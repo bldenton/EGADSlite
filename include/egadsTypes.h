@@ -58,7 +58,7 @@
 #define PLANE          1
 #define SPHERICAL      2
 #define CYLINDRICAL    3
-#define REVOLUTION     4 
+#define REVOLUTION     4
 #define TOROIDAL       5
 #define CONICAL       10
 #define EXTRUSION     11
@@ -156,7 +156,7 @@ typedef struct {
   int      outLevel;		/* output level for messages
                                    0 none, 1 minimal, 2 verbose, 3 debug */
   double   tess[MTESSPARAM];    /* global tessellation parameters */
-  char     **signature;
+  const char **signature;
   void     *usrPtr;
   egObject *pool;               /* available object structures for use */
   egObject *last;               /* the last object in the list */

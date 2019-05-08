@@ -946,7 +946,7 @@ EG_fillMid(int t1, int close, triStruct *ts)
 
 
 static void
-EG_swapTris(int (*test)(int, int, int, triStruct *), /*@unused@*/ char *string,
+EG_swapTris(int (*test)(int, int, int, triStruct *), /*@unused@*/ const char *string,
             double start, triStruct *ts)
 {
   int swap, t1, t2, side, i, i0, i1, i2, i3, n11, n12, n21, n22, os, count;

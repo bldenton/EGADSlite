@@ -1,0 +1,17 @@
+CFLAGS = -DLITE -I../include
+
+EGADS_OBJS = liteAttrs.o liteBase.o liteGeom.o liteImport.o liteMemory.o liteTopo.o \
+			 			 egadsTess.o egadsTris.o egadsQuads.o egadsTessInp.o egadsRobust.o \
+			 		 	 emp.o evaluate.o rational.o
+
+include ${PETSC_DIR}/lib/petsc/conf/variables
+include ${PETSC_DIR}/lib/petsc/conf/rules
+
+all: libegadslite.$(SL_LINKER_SUFFIX)
+
+libegadslite.$(SL_LINKER_SUFFIX) : ${EGADS_OBJS}
+	echo ${EGADS_OBJS}
+	${CLINKER} -shared -o $@ $^ ${PETSC_EXTERNAL_LIB_BASIC}
+
+liteTest: liteTest.o
+	${CLINKER} -o $@ $^ -L. -legadslite ${PETSC_EXTERNAL_LIB_BASIC}

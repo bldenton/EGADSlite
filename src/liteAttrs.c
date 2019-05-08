@@ -13,11 +13,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "egads.h"
 #include "egadsTypes.h"
 
 
 int
-EG_attributeNum(const egObject *obj, int *num)
+EG_attributeNum(const ego obj, int *num)
 {
   egAttrs *attrs;
 
@@ -37,8 +38,8 @@ EG_attributeNum(const egObject *obj, int *num)
 
 
 int
-EG_attributeGet(const egObject *obj, int index, const char **name, 
-                int *atype, int *len, /*@null@*/ const int **ints, 
+EG_attributeGet(const ego obj, int index, const char **name,
+                int *atype, int *len, /*@null@*/ const int **ints,
                 /*@null@*/ const double **reals, /*@null@*/ const char **str)
 {
   egAttrs *attrs;
@@ -69,19 +70,21 @@ EG_attributeGet(const egObject *obj, int index, const char **name,
   *atype = attrs->attrs[index-1].type;
   *len   = attrs->attrs[index-1].length;
   if (*atype == ATTRINT) {
-    if (ints != NULL) 
+    if (ints != NULL) {
       if (*len <= 1) {
         *ints = &attrs->attrs[index-1].vals.integer;
       } else {
         *ints =  attrs->attrs[index-1].vals.integers;
       }
+    }
   } else if (*atype == ATTRREAL) {
-    if (reals != NULL)
+    if (reals != NULL) {
       if (*len <= 1) {
         *reals = &attrs->attrs[index-1].vals.real;
       } else {
         *reals =  attrs->attrs[index-1].vals.reals;
       }
+    }
   } else if (*atype == ATTRCSYS) {
     *len = attrs->attrs[index-1].length - 12;
     if (reals != NULL) *reals = attrs->attrs[index-1].vals.reals;
@@ -95,9 +98,9 @@ EG_attributeGet(const egObject *obj, int index, const char **name,
 
 
 int
-EG_attributeRet(const egObject *obj, const char *name, int *atype, 
-                int *len, /*@null@*/ const int **ints, 
-                          /*@null@*/ const double **reals, 
+EG_attributeRet(const ego obj, const char *name, int *atype,
+                int *len, /*@null@*/ const int **ints,
+                          /*@null@*/ const double **reals,
                           /*@null@*/ const char **str)
 {
   int     i, index;
@@ -129,19 +132,21 @@ EG_attributeRet(const egObject *obj, const char *name, int *atype,
   *atype = attrs->attrs[index].type;
   *len   = attrs->attrs[index].length;
   if (*atype == ATTRINT) {
-    if (ints != NULL) 
+    if (ints != NULL) {
       if (*len <= 1) {
         *ints = &attrs->attrs[index].vals.integer;
       } else {
         *ints =  attrs->attrs[index].vals.integers;
       }
+    }
   } else if (*atype == ATTRREAL) {
-    if (reals != NULL)
+    if (reals != NULL) {
       if (*len <= 1) {
         *reals = &attrs->attrs[index].vals.real;
       } else {
         *reals =  attrs->attrs[index].vals.reals;
       }
+    }
   } else if (*atype == ATTRCSYS) {
     *len = attrs->attrs[index].length - 12;
     if (reals != NULL) *reals = attrs->attrs[index].vals.reals;
@@ -149,6 +154,6 @@ EG_attributeRet(const egObject *obj, const char *name, int *atype,
   } else {
     if (str != NULL) *str = attrs->attrs[index].vals.string;
   }
-  
+
   return EGADS_SUCCESS;
 }

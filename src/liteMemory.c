@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "egads.h"
 #include "egadsTypes.h"
 
 
@@ -63,4 +64,3 @@ EG_strdup(/*@null@*/ const char *str)
 
   return dup;
 }
-

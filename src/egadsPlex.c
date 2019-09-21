@@ -24,8 +24,13 @@ int main(int argc, char *argv[])
   stat = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies,
                         &bodies, &senses);
                         
-  printf(" Number of Bodies (nbodies): %d ", nbodies);
-
+  printf(" Number of BODIES (nbodies): %d \n", nbodies);
+  
+  for (i = 0; i < nbodies; i++)
+    {
+    stat = EG_getBodyTopos(bodies[i], NULL, SHELL, &n, &objs);
+    printf("   Number of SHELLS (n): %d \n", n);
+    }
 
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));

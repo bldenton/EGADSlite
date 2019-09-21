@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[])
 {
-  int i, j, k, l, n, nn, mm, index, stat, oclass, mtype, nbodies, *senses;
+  int i, j, k, l, n, ll, nn, mm, index, stat, oclass, mtype, nbodies, *senses;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   

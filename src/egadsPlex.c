@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
                         &nobjs, &senses);
       
       // Loop through NODES
-      for (k = 0; k < nn; nn++)
+      for (k = 0; k < nn; k++)
         {
         stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, limits, &mm,
                         &mobjs, &senses);

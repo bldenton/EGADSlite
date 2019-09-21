@@ -8,8 +8,9 @@
 
 int main(int argc, char *argv[])
 {
-  int i, j, k, n, nn, index, stat, oclass, mtype, nbodies, *senses;
-  ego context, model, geom, *bodies, *objs, *nobjs;
+  int i, j, k, n, nn, mm, index, stat, oclass, mtype, nbodies, *senses;
+  double limits[4];
+  ego context, model, geom, *bodies, *objs, *nobjs, *mobjs;
   
   if (argc != 2) {
     printf(" Usage: liteTest liteFile\n\n");
@@ -40,10 +41,25 @@ int main(int argc, char *argv[])
     stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &n, &objs);  // Get number of EDGES
     printf("         Number of EDGES (n): %d \n", n);
     
+    // Loop through EDGES
     for (j = 0; j < n; j++)
       {
       index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
       printf("          EDGE ID: %d \n", index);
+      
+      stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
+                        &nobjs, &senses);
+      
+      // Loop through NODES
+      for (k = 0; k < nn; nn++)
+        {
+        stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, &limits, &mm,
+                        &mobjs, &senses);
+        
+        index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
+        printf("          NODE ID: %d \n", index);
+        printf("             (x, y, z) = ( %d, %d, %d) \n", limits[0], limits[1], limits[2]);
+        } 
       }
     
     stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES

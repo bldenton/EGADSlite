@@ -58,7 +58,7 @@ int main(int argc, char *argv[])
         
         index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
         printf("          NODE ID: %d \n", index);
-        printf("             (x, y, z) = ( %d, %d, %d) \n", limits[0], limits[1], limits[2]);
+        printf("             (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
         } 
       }
     

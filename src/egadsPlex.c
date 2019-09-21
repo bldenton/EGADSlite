@@ -28,8 +28,20 @@ int main(int argc, char *argv[])
   
   for (i = 0; i < nbodies; i++)
     {
-    stat = EG_getBodyTopos(bodies[i], NULL, SHELL, &n, &objs);
+    stat = EG_getBodyTopos(bodies[i], NULL, SHELL, &n, &objs);  // Get number of SHELLS
     printf("   Number of SHELLS (n): %d \n", n);
+    
+    stat = EG_getBodyTopos(bodies[i], NULL, FACE, &n, &objs);  // Get number of FACES
+    printf("     Number of FACES (n): %d \n", n);
+    
+    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &n, &objs);  // Get number of LOOPS
+    printf("       Number of LOOPS (n): %d \n", n);
+    
+    stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &n, &objs);  // Get number of EDGES
+    printf("         Number of EDGES (n): %d \n", n);
+    
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
+    printf("           Number of NODES (n): %d \n", n);
     }
 
   /* Close EGADSlite file */

@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
       // Loop through NODES
       for (k = 0; k < nn; nn++)
         {
-        stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, &limits, &mm,
+        stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, limits, &mm,
                         &mobjs, &senses);
         
         index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates

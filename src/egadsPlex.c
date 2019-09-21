@@ -56,7 +56,7 @@ int main(int argc, char *argv[])
       for (j = 0; j < n; j++)
         {
         index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
-        printf("          EDGE ID: %d \n", index);
+        printf("            EDGE ID: %d \n", index);
         
         // Get NODE info which associated with the current EDGE
         stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
@@ -70,14 +70,13 @@ int main(int argc, char *argv[])
                           &mobjs, &senses);
           
           index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
-          printf("            NODE ID: %d \n", index);
-          printf("               (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
+          printf("              NODE ID: %d \n", index);
+          printf("                 (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
           } 
         }
-      
+      }
       stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
       printf("           Number of NODES (n): %d \n", n);
-      }
     }
 
   /* Close EGADSlite file */

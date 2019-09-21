@@ -8,7 +8,7 @@
 
 int main(int argc, char *argv[])
 {
-  int i, j, k, n, nn, stat, oclass, mtype, nbodies, *senses;
+  int i, j, k, n, nn, index, stat, oclass, mtype, nbodies, *senses;
   ego context, model, geom, *bodies, *objs, *nobjs;
   
   if (argc != 2) {
@@ -39,6 +39,12 @@ int main(int argc, char *argv[])
     
     stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &n, &objs);  // Get number of EDGES
     printf("         Number of EDGES (n): %d \n", n);
+    
+    for (j = 0; j < n; j++)
+      {
+      index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
+      printf("          EDGE ID: %d \n", index);
+      }
     
     stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
     printf("           Number of NODES (n): %d \n", n);

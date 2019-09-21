@@ -19,6 +19,13 @@ int main(int argc, char *argv[])
   printf(" EG_open          = %d\n", EG_open(&context));
   printf(" EG_loadModel     = %d  %s\n", EG_loadModel(context, 0, argv[1],
                                                       &model), argv[1]);
+  
+  /* test bodyTopo functions */
+  stat = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies,
+                        &bodies, &senses);
+                        
+  printf(" Number of Bodies (nbodies): %d ", nbodies);
+
 
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));

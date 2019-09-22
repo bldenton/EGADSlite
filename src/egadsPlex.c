@@ -5,6 +5,8 @@
 */
 
 #include "egads.h"
+#include "petsc.h"
+#include "petscdmplex.h"
 
 int main(int argc, char *argv[])
 {
@@ -33,6 +35,7 @@ int main(int argc, char *argv[])
   // Loop through BODIES
   for (i = 0; i < nbodies; i++)
     {
+    // Output Basic Model Topology
     stat = EG_getBodyTopos(bodies[i], NULL, SHELL, &n, &objs);  // Get number of SHELLS
     printf("   Number of SHELLS (n): %d \n", n);
     
@@ -57,9 +60,6 @@ int main(int argc, char *argv[])
       // Get EDGE info which associated with the current LOOP
       stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
                         &objs, &senses);
-      
-      //stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &n, &objs);  // Get number of EDGES
-      //printf("         Number of EDGES (n): %d \n", n);
       
       // Cycle through EDGES
       for (j = 0; j < n; j++)

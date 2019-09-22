@@ -42,8 +42,8 @@ int main(int argc, char *argv[])
     stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &nloops, &lobjs);  // Get number of LOOPS
     printf("       Number of LOOPS (n): %d \n", nloops);
 
-    stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &l, &lobjs);  // Get number of LOOPS
-    printf("         Number of LOOPS (n): %d \n", l);
+    stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &l, &objs);  // Get number of EDGES
+    printf("         Number of EDGES (n): %d \n", l);
     
     stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
     printf("           Number of NODES (n): %d \n", n);

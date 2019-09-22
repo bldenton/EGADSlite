@@ -8,15 +8,18 @@
 
 int main(int argc, char *argv[])
 {
-  int i, j, k, l, n, ll, nn, mm, index, stat, oclass, mtype, nbodies, *senses;
+  // Define Variables
+  int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   
+  // Check for the right number or arguments
   if (argc != 2) {
     printf(" Usage: liteTest liteFile\n\n");
     exit(EXIT_FAILURE);
   }
-  /* initialize */
+  
+  // Open EGADs file and load EGADs model data
   printf(" EG_open          = %d\n", EG_open(&context));
   printf(" EG_loadModel     = %d  %s\n", EG_loadModel(context, 0, argv[1],
                                                       &model), argv[1]);
@@ -36,11 +39,17 @@ int main(int argc, char *argv[])
     stat = EG_getBodyTopos(bodies[i], NULL, FACE, &n, &objs);  // Get number of FACES
     printf("     Number of FACES (n): %d \n", n);
     
-    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &l, &lobjs);  // Get number of LOOPS
-    printf("       Number of LOOPS (n): %d \n", l);
+    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &nloops, &lobjs);  // Get number of LOOPS
+    printf("       Number of LOOPS (n): %d \n", nloops);
+
+    stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &l, &lobjs);  // Get number of LOOPS
+    printf("         Number of LOOPS (n): %d \n", l);
+    
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
+    printf("           Number of NODES (n): %d \n", n);
     
     // Cycle through LOOPS
-    for (ll = 0; ll < l; ll++)
+    for (ll = 0; ll < nloops; ll++)
       {
       index = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Print out Loop IDs
       printf("          LOOP ID: %d \n", index);
@@ -75,8 +84,6 @@ int main(int argc, char *argv[])
           } 
         }
       }
-      stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
-      printf("           Number of NODES (n): %d \n", n);
     }
 
   /* Close EGADSlite file */

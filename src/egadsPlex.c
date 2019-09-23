@@ -12,7 +12,9 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  int numNodes;
+  int numNodes, dim;
+  int *plexCells;
+  double *plexNodeCoord;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   
@@ -97,11 +99,11 @@ int main(int argc, char *argv[])
   numNodes = 0;
   for (i = 0; i < nbodies; i++)
     {
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs); // Get NODE data of curren Body
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of curren Body
     
     for (j = 0; j < n; j++)
       {
-      index = EG_indexBodyTopo(bodies[i], objs[j]);
+      index = EG_indexBodyTopo(bodies[i], nobjs[j]);
       
       if (index > numNodes) 
         {
@@ -116,6 +118,37 @@ int main(int argc, char *argv[])
   
   // Output the total number of nodes
   printf(" Total Number of Unique Nodes = %d \n", numNodes);
+  
+  // Define NODEcoord[] Array size
+  dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
+  PetscMalloc1(dim*numNodes, &plexNodeCoord);
+  
+  // Get Current NODE coordinates data by cycling through BODIES
+  // and load plexNodeCoord for plex
+  for (i = 0; i < nbodies; i++)
+    {
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of curren Body
+    
+    for (j = 0; j < n; j++)
+      {
+      stat = EG_getTopology(nobjs[j], &geom, &oclass, &mtype, limits, &mm,
+                      &mobjs, &senses);
+                      
+      index = EG_indexBodyTopo(bodies[i], nobjs[j]);    // Print out NODE IDs & coordinates
+      
+      plexNodeCoord[dim*index+0] = limits[0];  // Node x-coordinate
+      plexNodeCoord[dim*index+1] = limits[1];  // Node y-coordinate
+      plexNodeCoord[dim*index+2] = limits[2];  // Node z-coordinate
+      
+      printf("    Node ID = %d \n", index);
+      printf("      (x,y,z) = (%lf, %lf, %lff) \n", plexNodeCoord[dim*index+0],plexNodeCoord[dim*index+1],plexNodeCoord[dim*index+2]);
+      
+      }
+    }
+
+
+
+
 
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));

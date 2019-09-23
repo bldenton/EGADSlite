@@ -12,6 +12,7 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
+  int numNodes;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   
@@ -91,9 +92,30 @@ int main(int argc, char *argv[])
   //    Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formateed array
   
   // Get All NODEs in a model
-  stat = EG_getTopology(model, &geom, NODE, &mtype, limits, &n,
-                          &objs, &senses);
-  printf("\n Number of NODEs in Model = %d \n", n);
+  stat = EG_getTopology(model, &geom, &oclass, &mtype, limits, &nbodies,
+                          &bodies, &senses);
+  numNodes = 0;
+  for (i = 0; i < nbodies; i++)
+    {
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs); // Get NODE data of curren Body
+    
+    for (j = 0; j < n; j++)
+      {
+      index = EG_indexBodyTopo(bodies[i], objs[j]);
+      
+      if (index > numNodes) 
+        {
+        numNodes = index;
+        }
+      else
+        {
+        // Do Nothing
+        }
+      }
+    }
+  
+  // Output the total number of nodes
+  printf(" Total Number of Unique Nodes = %d \n", numNodes);
 
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));

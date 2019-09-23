@@ -91,7 +91,8 @@ int main(int argc, char *argv[])
   //    Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formateed array
   
   // Get All NODEs in a model
-  stat = EG_getBodyTopos(model, NULL, NODE, &n, &objs);
+  stat = EG_getTopology(model, &geom, NODE, &mtype, limits, &n,
+                          &objs, &senses);
   printf("\n Number of NODEs in Model = %d \n", n);
 
   /* Close EGADSlite file */

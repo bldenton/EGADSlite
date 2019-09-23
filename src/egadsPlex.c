@@ -12,7 +12,7 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  int numNodes, dim;
+  PetscInt numNodes, dim;
   int *plexCells;
   double *plexNodeCoord;
   double limits[4];

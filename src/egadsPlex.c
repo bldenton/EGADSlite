@@ -85,6 +85,14 @@ int main(int argc, char *argv[])
         }
       }
     }
+    
+  // Generate Petsc Plex
+  //    Get all Nodes in model, record coordinates in a correctly formated array
+  //    Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formateed array
+  
+  // Get All NODEs in a model
+  stat = EG_getBodyTopos(model, NULL, NODE, &n, &objs);
+  printf("\n Number of NODEs in Model = %d \n", n);
 
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));

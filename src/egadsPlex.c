@@ -123,9 +123,6 @@ int main(int argc, char *argv[])
   
   // Define NODEcoord[] Array size
   dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
-  printf(" dim = %d \n", dim);
-  printf(" numNodes = %d \n", numNodes);
-  printf(" dim*numNodes = %d \n", dim*numNodes);
   PetscMalloc1(dim*numNodes,&plexNodeCoord);
   
   // Get Current NODE coordinates data by cycling through BODIES
@@ -140,22 +137,20 @@ int main(int argc, char *argv[])
                       &mobjs, &senses);
                       
       index = EG_indexBodyTopo(bodies[i], nobjs[j]);    // Print out NODE IDs & coordinates
-      count = index - 1;
       
-      plexNodeCoord[dim*count+0] = limits[0];  // Node x-coordinate
-      plexNodeCoord[dim*count+1] = limits[1];  // Node y-coordinate
-      plexNodeCoord[dim*count+2] = limits[2];  // Node z-coordinate
+      plexNodeCoord[dim*(index-1)+0] = limits[0];  // Node x-coordinate
+      plexNodeCoord[dim*(index-1)+1] = limits[1];  // Node y-coordinate
+      plexNodeCoord[dim*(index-1)+2] = limits[2];  // Node z-coordinate
       
       printf("    Node ID = %d \n", index);
-      printf("      (x,y,z) = (%lf, %lf, %lff) \n", plexNodeCoord[dim*count+0],plexNodeCoord[dim*count+1],plexNodeCoord[dim*count+2]);
-      
+      printf("      (x,y,z) = (%lf, %lf, %lf) \n", plexNodeCoord[dim*(index-1)+0],plexNodeCoord[dim*(index-1)+1],plexNodeCoord[dim*(index-1)+2]);   
       }
     }
-
-
-
-
-
+    
+    
+    
+    
+    
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));
   return 0;

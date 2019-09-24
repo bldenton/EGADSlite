@@ -5,15 +5,15 @@
 */
 
 #include "egads.h"
-#include <petsc.h>
-#include <petscdmplex.h>
-#include <petscsys.h>
+#include "petsc.h"
+#include "petscdmplex.h"
+#include "petscsys.h"
 
 int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  int numNodes, dim;
+  PetscInt numNodes, dim;
   PetscInt count;
   PetscInt *plexCells;
   PetscReal *plexNodeCoord;

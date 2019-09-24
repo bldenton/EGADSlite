@@ -123,7 +123,7 @@ int main(int argc, char *argv[])
   
   // Define NODEcoord[] Array size
   dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
-  PetscMalloc1(dim*numNodes, &plexNodeCoord);
+  PetscMalloc1(3*numNodes, &plexNodeCoord);
   
   // Get Current NODE coordinates data by cycling through BODIES
   // and load plexNodeCoord for plex

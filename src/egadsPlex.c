@@ -5,9 +5,9 @@
 */
 
 #include "egads.h"
-#include "petsc.h"
-#include "petscdmplex.h"
-#include "petscsys.h"
+#include <petsc.h>
+#include <petscdmplex.h>
+#include <petscsys.h>
 
 int main(int argc, char *argv[])
 {
@@ -15,8 +15,8 @@ int main(int argc, char *argv[])
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
   int numNodes, dim;
   PetscInt count;
-  int *plexCells;
-  double *plexNodeCoord;
+  PetscInt *plexCells;
+  PetscReal *plexNodeCoord;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   

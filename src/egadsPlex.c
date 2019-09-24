@@ -126,7 +126,7 @@ int main(int argc, char *argv[])
   printf(" dim = %d \n", dim);
   printf(" numNodes = %d \n", numNodes);
   printf(" dim*numNodes = %d \n", dim*numNodes);
-  //PetscMalloc1(dim*numNodes,&plexNodeCoord);
+  PetscMalloc1(dim*numNodes,&plexNodeCoord);
   
   // Get Current NODE coordinates data by cycling through BODIES
   // and load plexNodeCoord for plex

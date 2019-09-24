@@ -7,6 +7,7 @@
 #include "egads.h"
 #include "petsc.h"
 #include "petscdmplex.h"
+#include "petscsys.h"
 
 int main(int argc, char *argv[])
 {

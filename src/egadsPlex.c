@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
       }
     }
     
-  printf(" PLEX Input Array Checkouts \n");
+  printf(" \n PLEX Input Array Checkouts \n");
   
   // Output the total number of unique LOOPs and NODEs
   printf(" Total Number of Unique Loops = %d \n", numLoops);
@@ -172,9 +172,44 @@ int main(int argc, char *argv[])
       }
     }
     
-   // Get all LOOPs in the Model
-   // We are assuming LOOPs are equivalent to FACEs or SURFACEs   
-    
+    // Get all LOOPs in the Model
+    // We are assuming LOOPs are equivalent to FACEs or SURFACEs
+    for (i = 0; i < nbodies; i++)
+      {
+      for (ll = 0; ll < nloops; ll++)
+        {
+        index = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Loop IDs
+        //printf("          LOOP ID: %d \n", index);
+        
+        // Get EDGE info which associated with the current LOOP
+        stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
+                          &objs, &senses);
+        
+        // Cycle through EDGES
+        for (j = 0; j < n; j++)
+          {
+          index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
+          printf("            EDGE ID: %d \n", index);
+          
+          // Get NODE info which associated with the current EDGE
+          stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
+                            &nobjs, &senses);
+          printf("   mtype = %d ", mtype);  
+          
+          // Cycle through NODES
+          for (k = 0; k < nn; k++)
+            {
+            // Get Current NODE data
+            stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, limits, &mm,
+                            &mobjs, &senses);
+            
+            index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
+            printf("              NODE ID: %d \n", index);
+            printf("                 (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
+            } 
+          }
+        }
+      }    
     
     
   /* Close EGADSlite file */

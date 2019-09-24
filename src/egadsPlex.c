@@ -136,9 +136,9 @@ int main(int argc, char *argv[])
                       
       index = EG_indexBodyTopo(bodies[i], nobjs[j]);    // Print out NODE IDs & coordinates
       
-      plexNodeCoord[dim*index+0] = limits[0];  // Node x-coordinate
-      plexNodeCoord[dim*index+1] = limits[1];  // Node y-coordinate
-      plexNodeCoord[dim*index+2] = limits[2];  // Node z-coordinate
+      //plexNodeCoord[dim*index+0] = limits[0];  // Node x-coordinate
+      //plexNodeCoord[dim*index+1] = limits[1];  // Node y-coordinate
+      //plexNodeCoord[dim*index+2] = limits[2];  // Node z-coordinate
       
       printf("    Node ID = %d \n", index);
       printf("      (x,y,z) = (%lf, %lf, %lff) \n", plexNodeCoord[dim*index+0],plexNodeCoord[dim*index+1],plexNodeCoord[dim*index+2]);

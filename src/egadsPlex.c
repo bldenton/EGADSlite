@@ -13,8 +13,7 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  PetscInt numNodes, dim;
-  PetscInt count;
+  PetscInt dim, numNodes, numLoops;
   PetscInt *plexCells;
   PetscReal *plexNodeCoord;
   double limits[4];
@@ -90,7 +89,8 @@ int main(int argc, char *argv[])
         }
       }
     }
-    
+  
+  // ---------------------------------------------------------------------------------------------------  
   // Generate Petsc Plex
   //    Get all Nodes in model, record coordinates in a correctly formated array
   //    Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formateed array
@@ -98,14 +98,32 @@ int main(int argc, char *argv[])
   // Get All NODEs in a model
   stat = EG_getTopology(model, &geom, &oclass, &mtype, limits, &nbodies,
                           &bodies, &senses);
+  numLoops = 0;
   numNodes = 0;
   for (i = 0; i < nbodies; i++)
     {
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of curren Body
+    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &nloops, &lobjs);  // Get LOOP data of current body
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of current Body
     
+    // Determine the total number of LOOPs in the model
+    for (j = 0; j < nloops; j++)
+      {
+      index = EG_indexBodyTopo(bodies[i], lobjs[j]);  // Get ID of current LOOP
+      
+      if (index > numLoops)
+        {
+        numLoops = index;
+        }
+      else
+        {
+        // Do Nothing
+        }
+      }
+    
+    // Determine the total number of NODEs in the model
     for (j = 0; j < n; j++)
       {
-      index = EG_indexBodyTopo(bodies[i], nobjs[j]);
+      index = EG_indexBodyTopo(bodies[i], nobjs[j]);  // Get ID of current NODE
       
       if (index > numNodes) 
         {
@@ -117,13 +135,19 @@ int main(int argc, char *argv[])
         }
       }
     }
+    
+  printf(" PLEX Input Array Checkouts \n");
   
-  // Output the total number of nodes
+  // Output the total number of unique LOOPs and NODEs
+  printf(" Total Number of Unique Loops = %d \n", numLoops);
   printf(" Total Number of Unique Nodes = %d \n", numNodes);
   
-  // Define NODEcoord[] Array size
+  // Define plexNodeCoord[] Array size
   dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
-  PetscMalloc1(dim*numNodes,&plexNodeCoord);
+  PetscMalloc1(dim*numNodes, &plexNodeCoord);
+  PetscMalloc1(3*numLoops, &plexCells);  // Only Triangle Cells current understood
+                                         // Also all cells must have the same number of corner vertices
+                                         // based on the current functionality of Petsc Plexes
   
   // Get Current NODE coordinates data by cycling through BODIES
   // and load plexNodeCoord for plex
@@ -142,12 +166,14 @@ int main(int argc, char *argv[])
       plexNodeCoord[dim*(index-1)+1] = limits[1];  // Node y-coordinate
       plexNodeCoord[dim*(index-1)+2] = limits[2];  // Node z-coordinate
       
+      // Checkout Statement
       printf("    Node ID = %d \n", index);
       printf("      (x,y,z) = (%lf, %lf, %lf) \n", plexNodeCoord[dim*(index-1)+0],plexNodeCoord[dim*(index-1)+1],plexNodeCoord[dim*(index-1)+2]);   
       }
     }
     
-    
+   // Get all LOOPs in the Model
+   // We are assuming LOOPs are equivalent to FACEs or SURFACEs   
     
     
     

@@ -12,7 +12,8 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  PetscInt numNodes, dim;
+  int numNodes, dim;
+  PetscInt count;
   int *plexCells;
   double *plexNodeCoord;
   double limits[4];
@@ -121,7 +122,7 @@ int main(int argc, char *argv[])
   
   // Define NODEcoord[] Array size
   dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
-  PetscMalloc1(dim*numNodes, &plexNodeCoord);
+  //PetscMalloc1(dim*numNodes, &plexNodeCoord);
   
   // Get Current NODE coordinates data by cycling through BODIES
   // and load plexNodeCoord for plex
@@ -135,6 +136,7 @@ int main(int argc, char *argv[])
                       &mobjs, &senses);
                       
       index = EG_indexBodyTopo(bodies[i], nobjs[j]);    // Print out NODE IDs & coordinates
+      count = index - 1;
       
       //plexNodeCoord[dim*index+0] = limits[0];  // Node x-coordinate
       //plexNodeCoord[dim*index+1] = limits[1];  // Node y-coordinate

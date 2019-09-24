@@ -141,7 +141,7 @@ int main(int argc, char *argv[])
       //plexNodeCoord[dim*index+2] = limits[2];  // Node z-coordinate
       
       printf("    Node ID = %d \n", index);
-      printf("      (x,y,z) = (%lf, %lf, %lff) \n", plexNodeCoord[dim*index+0],plexNodeCoord[dim*index+1],plexNodeCoord[dim*index+2]);
+      //printf("      (x,y,z) = (%lf, %lf, %lff) \n", plexNodeCoord[dim*index+0],plexNodeCoord[dim*index+1],plexNodeCoord[dim*index+2]);
       
       }
     }

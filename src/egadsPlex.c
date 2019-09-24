@@ -194,7 +194,10 @@ int main(int argc, char *argv[])
           // Get NODE info which associated with the current EDGE
           stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
                             &nobjs, &senses);
-          printf("   mtype = %d ", mtype);  
+          if (mtype == DEGENERATE)
+            {
+            printf("   mtype = %d \n", mtype);
+            }  
           
           // Cycle through NODES
           for (k = 0; k < nn; k++)

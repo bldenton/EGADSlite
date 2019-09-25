@@ -8,6 +8,7 @@
 #include "petsc.h"
 #include "petscdmplex.h"
 #include "petscsys.h"
+#include <stdbool.h>
 
 int main(int argc, char *argv[])
 {

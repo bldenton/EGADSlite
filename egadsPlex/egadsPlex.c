@@ -13,6 +13,7 @@ int main(int argc, char *argv[])
 {
   // Define Variables
   int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, loopID, *senses;
+  bool nodeCheck;
   PetscInt dim, numNodes, numLoops, nodeCount;
   PetscInt *plexCells;
   PetscReal *plexNodeCoord;
@@ -200,6 +201,7 @@ int main(int argc, char *argv[])
                                     //       to be added later.
             {
             // Do Nothing
+            printf("        EGDE %d is DEGENERATE \n", index);
             }
           else
             {              
@@ -215,17 +217,27 @@ int main(int argc, char *argv[])
                 }
               else
                 {
+                nodeCheck = false;
                 for (l = 0; l < 2; l++)
                   {
                   if (plexCells[dim*(loopID-1)+l] == index)
                     {
-                    // Do Nothing
+                    nodeCheck = true;
                     }
                   else
                     {
-                    plexCells[dim*(loopID-1)+l] = index;
-                    nodeCount++;
+                    // Do Nothing
                     }
+                  }
+                
+                if (nodeCheck = false)
+                  { 
+                  plexCells[dim*(loopID-1)+nodeCount] = index;
+                  nodeCount++;
+                  }
+                else
+                  {
+                  // Do Nothing
                   }
                 }
               }             

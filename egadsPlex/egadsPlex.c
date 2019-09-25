@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
             }
           }
         // Checkout Statement
-        printf("    LOOP Corner NODEs(ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
+        printf("      LOOP Corner NODEs (ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
         }
       }    
     

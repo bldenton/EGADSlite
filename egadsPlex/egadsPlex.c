@@ -22,6 +22,8 @@ int main(int argc, char *argv[])
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   DM    egadsDM = NULL;
   
+  PetscInitialize(&argc,&args,(char*)0,help);if (ierr) return ierr;
+  
   // Check for the right number or arguments
   if (argc != 2) {
     printf(" Usage: liteTest liteFile\n\n");
@@ -256,5 +258,7 @@ int main(int argc, char *argv[])
     
   /* Close EGADSlite file */
   printf(" EG_close         = %d\n", EG_close(context));
-  return 0;
+  
+  PetscFinalize();
+  return ierr;
 }

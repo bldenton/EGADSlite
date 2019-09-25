@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
                 {
                 for (l = 0; l < 2; l++)
                   {
-                  if (plexCells[dim*(loopID-1)+l] == index;
+                  if (plexCells[dim*(loopID-1)+l]) == index;
                     {
                     // Do Nothing
                     }

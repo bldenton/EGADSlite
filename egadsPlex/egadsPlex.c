@@ -20,6 +20,7 @@ int main(int argc, char *argv[])
   PetscReal *plexNodeCoord;
   double limits[4];
   ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
+  DM    egadsDM = NULL;
   
   // Check for the right number or arguments
   if (argc != 2) {
@@ -247,7 +248,10 @@ int main(int argc, char *argv[])
         // Checkout Statement
         printf("      LOOP Corner NODEs (ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
         }
-      }    
+      }
+      
+  // Create Petsc DMPlex of EGADSlite CAD
+  DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numLoops, numNodes, dim, PETSC_TRUE, plexCells, dim, plexNodeCoord, &egadsDM); 
     
     
   /* Close EGADSlite file */

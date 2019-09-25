@@ -170,7 +170,7 @@ int main(int argc, char *argv[])
       
       // Checkout Statement
       printf("    Node ID = %d \n", index);
-      printf("      (x,y,z) = (%lf, %lf, %lf) \n", plexNodeCoord[dim*(index-1)+0],plexNodeCoord[dim*(index-1)+1],plexNodeCoord[dim*(index-1)+2]);   
+      printf("      (x,y,z) = (%lf, %lf, %lf) \n \n", plexNodeCoord[dim*(index-1)+0],plexNodeCoord[dim*(index-1)+1],plexNodeCoord[dim*(index-1)+2]);   
       }
     }
     
@@ -181,7 +181,7 @@ int main(int argc, char *argv[])
       for (ll = 0; ll < nloops; ll++)  // Cycle through LOOPs in current BODY
         {
         loopID = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Loop IDs
-        printf("          LOOP ID: %d \n", loopID);
+        printf("    LOOP ID: %d \n", loopID);
         
         // Get EDGEs info which associated with the current LOOP
         stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
@@ -192,7 +192,7 @@ int main(int argc, char *argv[])
         for (j = 0; j < n; j++)
           {
           index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
-          printf("            EDGE ID: %d \n", index);
+          printf("      EDGE ID: %d \n", index);
           
           // Get NODE info associated with the current EDGE
           stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
@@ -202,7 +202,7 @@ int main(int argc, char *argv[])
                                     //       to be added later.
             {
             // Do Nothing
-            printf("            EGDE %d is DEGENERATE \n", index);
+            printf("        EGDE %d is DEGENERATE \n", index);
             }
           else
             {              
@@ -245,7 +245,7 @@ int main(int argc, char *argv[])
             }
           }
         // Checkout Statement
-        printf("            (ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
+        printf("    LOOP Corner NODEs(ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
         }
       }    
     

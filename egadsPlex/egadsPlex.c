@@ -231,7 +231,7 @@ int main(int argc, char *argv[])
                     }
                   }
                 
-                if (nodeCheck = false)
+                if (nodeCheck == false)
                   { 
                   plexCells[dim*(loopID-1)+nodeCount] = index;
                   nodeCount++;

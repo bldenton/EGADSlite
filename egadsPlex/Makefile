@@ -5,7 +5,7 @@ CC = mpicc
 
 all: testPlex
 
-testPlex: egadPlex.c
+testPlex: egadsPlex.c
 	$(CC) $? $(LIBS) -o $@
 
 clean:

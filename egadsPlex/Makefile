@@ -1,5 +1,5 @@
 LIBS = \
-  -legadslite -L../src -I../include -lpetsc -L$PETSC_DIR/lib -I$PETSC_DIR/include 
+  -legadslite -L../src -I../include -lpetsc -L$(PETSC_DIR)/lib -I$(PETSC_DIR)/include 
 
 CC = mpicc
 

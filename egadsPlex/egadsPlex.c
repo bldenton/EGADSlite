@@ -12,8 +12,8 @@
 int main(int argc, char *argv[])
 {
   // Define Variables
-  int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, *senses;
-  PetscInt dim, numNodes, numLoops;
+  int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, loopID, *senses;
+  PetscInt dim, numNodes, numLoops, nodeCount;
   PetscInt *plexCells;
   PetscReal *plexNodeCoord;
   double limits[4];
@@ -153,7 +153,7 @@ int main(int argc, char *argv[])
   // and load plexNodeCoord for plex
   for (i = 0; i < nbodies; i++)
     {
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of curren Body
+    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of current Body
     
     for (j = 0; j < n; j++)
       {
@@ -174,45 +174,67 @@ int main(int argc, char *argv[])
     
     // Get all LOOPs in the Model
     // We are assuming LOOPs are equivalent to FACEs or SURFACEs
-    for (i = 0; i < nbodies; i++)
+    for (i = 0; i < nbodies; i++) // Cycle through BODIES
       {
-      for (ll = 0; ll < nloops; ll++)
+      for (ll = 0; ll < nloops; ll++)  // Cycle through LOOPs in current BODY
         {
-        index = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Loop IDs
-        //printf("          LOOP ID: %d \n", index);
+        loopID = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Loop IDs
+        printf("          LOOP ID: %d \n", loopID);
         
-        // Get EDGE info which associated with the current LOOP
+        // Get EDGEs info which associated with the current LOOP
         stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
                           &objs, &senses);
         
         // Cycle through EDGES
+        nodeCount = 0;
         for (j = 0; j < n; j++)
           {
           index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
           printf("            EDGE ID: %d \n", index);
           
-          // Get NODE info which associated with the current EDGE
+          // Get NODE info associated with the current EDGE
           stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
                             &nobjs, &senses);
-          if (mtype == DEGENERATE)  // This does work. Need to extend and use correctly
-            {
-            printf("   mtype = %d \n", mtype);
-            }  
           
-          // Cycle through NODES
-          // We will have to make sure we filter out duplicate nodes
-          for (k = 0; k < nn; k++)
+          if (mtype == DEGENERATE)  // Note: This will approach will only work for triangles. Square will need
+                                    //       to be added later.
             {
-            // Get Current NODE data
-            stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, limits, &mm,
-                            &mobjs, &senses);
-            
-            index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
-            printf("              NODE ID: %d \n", index);
-            printf("                 (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
-            } 
-          }
+            // Do Nothing
+            }
+          else
+            {              
+            // Cycle through NODEs and record LOOP/FACE unique corner NODEs                   
+            for (k = 0; k < nn; k++) 
+              {
+              index = EG_indexBodyTopo(bodies[i], nobjs[k]);  // current NODE ID
+              
+              if (nodeCount == 0)
+                {
+                plexCells[dim*(loopID-1)+0] = index;
+                nodeCount++;
+                }
+              else
+                {
+                for (l = 0; l < 2; l++)
+                  {
+                  if (plexCells[dim*(loopID-1)+l] == index;
+                    {
+                    // Do Nothing
+                    }
+                  else
+                    {
+                    plexCells[dim*(loopID-1)+l] = index;
+                    nodeCount++;
+                    }
+                  }
+                }
+              }             
+            }
+          } 
         }
+        
+        // Checkout Statement
+        printf(" (ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]); 
       }    
     
     

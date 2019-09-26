@@ -1,260 +1,217 @@
-/*
-*        Program is intended to read the Geometric Topology of an EGADSlite geometry file and store it
-*        in a Petsc Plex
-*
-*/
+static char help[] = "Program is intended to read the Geometric Topology of an EGADSlite geometry file\n\
+and store it in a Petsc Plex\n\n\n";
 
-#include "egads.h"
-#include "petsc.h"
-#include "petscdmplex.h"
-#include "petscsys.h"
-#include <stdbool.h>
+#include <egads.h>
+#include <petsc.h>
+
+typedef struct {
+  char filename[PETSC_MAX_PATH_LEN];
+} AppCtx;
+
+static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
+{
+  PetscErrorCode ierr;
+
+  PetscFunctionBeginUser;
+  options->filename[0] = '\0';
+
+  ierr = PetscOptionsBegin(comm, "", "EGADSPlex Problem Options", "EGADSLite");CHKERRQ(ierr);
+  ierr = PetscOptionsString("-filename", "The EGADSLite file", "ex9.c", options->filename, options->filename, PETSC_MAX_PATH_LEN, NULL);CHKERRQ(ierr);
+  ierr = PetscOptionsEnd();
+  PetscFunctionReturn(0);
+}
 
 int main(int argc, char *argv[])
 {
-  // Define Variables
-  int i, j, k, l, n, ll, nn, mm, nloops, index, stat, oclass, mtype, nbodies, loopID, *senses;
-  bool nodeCheck;
-  PetscInt dim, numNodes, numLoops, nodeCount;
-  PetscInt *plexCells;
-  PetscReal *plexNodeCoord;
-  double limits[4];
-  ego context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
-  DM    egadsDM = NULL;
-  
-  // Check for the right number or arguments
-  if (argc != 2) {
-    printf(" Usage: liteTest liteFile\n\n");
-    exit(EXIT_FAILURE);
-  }
-  
-  // Open EGADs file and load EGADs model data
-  printf(" EG_open          = %d\n", EG_open(&context));
-  printf(" EG_loadModel     = %d  %s\n", EG_loadModel(context, 0, argv[1],
-                                                      &model), argv[1]);
-  
-  /* test bodyTopo functions */
-  stat = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies,
-                        &bodies, &senses);
-                        
-  printf(" Number of BODIES (nbodies): %d \n", nbodies);
-  
-  // Loop through BODIES
-  for (i = 0; i < nbodies; i++)
-    {
-    // Output Basic Model Topology
-    stat = EG_getBodyTopos(bodies[i], NULL, SHELL, &n, &objs);  // Get number of SHELLS
-    printf("   Number of SHELLS (n): %d \n", n);
-    
-    stat = EG_getBodyTopos(bodies[i], NULL, FACE, &n, &objs);  // Get number of FACES
-    printf("     Number of FACES (n): %d \n", n);
-    
-    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &nloops, &lobjs);  // Get number of LOOPS
-    printf("       Number of LOOPS (n): %d \n", nloops);
+  /* EGADSLite variables */
+  ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
+  int            oclass, mtype, nbodies, *senses;
+  int            b;
+  /* PETSc variables */
+  DM             dm;
+  PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0;
+  PetscInt      *cells  = NULL;
+  PetscReal     *coords = NULL;
+  MPI_Comm       comm;
+  PetscMPIInt    rank;
+  AppCtx         ctx;
+  PetscErrorCode ierr;
 
-    stat = EG_getBodyTopos(bodies[i], NULL, EDGE, &l, &objs);  // Get number of EDGES
-    printf("         Number of EDGES (n): %d \n", l);
-    
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &objs);  // Get number of NODES
-    printf("           Number of NODES (n): %d \n", n);
-    
-    // Cycle through LOOPS
-    for (ll = 0; ll < nloops; ll++)
-      {
-      index = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Print out Loop IDs
-      printf("          LOOP ID: %d \n", index);
-      
-      // Get EDGE info which associated with the current LOOP
-      stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
-                        &objs, &senses);
-      
-      // Cycle through EDGES
-      for (j = 0; j < n; j++)
-        {
-        index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
-        printf("            EDGE ID: %d \n", index);
-        
-        // Get NODE info which associated with the current EDGE
-        stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
-                          &nobjs, &senses);
-        
-        // Cycle through NODES
-        for (k = 0; k < nn; k++)
-          {
-          // Get Current NODE data
-          stat = EG_getTopology(nobjs[k], &geom, &oclass, &mtype, limits, &mm,
-                          &mobjs, &senses);
-          
-          index = EG_indexBodyTopo(bodies[i], nobjs[k]);    // Print out NODE IDs & coordinates
-          printf("              NODE ID: %d \n", index);
-          printf("                 (x, y, z) = ( %lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
-          } 
-        }
-      }
-    }
-  
-  // ---------------------------------------------------------------------------------------------------  
-  // Generate Petsc Plex
-  //    Get all Nodes in model, record coordinates in a correctly formated array
-  //    Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formateed array
-  
-  // Get All NODEs in a model
-  stat = EG_getTopology(model, &geom, &oclass, &mtype, limits, &nbodies,
-                          &bodies, &senses);
-  numLoops = 0;
-  numNodes = 0;
-  for (i = 0; i < nbodies; i++)
-    {
-    stat = EG_getBodyTopos(bodies[i], NULL, LOOP, &nloops, &lobjs);  // Get LOOP data of current body
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of current Body
-    
-    // Determine the total number of LOOPs in the model
-    for (j = 0; j < nloops; j++)
-      {
-      index = EG_indexBodyTopo(bodies[i], lobjs[j]);  // Get ID of current LOOP
-      
-      if (index > numLoops)
-        {
-        numLoops = index;
-        }
-      else
-        {
-        // Do Nothing
-        }
-      }
-    
-    // Determine the total number of NODEs in the model
-    for (j = 0; j < n; j++)
-      {
-      index = EG_indexBodyTopo(bodies[i], nobjs[j]);  // Get ID of current NODE
-      
-      if (index > numNodes) 
-        {
-        numNodes = index;
-        }
-      else
-        {
-        // Do Nothing
-        }
-      }
-    }
-    
-  printf(" \n PLEX Input Array Checkouts \n");
-  
-  // Output the total number of unique LOOPs and NODEs
-  printf(" Total Number of Unique Loops = %d \n", numLoops);
-  printf(" Total Number of Unique Nodes = %d \n", numNodes);
-  
-  // Define plexNodeCoord[] Array size
-  dim = 3;    // Assumed 3D Models :: Need to update to handle 2D Models in the future
-  PetscMalloc1(dim*numNodes, &plexNodeCoord);
-  PetscMalloc1(3*numLoops, &plexCells);  // Only Triangle Cells current understood
-                                         // Also all cells must have the same number of corner vertices
-                                         // based on the current functionality of Petsc Plexes
-  
-  // Get Current NODE coordinates data by cycling through BODIES
-  // and load plexNodeCoord for plex
-  for (i = 0; i < nbodies; i++)
-    {
-    stat = EG_getBodyTopos(bodies[i], NULL, NODE, &n, &nobjs); // Get NODE data of current Body
-    
-    for (j = 0; j < n; j++)
-      {
-      stat = EG_getTopology(nobjs[j], &geom, &oclass, &mtype, limits, &mm,
-                      &mobjs, &senses);
-                      
-      index = EG_indexBodyTopo(bodies[i], nobjs[j]);    // Print out NODE IDs & coordinates
-      
-      plexNodeCoord[dim*(index-1)+0] = limits[0];  // Node x-coordinate
-      plexNodeCoord[dim*(index-1)+1] = limits[1];  // Node y-coordinate
-      plexNodeCoord[dim*(index-1)+2] = limits[2];  // Node z-coordinate
-      
-      // Checkout Statement
-      printf("    Node ID = %d \n", index);
-      printf("      (x,y,z) = (%lf, %lf, %lf) \n \n", plexNodeCoord[dim*(index-1)+0],plexNodeCoord[dim*(index-1)+1],plexNodeCoord[dim*(index-1)+2]);   
-      }
-    }
-    
-    // Get all LOOPs in the Model
-    // We are assuming LOOPs are equivalent to FACEs or SURFACEs
-    for (i = 0; i < nbodies; i++) // Cycle through BODIES
-      {
-      for (ll = 0; ll < nloops; ll++)  // Cycle through LOOPs in current BODY
-        {
-        loopID = EG_indexBodyTopo(bodies[i], lobjs[ll]);    // Loop IDs
-        printf("    LOOP ID: %d \n", loopID);
-        
-        // Get EDGEs info which associated with the current LOOP
-        stat = EG_getTopology(lobjs[ll], &geom, &oclass, &mtype, NULL, &n,
-                          &objs, &senses);
-        
-        // Cycle through EDGES
-        nodeCount = 0;
-        for (j = 0; j < n; j++)
-          {
-          index = EG_indexBodyTopo(bodies[i], objs[j]);    // Print out EDGE IDs
-          printf("      EDGE ID: %d \n", index);
-          
-          // Get NODE info associated with the current EDGE
-          stat = EG_getTopology(objs[j], &geom, &oclass, &mtype, NULL, &nn,
-                            &nobjs, &senses);
-          
-          if (mtype == DEGENERATE)  // Note: This will approach will only work for triangles. Square will need
-                                    //       to be added later.
-            {
-            // Do Nothing
-            printf("        EGDE %d is DEGENERATE \n", index);
-            }
-          else
-            {              
-            // Cycle through NODEs and record LOOP/FACE unique corner NODEs                   
-            for (k = 0; k < nn; k++) 
-              {
-              index = EG_indexBodyTopo(bodies[i], nobjs[k]);  // current NODE ID
-              
-              if (nodeCount == 0)
-                {
-                plexCells[dim*(loopID-1)+0] = index;
-                nodeCount++;
-                }
-              else
-                {
-                nodeCheck = false;
-                for (l = 0; l < 2; l++)
-                  {
-                  if (plexCells[dim*(loopID-1)+l] == index)
-                    {
-                    nodeCheck = true;
-                    }
-                  else
-                    {
-                    // Do Nothing
-                    }
-                  }
-                
-                if (nodeCheck == false)
-                  { 
-                  plexCells[dim*(loopID-1)+nodeCount] = index;
-                  nodeCount++;
-                  }
-                else
-                  {
-                  // Do Nothing
-                  }
-                }
-              }             
-            }
+  ierr = PetscInitialize(&argc, &argv, NULL, help); if (ierr) return ierr;
+  comm = PETSC_COMM_WORLD;
+  ierr = ProcessOptions(comm, &ctx);CHKERRQ(ierr);
+  ierr = MPI_Comm_rank(comm, &rank);CHKERRQ(ierr);
+  if (!rank) {
+    /* Open EGADs file and load EGADs model data */
+    ierr = EG_open(&context);CHKERRQ(ierr);
+    ierr = EG_loadModel(context, 0, ctx.filename, &model);CHKERRQ(ierr);
+
+    /* test bodyTopo functions */
+    ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &senses);CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, " Number of BODIES (nbodies): %d \n", nbodies);CHKERRQ(ierr);
+
+    for (b = 0; b < nbodies; ++b) {
+      ego body = bodies[b];
+      int id, Nsh, Nf, Nl, l, Ne, e, Nv, v;
+
+      /* Output Basic Model Topology */
+      ierr = EG_getBodyTopos(body, NULL, SHELL, &Nsh, &objs);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of SHELLS: %d \n", Nsh);CHKERRQ(ierr);
+
+      ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &objs);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of FACES: %d \n", Nf);CHKERRQ(ierr);
+
+      ierr = EG_getBodyTopos(body, NULL, LOOP,  &Nl, &lobjs);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of LOOPS: %d \n", Nl);CHKERRQ(ierr);
+
+      ierr = EG_getBodyTopos(body, NULL, EDGE,  &Ne, &objs);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of EDGES: %d \n", Ne);CHKERRQ(ierr);
+
+      ierr = EG_getBodyTopos(body, NULL, NODE,  &Nv, &objs);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of NODES: %d \n", Nv);CHKERRQ(ierr);
+
+      for (l = 0; l < Nl; ++l) {
+        ego loop = lobjs[l];
+\
+        id   = EG_indexBodyTopo(body, loop);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "          LOOP ID: %d\n", id);CHKERRQ(ierr);
+
+        /* Get EDGE info which associated with the current LOOP */
+        ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &senses);CHKERRQ(ierr);
+
+        for (e = 0; e < Ne; ++e) {
+          ego edge = objs[e];
+
+          id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d\n", id);CHKERRQ(ierr);
+
+          /* Get NODE info which associated with the current EDGE */
+          ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
+
+          for (v = 0; v < Nv; ++v) {
+            ego    vertex = nobjs[v];
+            double limits[4];
+            int    dummy;
+
+            ierr = EG_getTopology(vertex, &geom, &oclass, &mtype, limits, &dummy, &mobjs, &senses);CHKERRQ(ierr);
+            id = EG_indexBodyTopo(body, vertex);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "              NODE ID: %d \n", id);CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "                 (x, y, z) = (%lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
           }
-        // Checkout Statement
-        printf("      LOOP Corner NODEs (ID1, ID2, ID3) = (%d, %d, %d) \n", plexCells[dim*(loopID-1)+0],plexCells[dim*(loopID-1)+1],plexCells[dim*(loopID-1)+2]);          
         }
       }
-      
-  // Create Petsc DMPlex of EGADSlite CAD
-  DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numLoops, numNodes, dim, PETSC_TRUE, plexCells, dim, plexNodeCoord, &egadsDM); 
-    
-    
+    }
+
+    /* ---------------------------------------------------------------------------------------------------
+    Generate Petsc Plex
+      Get all Nodes in model, record coordinates in a correctly formatted array
+      Cycle through bodies, cycle through loops, recorde NODE IDs in a correctly formatted array */
+
+    /* Calculate cell and vertex sizes */
+    ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &senses);CHKERRQ(ierr);
+    numCells    = 0;
+    numVertices = 0;
+    for (b = 0; b < nbodies; ++b) {
+      ego body = bodies[b];
+      int id, Nl, l, Nv, v;
+
+      ierr = EG_getBodyTopos(body, NULL, LOOP, &Nl, &lobjs);CHKERRQ(ierr);
+      ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs);CHKERRQ(ierr);
+      for (l = 0; l < Nl; ++l) {
+        ego loop = lobjs[l];
+
+        id = EG_indexBodyTopo(body, loop);
+        /* TODO: Instead of assuming contiguous ids, we could use a hash table */
+        numCells = PetscMax(id, numCells);
+      }
+      for (v = 0; v < Nv; ++v) {
+        ego vertex = nobjs[v];
+
+        id = EG_indexBodyTopo(body, vertex);
+        /* TODO: Instead of assuming contiguous ids, we could use a hash table */
+        numVertices = PetscMax(id, numVertices);
+      }
+    }
+    ierr = PetscPrintf(PETSC_COMM_SELF, "\nPLEX Input Array Checkouts\n");CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, " Total Number of Unique Cells    = %d \n", numCells);CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, " Total Number of Unique Vertices = %d \n", numVertices);CHKERRQ(ierr);
+
+    dim        = 2; /* Assume 3D Models :: Need to update to handle 2D Models in the future */
+    cdim       = 3; /* Assume 3D Models :: Need to update to handle 2D Models in the future */
+    numCorners = 3; /* TODO Check number of cell corners from EGADSLite */
+    ierr = PetscMalloc2(numVertices*cdim, &coords, numCells*numCorners, &cells);CHKERRQ(ierr);
+
+    /* Get vertex coordinates */
+    for (b = 0; b < nbodies; ++b) {
+      ego body = bodies[b];
+      int id, Nv, v;
+
+      ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs);CHKERRQ(ierr);
+      for (v = 0; v < Nv; ++v) {
+        ego    vertex = nobjs[v];
+        double limits[4];
+        int    dummy;
+
+        ierr = EG_getTopology(vertex, &geom, &oclass, &mtype, limits, &dummy, &mobjs, &senses);CHKERRQ(ierr);
+        id   = EG_indexBodyTopo(body, vertex);CHKERRQ(ierr);
+        coords[(id-1)*cdim+0] = limits[0];
+        coords[(id-1)*cdim+1] = limits[1];
+        coords[(id-1)*cdim+2] = limits[2];
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", id);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(id-1)*cdim+0], coords[(id-1)*cdim+1],coords[(id-1)*cdim+2]);
+      }
+    }
+
+    /* Get cell vertices by traversing loops */
+    for (b = 0; b < nbodies; ++b) {
+      ego body = bodies[b];
+      int id, Nl, l;
+
+      ierr = EG_getBodyTopos(body, NULL, LOOP, &Nl, &lobjs);CHKERRQ(ierr);
+      for (l = 0; l < Nl; ++l) {
+        ego loop = lobjs[l];
+        int lid, Ne, e, nc = 0, c;
+
+        lid  = EG_indexBodyTopo(body, loop);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    LOOP ID: %d \n", lid);CHKERRQ(ierr);
+        ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &senses);CHKERRQ(ierr);
+
+        for (e = 0; e < Ne; ++e) {
+          ego edge = objs[e];
+          int Nv, v;
+
+          id   = EG_indexBodyTopo(body, edge);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "      EDGE ID: %d \n", id);CHKERRQ(ierr);
+          if (mtype == DEGENERATE) {ierr = PetscPrintf(PETSC_COMM_SELF, "        EGDE %d is DEGENERATE \n", id);CHKERRQ(ierr);}
+          ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);
+
+          /* Add unique vertices to cells, this handles mtype == DEGENERATE fine */
+          for (v = 0; v < Nv; ++v) {
+            ego vertex = nobjs[v];
+
+            id = EG_indexBodyTopo(body, vertex);
+            for (c = 0; c < nc; ++c) if (cells[(lid-1)*numCorners+c] == id-1) break;
+            if (c == nc) cells[(lid-1)*numCorners+nc++] = id-1;
+          }
+        }
+        if (nc != numCorners) SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Invalid number of cell corners %D, should be %D", nc, numCorners);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "      LOOP Corner NODEs (");
+        for (c = 0; c < numCorners; ++c) {
+          if (c > 0) {ierr = PetscPrintf(PETSC_COMM_SELF, ", ");}
+          ierr = PetscPrintf(PETSC_COMM_SELF, "%D", cells[(lid-1)*numCorners+c]);
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, ")\n");
+      }
+    }
+  }
+  ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dm);CHKERRQ(ierr);
+  ierr = PetscFree2(coords, cells);CHKERRQ(ierr);
+
+  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+  ierr = DMDestroy(&dm);CHKERRQ(ierr);
+
   /* Close EGADSlite file */
-  printf(" EG_close         = %d\n", EG_close(context));
-  return 0;
+  ierr = EG_close(context);CHKERRQ(ierr);
+  ierr = PetscFinalize();
+  return ierr;
 }

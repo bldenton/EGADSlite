@@ -3,8 +3,8 @@ EGADS_LIBDIR2= ../src
 CFLAGS = -I../include
 
 testPlex: egadsPlex.o
-	${CLINKER} -o $@ $< ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2) -legadslite
-
+	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
+  
 clean::
 	${RM} testPlex egadsPlex.o
 

@@ -208,10 +208,11 @@ int main(int argc, char *argv[])
   ierr = PetscFree2(coords, cells);CHKERRQ(ierr);
   
   // Refinement
-  ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
-  if (dmf == NULL) PetscPrintf(PETSC_COMM_SELF, " dmf returns NULL. Refinement failed.");CHKERRQ(ierr);
+  // ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
+  // if (dmf == NULL) PetscPrintf(PETSC_COMM_SELF, " dmf returns NULL. Refinement failed.");CHKERRQ(ierr);
 
-  ierr = DMViewFromOptions(dmf, NULL, "-dm_view");CHKERRQ(ierr);    //changed from dm to dmf
+  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);	// refinement
+  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
   ierr = DMDestroy(&dm);CHKERRQ(ierr);
   // ierr = DMDestroy(&dmf);CHKERRQ(ierr);
 

@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   int            oclass, mtype, nbodies, *senses;
   int            b;
   /* PETSc variables */
-  DM             dm;
+  DM             dm, dmf;
   PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0;
   PetscInt      *cells  = NULL;
   PetscReal     *coords = NULL;
@@ -206,9 +206,13 @@ int main(int argc, char *argv[])
   }
   ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dm);CHKERRQ(ierr);
   ierr = PetscFree2(coords, cells);CHKERRQ(ierr);
+  
+  // NEW for Refinement
+  ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
 
-  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+  ierr = DMViewFromOptions(dmf, NULL, "-dm_view");CHKERRQ(ierr);    //changed from dm to dmf
   ierr = DMDestroy(&dm);CHKERRQ(ierr);
+  // ierr = DMDestroy(&dmf);CHKERRQ(ierr);
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

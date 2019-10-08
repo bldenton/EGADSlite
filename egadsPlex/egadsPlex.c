@@ -211,11 +211,11 @@ int main(int argc, char *argv[])
   // ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
   // if (dmf == NULL) PetscPrintf(PETSC_COMM_SELF, " dmf returns NULL. Refinement failed.");CHKERRQ(ierr);
 
-  ierr = DMPlexSetRefinementUniform(dm, PETSC_TRUE);CHKERRQ(ierr);
+  //ierr = DMPlexSetRefinementUniform(dm, PETSC_TRUE);CHKERRQ(ierr);
   ierr = DMSetFromOptions(dm);CHKERRQ(ierr);	// refinement
+  
   ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
   ierr = DMDestroy(&dm);CHKERRQ(ierr);
-  // ierr = DMDestroy(&dmf);CHKERRQ(ierr);
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

@@ -28,7 +28,7 @@ int main(int argc, char *argv[])
   int            oclass, mtype, nbodies, *senses;
   int            b;
   /* PETSc variables */
-  DM             dm, dmf;
+  DM             dm;
   PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0;
   PetscInt      *cells  = NULL;
   PetscReal     *coords = NULL;
@@ -211,6 +211,7 @@ int main(int argc, char *argv[])
   // ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
   // if (dmf == NULL) PetscPrintf(PETSC_COMM_SELF, " dmf returns NULL. Refinement failed.");CHKERRQ(ierr);
 
+  ierr = DMPlexSetRefinementUniform(dm, PETSC_TRUE);CHKERRQ(ierr);
   ierr = DMSetFromOptions(dm);CHKERRQ(ierr);	// refinement
   ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
   ierr = DMDestroy(&dm);CHKERRQ(ierr);

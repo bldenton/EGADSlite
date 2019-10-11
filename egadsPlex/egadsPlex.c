@@ -81,9 +81,24 @@ int main(int argc, char *argv[])
 
         for (e = 0; e < Ne; ++e) {
           ego edge = objs[e];
-
+          
           id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
           ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d\n", id);CHKERRQ(ierr);
+          
+          //
+          double *range[4];
+          double point[3];
+          double *params[4];
+          double *result[3];
+          int peri;
+          ierr = EG_getRange(objs[e], &range, &peri); 
+          
+          ierr = PetscPrintf(PETSC_COMM_SELF, " Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
+
+          point[0] = 0.;
+          point[1] = 0.;
+          point[2] = 0.;
+          //
 
           /* Get NODE info which associated with the current EDGE */
           ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -97,7 +112,30 @@ int main(int argc, char *argv[])
             id = EG_indexBodyTopo(body, vertex);
             ierr = PetscPrintf(PETSC_COMM_SELF, "              NODE ID: %d \n", id);CHKERRQ(ierr);
             ierr = PetscPrintf(PETSC_COMM_SELF, "                 (x, y, z) = (%lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
+            
+            point[0] = point[0] + limits[0];
+            point[1] = point[1] + limits[1];
+            point[2] = point[2] + limits[2];
           }
+          
+          //
+          point[0] = point[0]/2.;
+          point[1] = point[1]/2.;
+          point[2] = point[2]/2.;
+          
+          double trange[2];
+          
+          trange[0] = 0.;
+          trange[1] = 0.;
+          double *xyzresult[9];
+          double t=0.;
+          
+          //ierr = EG_invEvaluate(objs[e], &point, &params, &result);
+          ierr = EG_nearestOnCurve(objs[e], point, range, t, &xyzresult);
+          ierr = PetscPrintf(PETSC_COMM_SELF, " (t1, t2) = (%lf, %lf) \n", params[0], params[1]);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", result[0], result[1], result[2]);
+          ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", xyzresult[0], xyzresult[1], xyzresult[2]);
+          //
         }
       }
     }

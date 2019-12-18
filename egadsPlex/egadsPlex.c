@@ -1,5 +1,6 @@
-static char help[] = "Program is intended to read the Geometric Topology of an EGADSlite geometry file\n\
-and store it in a Petsc Plex\n\n\n";
+static const char help[] = "Test of EGADSLite CAD functionality";
+
+#include <petscdmplex.h>
 
 #include <egads.h>
 #include <petsc.h>
@@ -23,6 +24,8 @@ static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
 
 int main(int argc, char *argv[])
 {
+  DMLabel        bodyLabel, faceLabel, edgeLabel;
+  PetscInt       cStart, cEnd, c;
   /* EGADSLite variables */
   ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
   int            oclass, mtype, nbodies, *senses;
@@ -81,24 +84,16 @@ int main(int argc, char *argv[])
 
         for (e = 0; e < Ne; ++e) {
           ego edge = objs[e];
-          
+
           id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
           ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d\n", id);CHKERRQ(ierr);
-          
-          //
-          double *range[4];
-          double point[3];
-          double *params[4];
-          double *result[3];
-          int peri;
-          ierr = EG_getRange(objs[e], &range, &peri); 
-          
-          ierr = PetscPrintf(PETSC_COMM_SELF, " Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
 
-          point[0] = 0.;
-          point[1] = 0.;
-          point[2] = 0.;
-          //
+          double range[4] = {0., 0., 0., 0.};
+          double point[3] = {0., 0., 0.};
+          int    peri;
+
+          ierr = EG_getRange(objs[e], range, &peri);
+          ierr = PetscPrintf(PETSC_COMM_SELF, " Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
 
           /* Get NODE info which associated with the current EDGE */
           ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -112,30 +107,30 @@ int main(int argc, char *argv[])
             id = EG_indexBodyTopo(body, vertex);
             ierr = PetscPrintf(PETSC_COMM_SELF, "              NODE ID: %d \n", id);CHKERRQ(ierr);
             ierr = PetscPrintf(PETSC_COMM_SELF, "                 (x, y, z) = (%lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
-            
+
             point[0] = point[0] + limits[0];
             point[1] = point[1] + limits[1];
             point[2] = point[2] + limits[2];
           }
-          
-          //
+
+#if 0
           point[0] = point[0]/2.;
           point[1] = point[1]/2.;
           point[2] = point[2]/2.;
-          
+
           double trange[2];
-          
+
           trange[0] = 0.;
           trange[1] = 0.;
+          double *params[4];
+          double *result[3];
           double *xyzresult[9];
           double t=0.;
-          
-          //ierr = EG_invEvaluate(objs[e], &point, &params, &result);
+
           ierr = EG_nearestOnCurve(objs[e], point, range, t, &xyzresult);
           ierr = PetscPrintf(PETSC_COMM_SELF, " (t1, t2) = (%lf, %lf) \n", params[0], params[1]);
-          //ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", result[0], result[1], result[2]);
           ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", xyzresult[0], xyzresult[1], xyzresult[2]);
-          //
+#endif
         }
       }
     }
@@ -244,14 +239,86 @@ int main(int argc, char *argv[])
   }
   ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dm);CHKERRQ(ierr);
   ierr = PetscFree2(coords, cells);CHKERRQ(ierr);
-  
-  // Refinement
-  // ierr = DMRefine(dm, PETSC_COMM_WORLD, &dmf);CHKERRQ(ierr);
-  // if (dmf == NULL) PetscPrintf(PETSC_COMM_SELF, " dmf returns NULL. Refinement failed.");CHKERRQ(ierr);
+  {
+    PetscContainer modelObj;
 
-  //ierr = DMPlexSetRefinementUniform(dm, PETSC_TRUE);CHKERRQ(ierr);
-  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);	// refinement
-  
+    ierr = PetscContainerCreate(PETSC_COMM_SELF, &modelObj);CHKERRQ(ierr);
+    ierr = PetscContainerSetPointer(modelObj, model);CHKERRQ(ierr);
+    ierr = PetscObjectCompose((PetscObject) dm, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
+    ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
+  }
+  ierr = DMCreateLabel(dm, "EGADS Body ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dm, "EGADS Face ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dm, "EGADS Edge ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
+  for (b = 0; b < nbodies; ++b) {
+    ego body = bodies[b];
+    int id, Nl, l;
+
+    ierr = EG_getBodyTopos(body, NULL, LOOP, &Nl, &lobjs);CHKERRQ(ierr);
+    for (l = 0; l < Nl; ++l) {
+      ego loop = lobjs[l];
+      int lid, cell, Ne, e;
+
+      lid  = EG_indexBodyTopo(body, loop);CHKERRQ(ierr);
+      cell = lid-1;
+      ierr = DMLabelSetValue(bodyLabel, cell, b);CHKERRQ(ierr);
+      {
+        ego *fobjs;
+        int  Nf, fid;
+
+        ierr = EG_getBodyTopos(body, loop, FACE, &Nf, &fobjs);CHKERRQ(ierr);
+        fid  = EG_indexBodyTopo(body, fobjs[0]);CHKERRQ(ierr);
+        ierr = DMLabelSetValue(faceLabel, cell, fid);CHKERRQ(ierr);
+      }
+
+      ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &senses);CHKERRQ(ierr);
+      for (e = 0; e < Ne; ++e) {
+        ego edge = objs[e];
+        int eid, Nv, v;
+        PetscInt support[2], numEdges;
+        const PetscInt *edges;
+
+        eid  = EG_indexBodyTopo(body, edge);
+        ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);
+        if (Nv > 2) SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Edge %d has %d vertices > 2", id, Nv);
+        for (v = 0; v < Nv; ++v) {
+          ego vertex = nobjs[v];
+
+          id   = EG_indexBodyTopo(body, vertex);
+          ierr = DMLabelSetValue(edgeLabel, numCells + id-1, eid);CHKERRQ(ierr);
+          support[v] = numCells + id-1;
+        }
+        if (Nv == 2) {
+          ierr = DMPlexGetJoin(dm, 2, support, &numEdges, &edges);CHKERRQ(ierr);
+          if (numEdges != 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "2 vertices should only bound 1 edge, not %D", numEdges);
+          ierr = DMLabelSetValue(edgeLabel, edges[0], eid);CHKERRQ(ierr);
+          ierr = DMPlexRestoreJoin(dm, 2, support, &numEdges, &edges);CHKERRQ(ierr);
+        }
+      }
+    }
+  }
+  ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+  for (c = cStart; c < cEnd; ++c) {
+    PetscInt *closure = NULL;
+    PetscInt  clSize, cl, bval, fval;
+
+    ierr = DMPlexGetTransitiveClosure(dm, c, PETSC_TRUE, &clSize, &closure);CHKERRQ(ierr);
+    ierr = DMLabelGetValue(bodyLabel, c, &bval);CHKERRQ(ierr);
+    ierr = DMLabelGetValue(faceLabel, c, &fval);CHKERRQ(ierr);
+    for (cl = 0; cl < clSize*2; cl += 2) {
+      ierr = DMLabelSetValue(bodyLabel, closure[cl], bval);CHKERRQ(ierr);
+      ierr = DMLabelSetValue(faceLabel, closure[cl], fval);CHKERRQ(ierr);
+    }
+    ierr = DMPlexRestoreTransitiveClosure(dm, c, PETSC_TRUE, &clSize, &closure);CHKERRQ(ierr);
+  }
+  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+
   ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
   ierr = DMDestroy(&dm);CHKERRQ(ierr);
 
@@ -260,3 +327,11 @@ int main(int argc, char *argv[])
   ierr = PetscFinalize();
   return ierr;
 }
+
+/*TEST
+
+  test:
+    suffix: sphere_0
+    args: -filename ${wPETSC_DIR}/share/petsc/datafiles/meshes/unit_sphere.egadslite -dm_view ::ascii_info_detail
+
+TEST*/

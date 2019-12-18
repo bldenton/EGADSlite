@@ -1,6 +1,9 @@
 EGADS_LIBDIR = /PETSc3/cad/EGADSlite/src
 EGADS_LIBDIR2= ../src
+#EGADS_LIBDIR2=$ESP_ROOT/lib
 CFLAGS = -I../include
+
+# Note: I replaced -legadslite with -legads
 
 testPlex: egadsPlex.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)

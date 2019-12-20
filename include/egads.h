@@ -246,8 +246,5 @@ PETSC_EXTERN int  EG_ruled( int nsec, const ego *secs, ego *result );
 
 PETSC_EXTERN int  EG_inTriExact( double *t1, double *t2, double *t3, double *p,
                                  double *w );
-#ifdef __cplusplus
-}
-#endif
 
 #endif

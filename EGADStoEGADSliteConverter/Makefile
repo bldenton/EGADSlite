@@ -1,5 +1,5 @@
 LIBS = \
-  -legads -L$ESP_ROOT/lib
+  -legads -L$(ESP_ROOT)/lib
 
 CC = gcc
 

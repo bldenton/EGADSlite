@@ -93,7 +93,7 @@ int main(int argc, char *argv[])
           int    peri;
 
           ierr = EG_getRange(objs[e], range, &peri);
-          ierr = PetscPrintf(PETSC_COMM_SELF, " Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "            Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
 
           /* Get NODE info which associated with the current EDGE */
           ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -134,11 +134,12 @@ int main(int argc, char *argv[])
         }
       }
     }
+  }
 
-  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
-
-  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
-  ierr = DMDestroy(&dm);CHKERRQ(ierr);
+//  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+//
+//  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+//  ierr = DMDestroy(&dm);CHKERRQ(ierr);
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

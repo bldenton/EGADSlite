@@ -8,7 +8,7 @@ CFLAGS = -I../include
 testPlex: egadsPlex.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
 
-testNozzle: egadsPlex.o
+testNozzle: egadsNozzle.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
 
 clean::

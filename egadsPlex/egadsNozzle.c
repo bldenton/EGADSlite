@@ -27,8 +27,8 @@ int main(int argc, char *argv[])
   DMLabel        bodyLabel, faceLabel, edgeLabel;
   PetscInt       cStart, cEnd, c;
   /* EGADSLite variables */
-  ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs;
-  int            oclass, mtype, nbodies, *senses;
+  ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs, *fobjs;
+  int            oclass, mtype, nbodies, *senses, *esenses;
   int            b;
   /* PETSc variables */
   DM             dm;
@@ -55,13 +55,13 @@ int main(int argc, char *argv[])
 
     for (b = 0; b < nbodies; ++b) {
       ego body = bodies[b];
-      int id, Nsh, Nf, Nl, l, Ne, e, Nv, v;
+      int id, Nsh, Nf, f, Nl, l, Ne, e, Nv, v;
 
       /* Output Basic Model Topology */
       ierr = EG_getBodyTopos(body, NULL, SHELL, &Nsh, &objs);CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of SHELLS: %d \n", Nsh);CHKERRQ(ierr);
 
-      ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &objs);CHKERRQ(ierr);
+      ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &fobjs);CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of FACES: %d \n", Nf);CHKERRQ(ierr);
 
       ierr = EG_getBodyTopos(body, NULL, LOOP,  &Nl, &lobjs);CHKERRQ(ierr);
@@ -73,64 +73,75 @@ int main(int argc, char *argv[])
       ierr = EG_getBodyTopos(body, NULL, NODE,  &Nv, &objs);CHKERRQ(ierr);
       ierr = PetscPrintf(PETSC_COMM_SELF, "   Number of NODES: %d \n", Nv);CHKERRQ(ierr);
 
-      for (l = 0; l < Nl; ++l) {
-        ego loop = lobjs[l];
+      for (f = 0; f < Nf; ++f){
+        ego face = fobjs[f];
+        
+        id   = EG_indexBodyTopo(body, face);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "        FACE ID: %d\n", id);CHKERRQ(ierr);
+        
+        /* Get LOOP info which associated with the current FACE */
+        ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Nl, &objs, &senses);CHKERRQ(ierr);
+        
+        for (l = 0; l < Nl; ++l) {
+          ego loop = objs[l];
 \
-        id   = EG_indexBodyTopo(body, loop);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "          LOOP ID: %d\n", id);CHKERRQ(ierr);
-
-        /* Get EDGE info which associated with the current LOOP */
-        ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &senses);CHKERRQ(ierr);
-
-        for (e = 0; e < Ne; ++e) {
-          ego edge = objs[e];
-
-          id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d\n", id);CHKERRQ(ierr);
-
-          double range[4] = {0., 0., 0., 0.};
-          double point[3] = {0., 0., 0.};
-          int    peri;
-
-          ierr = EG_getRange(objs[e], range, &peri);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "            Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
-
-          /* Get NODE info which associated with the current EDGE */
-          ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
-
-          for (v = 0; v < Nv; ++v) {
-            ego    vertex = nobjs[v];
-            double limits[4];
-            int    dummy;
-
-            ierr = EG_getTopology(vertex, &geom, &oclass, &mtype, limits, &dummy, &mobjs, &senses);CHKERRQ(ierr);
-            id = EG_indexBodyTopo(body, vertex);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "              NODE ID: %d \n", id);CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "                 (x, y, z) = (%lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
-
-            point[0] = point[0] + limits[0];
-            point[1] = point[1] + limits[1];
-            point[2] = point[2] + limits[2];
-          }
-
+          id   = EG_indexBodyTopo(body, loop);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "          LOOP ID: %d\n", id);CHKERRQ(ierr);
+  
+          /* Get EDGE info which associated with the current LOOP */
+          ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &esenses);CHKERRQ(ierr);
+  
+          for (e = 0; e < Ne; ++e) {
+            ego edge = objs[e];
+			int sense = esenses[e];
+  
+            id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d  :: sense = %d\n", id, sense);CHKERRQ(ierr);
+  
+            double range[4] = {0., 0., 0., 0.};
+            double point[3] = {0., 0., 0.};
+            int    peri;
+  
+            ierr = EG_getRange(objs[e], range, &peri);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "              Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
+  
+            /* Get NODE info which associated with the current EDGE */
+            ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
+  
+            for (v = 0; v < Nv; ++v) {
+              ego    vertex = nobjs[v];
+              double limits[4];
+              int    dummy;
+  
+              ierr = EG_getTopology(vertex, &geom, &oclass, &mtype, limits, &dummy, &mobjs, &senses);CHKERRQ(ierr);
+              id = EG_indexBodyTopo(body, vertex);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "              NODE ID: %d \n", id);CHKERRQ(ierr);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "                 (x, y, z) = (%lf, %lf, %lf) \n", limits[0], limits[1], limits[2]);
+  
+              point[0] = point[0] + limits[0];
+              point[1] = point[1] + limits[1];
+              point[2] = point[2] + limits[2];
+            }
+  
 #if 0
-          point[0] = point[0]/2.;
-          point[1] = point[1]/2.;
-          point[2] = point[2]/2.;
-
-          double trange[2];
-
-          trange[0] = 0.;
-          trange[1] = 0.;
-          double *params[4];
-          double *result[3];
-          double *xyzresult[9];
-          double t=0.;
-
-          ierr = EG_nearestOnCurve(objs[e], point, range, t, &xyzresult);
-          ierr = PetscPrintf(PETSC_COMM_SELF, " (t1, t2) = (%lf, %lf) \n", params[0], params[1]);
-          ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", xyzresult[0], xyzresult[1], xyzresult[2]);
+            point[0] = point[0]/2.;
+            point[1] = point[1]/2.;
+            point[2] = point[2]/2.;
+  
+            double trange[2];
+  
+            trange[0] = 0.;
+            trange[1] = 0.;
+            double *params[4];
+            double *result[3];
+            double *xyzresult[9];
+            double t=0.;
+  
+            ierr = EG_nearestOnCurve(objs[e], point, range, t, &xyzresult);
+            ierr = PetscPrintf(PETSC_COMM_SELF, " (t1, t2) = (%lf, %lf) \n", params[0], params[1]);
+            ierr = PetscPrintf(PETSC_COMM_SELF, " (x, y, z) = (%lf, %lf, %lf) \n", xyzresult[0], xyzresult[1], xyzresult[2]);
 #endif
+          }
         }
       }
     }

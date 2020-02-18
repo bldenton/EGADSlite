@@ -27,13 +27,13 @@ int main(int argc, char *argv[])
   DMLabel        bodyLabel, faceLabel, edgeLabel;
   PetscInt       cStart, cEnd, c;
   /* EGADSLite variables */
-  ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs, *fobjs, *shobjs;
+  ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs, *fobjs, *eobjs, *shobjs;
   int            oclass, mtype, nbodies, *senses, *bsenses, *shsenses, *fsenses, *lsenses, *esenses;
   int            b;
   /* PETSc variables */
   DM             dm;
   PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0, depth = 0;
-  PetscInt       numFaces = 0;
+  PetscInt       numFaces = 0, numEdges = 0;
   PetscInt      *cells  = NULL, *coneOrient = NULL, *cones = NULL, *coneSize = NULL, *numPoints = NULL;
   PetscReal     *coords = NULL;
   MPI_Comm       comm;
@@ -165,7 +165,7 @@ int main(int argc, char *argv[])
   }
   
   /* Set up DMPlex DAG */
-  depth = 1;                                                // define depth of DAG. Here its just FACE --> VERTICES
+  depth = 2;                                                // define depth of DAG. Here its just FACE --> EGDES --> VERTICES
   ierr = DMCreate(PETSC_COMM_WORLD, &dm); CHKERRQ(ierr);    // Create dm
   ierr = DMSetDimension(dm, depth); CHKERRQ(ierr);          // Set Topological Dimension
   ierr = DMSetCoordinateDim(dm, 3); CHKERRQ(ierr);          // Set Spacial/Coordinate Dimension
@@ -173,47 +173,67 @@ int main(int argc, char *argv[])
   
   /* Determine Number of Total FACES & NODES in model */
   ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &bsenses);CHKERRQ(ierr);
-  int Nf, Nv;
+  int Nf, Ne, Nv;
   for (b = 0; b < nbodies; ++b) {
       ego body = bodies[b];
       ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &fobjs);CHKERRQ(ierr);
-      ierr = EG_getBodyTopos(body, NULL, NODE,  &Nv, &fobjs);CHKERRQ(ierr);
+      ierr = EG_getBodyTopos(body, NULL, EDGE,  &Ne, &eobjs);CHKERRQ(ierr);
+      ierr = EG_getBodyTopos(body, NULL, NODE,  &Nv, &nobjs);CHKERRQ(ierr);
       numFaces = numFaces + Nf;
+      numEdges = numEdges + Ne;
       numVertices = numVertices + Nv;
   }
   ierr = PetscPrintf(PETSC_COMM_SELF, "numFaces = %d \n", numFaces);CHKERRQ(ierr);    // Print out results
+  ierr = PetscPrintf(PETSC_COMM_SELF, "numEdges = %d \n", numEdges);CHKERRQ(ierr);    // Print out results
   ierr = PetscPrintf(PETSC_COMM_SELF, "numVertices = %d \n\n", numVertices);CHKERRQ(ierr);    // Print out results
   
   /* Load numPoints */
   ierr = PetscMalloc1(depth+1, &numPoints); CHKERRQ(ierr);  // Set Size of numPoints Array
   numPoints[0] = numVertices;
-  numPoints[1] = numFaces;
+  numPoints[1] = numEdges;
+  numPoints[2] = numFaces;
 
-  /* Load coneSize */   //This won't work with multiple bodies -- need to rework....
+  /* Load coneSize */   //Currently this won't work with multiple bodies -- need to rework....
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n coneSize Array \n");CHKERRQ(ierr);
-  ierr = PetscMalloc1(numFaces+numVertices, &coneSize); CHKERRQ(ierr);     // Set Size of coneSize Array
+  ierr = PetscMalloc1(numFaces+numEdges+numVertices, &coneSize); CHKERRQ(ierr);     // Set Size of coneSize Array
   int orientSize = 0;    //Defined here to utilize coneSize elements to calculate it coneOrient Array's size
-  for (int ii = 0; ii < numFaces + numVertices; ++ii){
+  int vStartIndex = 0;
+  for (int ii = 0; ii < numFaces + numEdges + numVertices; ++ii){
     for (b = 0; b < nbodies; ++b) {
       ego body = bodies[b];
-      ego *faceObj;
-      int numNodes = 0;
+      ego *faceObj, *eobjs;
+      int numEnt = 0, numEdge = 0;
       if (ii < numFaces){
         ierr = EG_objectBodyTopo(body, FACE, ii+1, &faceObj); CHKERRQ(ierr);   // Get FACE objects for given ID
-        ierr = EG_getBodyTopos(body, faceObj, NODE, &numNodes, &objs);         // Get Number of NODES and their objects connected to the current FACE    
-        coneSize[ii] = numNodes;
+        ierr = EG_getBodyTopos(body, faceObj, EDGE, &numEnt, &objs);         // Get Number of NODES and their objects connected to the current FACE    
+        coneSize[ii] = numEnt;
+        vStartIndex = vStartIndex + numEnt;
+      } else if(ii >= numFaces && ii < (numEdges+numFaces)){
+        ierr = EG_objectBodyTopo(body, EDGE, ii+1-numFaces, &eobjs); CHKERRQ(ierr);   // Get EDGE objects for given ID
+        ierr = EG_getBodyTopos(body, eobjs, NODE, &numEnt, &objs);         // Get Number of NODES and their objects connected to the current FACE    
+        coneSize[ii] = numEnt;
       } else {
         coneSize[ii] = 0;    // Store coneSize for Nodes. Note: This is always zero since Nodes are the base (top of the chart) entities
       }
-      orientSize = orientSize + numNodes;
+      orientSize = orientSize + numEnt;
     }   
     ierr = PetscPrintf(PETSC_COMM_SELF, "coneSize[%d] = %d \n", ii, coneSize[ii]);CHKERRQ(ierr);    // Print out results
   }
   
-  /* Load cones Array */     // Need updating to respect EDGE sense
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n vStartIndex = %d \n", vStartIndex);CHKERRQ(ierr);    // Print out results
+ 
+   /* Load coneOrient Array */
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n coneOrient Array\n");CHKERRQ(ierr);
+  ierr = PetscMalloc1(orientSize, &coneOrient); CHKERRQ(ierr);    // Set Size of coneSize Array
+  for (int ii = 0; ii < orientSize; ++ii){
+    coneOrient[ii] = 0;
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "coneOrient[%d] = %d \n", ii, coneOrient[ii]);CHKERRQ(ierr);    // Print out results
+  }
+  
+  /* Load cones Array */     // Need updating to respect EDGE sense also probably won't work correctly for multiple bodies
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n cones Array\n");CHKERRQ(ierr);
   ierr = PetscMalloc1(orientSize, &cones); CHKERRQ(ierr);    // Set Size of cones Array (same size as coneOrient)
-  int counter = 0;
+  int ecntr = 0, eID = 0, vcntr = 0;
   for (b = 0; b < nbodies; ++b) {
       //ierr = PetscPrintf(PETSC_COMM_SELF, "b = %d \n", b);CHKERRQ(ierr);
       ego body = bodies[b];
@@ -237,46 +257,84 @@ int main(int argc, char *argv[])
             ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
             //ierr = PetscPrintf(PETSC_COMM_SELF, "Ne = %d \n", Ne);CHKERRQ(ierr);
             
-            for (int ll = 0; ll < Ne-1; ++ll){      // one less edge since the DAG assumes closure for what I'm using it for
+            for (int ll = 0; ll < Ne; ++ll){      // one less edge since the DAG assumes closure for what I'm using it for
               ego edge = eobjs[ll];
   			      int esense = esenses[ll];
+             
+              eID = EG_indexBodyTopo(body, edge);
+              cones[ecntr] = eID + (numFaces - 1);
+              //ierr = PetscPrintf(PETSC_COMM_SELF, "cones[%d] = %d \n", ecntr, cones[ecntr]);CHKERRQ(ierr);
+              ecntr = ecntr + 1;
+              //ierr = PetscPrintf(PETSC_COMM_SELF, "ecntr = %d \n", ecntr);CHKERRQ(ierr);
            
+               // Added to see if coneOrient is fixed
+               if (esense < 0 ){
+                 coneOrient[ecntr] = -1;
+               }       
+               
                ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
                
-               if (ll == 0){
+               vcntr = 0;
+               // Need to update this loop to correctly assign the cones for edges
+               // Have to respect EDGE sense
+               //if (esense > 0){
+                 for (int mm = 0; mm < Nv; ++mm){
+                   ego vertex = nobjs[mm];
+                   
+                   cones[vStartIndex + (2*(eID-1)) + mm] = EG_indexBodyTopo(body, vertex) + (numFaces + numEdges - 1);
+                   //ierr = PetscPrintf(PETSC_COMM_SELF, "cones[%d] = %d \n", vStartIndex + vcntr - 1, cones[vStartIndex + vcntr - 1]);CHKERRQ(ierr);
+                   //vcntr = eID;
+                   //ierr = PetscPrintf(PETSC_COMM_SELF, "vcntr = %d \n", vcntr);CHKERRQ(ierr);
+                 }
+               //} else {
+               //  //for (int mm = Nv-1; mm >= 0; --mm){
+               //  //  ego vertex = nobjs[mm];
+               //  //  
+               //  //  cones[vStartIndex + (2*(eID-1)) + mm] = EG_indexBodyTopo(body, vertex) + (numFaces + numEdges - 1);
+               //  //  //ierr = PetscPrintf(PETSC_COMM_SELF, "cones[%d] = %d \n", vStartIndex + vcntr - 1, cones[vStartIndex + vcntr - 1]);CHKERRQ(ierr);
+               //  //  //vcntr = eID;
+               //  //  //ierr = PetscPrintf(PETSC_COMM_SELF, "vcntr = %d \n", vcntr);CHKERRQ(ierr);
+               //  //}
+               //  
+               //  cones[vStartIndex + (2*(eID-1))] = EG_indexBodyTopo(body, nobjs[1]) + (numFaces + numEdges - 1);
+               //  cones[vStartIndex + (2*(eID-1)) + 1] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces + numEdges - 1);
+               //}
+               
+               
+               /*if (ll == 0){
                  //ierr = PetscPrintf(PETSC_COMM_SELF, "counter = %d \n", counter);CHKERRQ(ierr);
-                 if (esense > 0){
+                 //if (esense > 0){
                    cones[counter] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces - 1);
                    cones[counter+1] = EG_indexBodyTopo(body, nobjs[1]) + (numFaces - 1);
-                 } else {
-                   cones[counter] = EG_indexBodyTopo(body, nobjs[1]) + (numFaces - 1);
-                   cones[counter+1] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces - 1);
-                 }
+                 //} else {
+                 //  cones[counter] = EG_indexBodyTopo(body, nobjs[1]) + (numFaces - 1);
+                 //  cones[counter+1] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces - 1);
+                 //}
                  counter = counter + 2;
                } else {
                  //ierr = PetscPrintf(PETSC_COMM_SELF, "counter = %d \n", counter);CHKERRQ(ierr);
-                 if (esense > 0){
+                 //if (esense > 0){
                    cones[counter] = EG_indexBodyTopo(body, nobjs[1]) + (numFaces - 1);
-                 } else {
-                   cones[counter] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces - 1);
-                 }              
+                 //} else {
+                 //  cones[counter] = EG_indexBodyTopo(body, nobjs[0]) + (numFaces - 1);
+                 //}              
                  counter = counter + 1;
-               }
+               }*/  // To restore previous work only delete /* and */ from the code block above
                //ierr = PetscPrintf(PETSC_COMM_SELF, "counter = %d \n", counter);CHKERRQ(ierr);
             }
           }
         }
       }        
   }
-  for (int ii = 0; ii < counter; ++ii){      // originally counter = orientSize
+  for (int ii = 0; ii < orientSize; ++ii){      // originally counter = orientSize
     ierr = PetscPrintf(PETSC_COMM_SELF, "cones[%d] = %d \n", ii, cones[ii]);CHKERRQ(ierr);    // Print out results
   }
   
-  /* Load coneOrient Array */
+//  /* Load coneOrient Array */
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n coneOrient Array\n");CHKERRQ(ierr);
-  ierr = PetscMalloc1(orientSize, &coneOrient); CHKERRQ(ierr);    // Set Size of coneSize Array
+//  ierr = PetscMalloc1(orientSize, &coneOrient); CHKERRQ(ierr);    // Set Size of coneSize Array
   for (int ii = 0; ii < orientSize; ++ii){
-    coneOrient[ii] = 0;
+//    coneOrient[ii] = 0;
     ierr = PetscPrintf(PETSC_COMM_SELF, "coneOrient[%d] = %d \n", ii, coneOrient[ii]);CHKERRQ(ierr);    // Print out results
   }
   
@@ -305,14 +363,14 @@ int main(int argc, char *argv[])
   
   ierr = DMPlexCreateFromDAG(dm, depth, numPoints, coneSize, cones, coneOrient, coords); CHKERRQ(ierr);  
   
-  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n dm \n");CHKERRQ(ierr);
-  //ierr = DMView(dm, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
-  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);  
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dm \n");CHKERRQ(ierr);
+  ierr = DMView(dm, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);  
 
-  //ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
   
-  //ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
-  //ierr = DMDestroy(&dm);CHKERRQ(ierr);
+  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+  ierr = DMDestroy(&dm);CHKERRQ(ierr);
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

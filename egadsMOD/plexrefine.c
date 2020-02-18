@@ -1,6 +1,5 @@
 #include <petsc/private/dmpleximpl.h>   /*I      "petscdmplex.h"   I*/
 #include <petscsf.h>
-// #include <egads.h>
 
 const char * const CellRefiners[] = {"NOOP", "SIMPLEX_1D", "SIMPLEX_2D", "HYBRID_SIMPLEX_2D", "SIMPLEX_TO_HEX_2D", "HYBRID_SIMPLEX_TO_HEX_2D", "HEX_2D", "HYBRID_HEX_2D",
                                      "SIMPLEX_3D", "HYBRID_SIMPLEX_3D", "SIMPLEX_TO_HEX_3D", "HYBRID_SIMPLEX_TO_HEX_3D", "HEX_3D", "HYBRID_HEX_3D", "CellRefiners", "REFINER_", 0};
@@ -8681,7 +8680,7 @@ static PetscErrorCode CellRefinerSetCoordinates(CellRefiner refiner, DM dm, Pets
         ierr = DMPlexGetTransitiveClosure(rdm, newv, PETSC_FALSE, &rStarSize, &rStar);CHKERRQ(ierr);
         for (v = 0; v < eStarSize*2; v += 2) {
           if ((eStar[v] >= cStart) && (eStar[v] < cEnd)) {
-            PetscScalar     coordsNewAux[3];
+            PetscScalar     coordsNewAux[3] = {0., 0., 0.};
             PetscInt       *cellCone = NULL;
             PetscInt        cellClosureSize, s, cv, cdof;
             PetscBool       locvA = PETSC_TRUE, locvB = PETSC_TRUE;
@@ -8756,15 +8755,8 @@ static PetscErrorCode CellRefinerSetCoordinates(CellRefiner refiner, DM dm, Pets
         ierr = DMLocalizeCoordinate_Internal(dm, spaceDim, &coords[offA], &coords[offB], &coordsNew[offnew]);CHKERRQ(ierr);
         for (d = 0; d < spaceDim; ++d) {
           coordsNew[offnew+d] = 0.5*(coords[offA+d] + coordsNew[offnew+d]);
+          ierr = DMPlexSnapToGeomModel(dm, e, &coordsNew[offnew], &coordsNew[offnew]);CHKERRQ(ierr);
         }
-        // ----------------------------------------------------------------------------------
-        ierr = PetscPrintf(PETSC_COMM_SELF, "=\n In petscrefine.c \n");
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      Node A ID = %d \n", (offA/spaceDim)+1);    // This does work in calculating the NODE IDs
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      Node A = (%lf, %lf, %lf) \n", coords[offA+0], coords[offA+1],coords[offA+2]);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      Node B ID = %d \n", (offB/spaceDim)+1);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      Node B = (%lf, %lf, %lf) \n", coords[offB+0], coords[offB+1],coords[offB+2]);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      New Node = (%lf, %lf, %lf) \n", coordsNew[offnew+0], coordsNew[offnew+1],coordsNew[offnew+2]);
-        //-----------------------------------------------------------------------------------    
       } else {
         for (d = 0; d < spaceDim; ++d) coordsNew[offnew+d] = PETSC_MIN_REAL;
       }
@@ -8788,7 +8780,7 @@ static PetscErrorCode CellRefinerSetCoordinates(CellRefiner refiner, DM dm, Pets
         ierr = DMPlexGetTransitiveClosure(rdm, newv, PETSC_FALSE, &rStarSize, &rStar);CHKERRQ(ierr);
         for (p = 0; p < rStarSize*2; p += 2) {
           if ((rStar[p] >= cStartNew) && (rStar[p] < cEndNew)) {
-            PetscScalar  ocoords[3];
+            PetscScalar  ocoords[3] = {0,0,0}; /* dummy values for compiler warnings about uninitialized values */
             PetscInt    *cone = NULL, closureSize, lid, coff, s, oc, cdof;
 
             c    = rStar[p];

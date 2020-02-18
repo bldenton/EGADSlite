@@ -25,6 +25,15 @@ cp /kif1/data/shared/software/egadsMOD/plexrefine.c /kif1/data/shared/software/b
 # Copy Modified petscvariables
 #cp /kif1/data/shared/software/egadsMOD/petscvariables /kif1/data/shared/software/builddir/petsc-3.12.0/lib/petsc/conf/petscvariables
 
+# Copy egads.py
+cp /kif1/data/shared/software/egadsMOD/egads.py /kif1/data/shared/software/builddir/petsc-3.12.0/config/BuildSystem/config/packages
+
+# Copy makefile with EGADS library
+cp /kif1/data/shared/software/egadsMOD/makefile /kif1/data/shared/software/builddir/petsc-3.12.0/src/dm/impls/plex/makefile
+
+# Copy plexegads.c to correct location
+cp /kif1/data/shared/software/egadsMOD/plexegads.c /kif1/data/shared/software/builddir/petsc-3.12.0/src/dm/impls/plex/plexegads.c
+
 # Install the modified petsc code 
 cd /eng/home/bldenton/ubaceslab/build_scripts
 ./build_petsc_egads_version.sh

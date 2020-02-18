@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
   int            oclass, mtype, nbodies, *senses, *bsenses, *shsenses, *fsenses, *lsenses, *esenses;
   int            b;
   /* PETSc variables */
-  DM             dm;
+  DM             dm, dmMesh;
   PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0, depth = 0;
   PetscInt       numFaces = 0, numEdges = 0;
   PetscInt      *cells  = NULL, *coneOrient = NULL, *cones = NULL, *coneSize = NULL, *numPoints = NULL;
@@ -169,7 +169,7 @@ int main(int argc, char *argv[])
   ierr = DMCreate(PETSC_COMM_WORLD, &dm); CHKERRQ(ierr);    // Create dm
   ierr = DMSetDimension(dm, depth); CHKERRQ(ierr);          // Set Topological Dimension
   ierr = DMSetCoordinateDim(dm, 3); CHKERRQ(ierr);          // Set Spacial/Coordinate Dimension
-  ierr = DMSetType(dm, DMPLEX); CHKERRQ(ierr);            // Set DM Type
+  ierr = DMSetType(dm, DMPLEX); CHKERRQ(ierr);              // Set DM Type
   
   /* Determine Number of Total FACES & NODES in model */
   ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &bsenses);CHKERRQ(ierr);
@@ -367,10 +367,21 @@ int main(int argc, char *argv[])
   ierr = DMView(dm, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);  
 
-  ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+  //ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+  //ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);
   
-  ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+  ierr = DMPlexGenerate(dm, "tetgen", PETSC_FALSE, &dmMesh); CHKERRQ(ierr);
+  //ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);
+  
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
+  ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
+  
+  //ierr = DMViewFromOptions(dm, NULL, "-dm_view");CHKERRQ(ierr);
+  //ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view");CHKERRQ(ierr);
+  
   ierr = DMDestroy(&dm);CHKERRQ(ierr);
+  ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

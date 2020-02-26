@@ -161,20 +161,7 @@ int main(int argc, char *argv[])
             }
           }
         }
-      }
-      
-    /* Tray to work with the EGAD Tessellation */
-    double *params[3];
-    //params[0] = 0;
-    //params[1] = 0;
-    //params[2] = 0;
-    ierr = EG_makeTessBody(body, params, &tess);CHKERRQ(ierr);
-    
-    int len;
-    double *pxyz, *pt;
-    ierr = EG_getTessEdge(tess, 2, &len, &pxyz, &pt); CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_SELF, "Number of Vertices on Edge 2 = %d \n", len);
-    
+      }   
     }
   }
   
@@ -220,7 +207,7 @@ int main(int argc, char *argv[])
           int    *periodic;
           
           ierr = EG_getRange(face, &range, &periodic); CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d range = %lf, %lf, %lf, %lf \n", ii+1, range[0], range[1], range[2], range[3]);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d range = %lf, %lf, %lf, %lf \n", ii+1, range[0], range[1], range[2], range[3]);CHKERRQ(ierr);
           
           double avgUV[2];
           avgUV[0] = (range[0] + range[1]) / 2.;
@@ -228,7 +215,7 @@ int main(int argc, char *argv[])
           
           double cntrPnt[18];
           ierr = EG_evaluate(face, avgUV, &cntrPnt);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d cntrPnt = %lf, %lf, %lf \n", ii+1, cntrPnt[0], cntrPnt[1], cntrPnt[2]);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d cntrPnt = %lf, %lf, %lf \n", ii+1, cntrPnt[0], cntrPnt[1], cntrPnt[2]);CHKERRQ(ierr);
           
           ierr = MatSetValue(faceMidP,ii,0,Nv+Ne+ii,INSERT_VALUES); CHKERRQ(ierr);
           ierr = MatSetValue(faceMidP,ii,1,cntrPnt[0],INSERT_VALUES); CHKERRQ(ierr);
@@ -248,14 +235,14 @@ int main(int argc, char *argv[])
           int    *periodic;
           
           ierr = EG_getRange(edge, &range, &periodic); CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d range = %lf, %lf \n", ii+1, range[0], range[1]);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d range = %lf, %lf \n", ii+1, range[0], range[1]);CHKERRQ(ierr);
           
           double avgt[1];
           avgt[0] = (range[0] + range[1]) / 2.;
           
           double cntrPnt[9];
           ierr = EG_evaluate(edge, avgt, &cntrPnt);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d cntrPnt = %lf, %lf, %lf \n", ii+1, cntrPnt[0], cntrPnt[1], cntrPnt[2]);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d cntrPnt = %lf, %lf, %lf \n", ii+1, cntrPnt[0], cntrPnt[1], cntrPnt[2]);CHKERRQ(ierr);
           
           ierr = MatSetValue(edgeMidP,ii,0,Nv+ii,INSERT_VALUES); CHKERRQ(ierr);
           ierr = MatSetValue(edgeMidP,ii,1,cntrPnt[0],INSERT_VALUES); CHKERRQ(ierr);
@@ -269,13 +256,13 @@ int main(int argc, char *argv[])
     MatAssemblyBegin(edgeMidP,MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(edgeMidP,MAT_FINAL_ASSEMBLY);
     
-    ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
-    ierr = MatView(faceMidP, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_SELF, "]\n");CHKERRQ(ierr);
-    
-    ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
-    ierr = MatView(edgeMidP, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_SELF, "]\n");CHKERRQ(ierr);
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
+    //ierr = MatView(faceMidP, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "]\n");CHKERRQ(ierr);
+    //
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
+    //ierr = MatView(edgeMidP, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "]\n");CHKERRQ(ierr);
     
     // Start to setup DMPlex
     dim = 2;
@@ -297,7 +284,7 @@ int main(int argc, char *argv[])
       }
     }
     
-    ierr = PetscPrintf(PETSC_COMM_SELF, "numCells = %d \n", numCells);CHKERRQ(ierr);
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "numCells = %d \n", numCells);CHKERRQ(ierr);
     
     ierr = PetscMalloc2(numVertices*cdim, &coords, numCells*numCorners, &cells);CHKERRQ(ierr);
     
@@ -318,8 +305,8 @@ int main(int argc, char *argv[])
         coords[(id-1)*cdim+0] = limits[0];
         coords[(id-1)*cdim+1] = limits[1];
         coords[(id-1)*cdim+2] = limits[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", id-1);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(id-1)*cdim+0], coords[(id-1)*cdim+1],coords[(id-1)*cdim+2]);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", id-1);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(id-1)*cdim+0], coords[(id-1)*cdim+1],coords[(id-1)*cdim+2]);
       }
     }
     
@@ -345,8 +332,8 @@ int main(int argc, char *argv[])
         coords[(Nv+ii)*cdim+0] = cntrPnt[0];
         coords[(Nv+ii)*cdim+1] = cntrPnt[1];
         coords[(Nv+ii)*cdim+2] = cntrPnt[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", ii+Nv);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(ii+Nv)*cdim+0], coords[(ii+Nv)*cdim+1],coords[(ii+Nv)*cdim+2]);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", ii+Nv);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(ii+Nv)*cdim+0], coords[(ii+Nv)*cdim+1],coords[(ii+Nv)*cdim+2]);
       }
     }
     
@@ -375,8 +362,8 @@ int main(int argc, char *argv[])
         coords[(Nv+Ne+ii)*cdim+0] = cntrPnt[0];
         coords[(Nv+Ne+ii)*cdim+1] = cntrPnt[1];
         coords[(Nv+Ne+ii)*cdim+2] = cntrPnt[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", ii+Nv+Ne);
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(ii+Nv+Ne)*cdim+0], coords[(ii+Nv+Ne)*cdim+1],coords[(ii+Nv+Ne)*cdim+2]);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", ii+Nv+Ne);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(ii+Nv+Ne)*cdim+0], coords[(ii+Nv+Ne)*cdim+1],coords[(ii+Nv+Ne)*cdim+2]);
       }
     }
     
@@ -397,13 +384,13 @@ int main(int argc, char *argv[])
         //  ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
           
           int midFaceID = Nvtotal + Netotal + f;    // f was l
-          ierr = PetscPrintf(PETSC_COMM_SELF, "    midFaceID = %d \n", midFaceID);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "    midFaceID = %d \n", midFaceID);
           
           for (int e = 0; e < Ne; ++e){
             ego edge = eobjs[e];
             int id   = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);  // ID of current edge
             int midPntID = Nvtotal + id - 1;
-            ierr = PetscPrintf(PETSC_COMM_SELF, "    midPntID = %d \n", midPntID);
+            //ierr = PetscPrintf(PETSC_COMM_SELF, "    midPntID = %d \n", midPntID);
             
             ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &esenses);CHKERRQ(ierr);
             
@@ -425,8 +412,8 @@ int main(int argc, char *argv[])
             cells[cellCntr*numCorners + 5] = endID-1;   
             
             cellCntr = cellCntr + 2; 
-            ierr = PetscPrintf(PETSC_COMM_SELF, "    Ne = %d \n", Ne);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "    cellCntr = %d \n", cellCntr);    
+            //ierr = PetscPrintf(PETSC_COMM_SELF, "    Ne = %d \n", Ne);
+            //ierr = PetscPrintf(PETSC_COMM_SELF, "    cellCntr = %d \n", cellCntr);    
           } 
         //}  
       }
@@ -436,6 +423,23 @@ int main(int argc, char *argv[])
     ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dmNozzle);CHKERRQ(ierr); 
     ierr = PetscFree2(coords, cells);CHKERRQ(ierr);   
   
+  ierr = DMPlexOrient(dmNozzle); CHKERRQ(ierr);
+  
+  {
+    PetscContainer modelObj;
+
+    ierr = PetscContainerCreate(PETSC_COMM_SELF, &modelObj);CHKERRQ(ierr);
+    ierr = PetscContainerSetPointer(modelObj, model);CHKERRQ(ierr);
+    ierr = PetscObjectCompose((PetscObject) dmNozzle, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
+    ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
+  }
+  
+  ierr = DMCreateLabel(dmNozzle, "EGADS Body ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dmNozzle, "EGADS Face ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dmNozzle, "EGADS Edge ID");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
   
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmNozzle \n");CHKERRQ(ierr);
   ierr = DMView(dmNozzle, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);

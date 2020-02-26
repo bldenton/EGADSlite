@@ -179,6 +179,7 @@ int main(int argc, char *argv[])
         numVertices = numVertices + Nv;
     }
     
+    int Nftotal = numFaces;
     int Netotal = numEdges;
     int Nvtotal = numVertices;
     
@@ -477,15 +478,15 @@ int main(int argc, char *argv[])
           vID = EG_indexBodyTopo(body, vertex);CHKERRQ(ierr);    // vertex ID
           
           // Edge Endnodes
-          ierr = DMLabelSetValue(edgeLabel, vID-1, eID);CHKERRQ(ierr);
-          ierr = DMLabelSetValue(faceLabel, vID-1, fID);CHKERRQ(ierr);
+          ierr = DMLabelSetValue(edgeLabel, Nftotal + Netotal + vID - 1, eID);CHKERRQ(ierr);
+          ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + vID - 1, fID);CHKERRQ(ierr);
         }
         // Edge MidPoint
-        ierr = DMLabelSetValue(edgeLabel, Nvtotal+eID-1, eID);CHKERRQ(ierr);
-        ierr = DMLabelSetValue(faceLabel, Nvtotal+eID-1, fID);CHKERRQ(ierr);
+        ierr = DMLabelSetValue(edgeLabel, Nftotal + Netotal + Nvtotal + eID - 1, eID);CHKERRQ(ierr);
+        ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + Nvtotal + eID - 1, fID);CHKERRQ(ierr);
       }
       // Face Center Node
-      ierr = DMLabelSetValue(faceLabel, Nvtotal+Netotal+fID-1, fID);CHKERRQ(ierr);
+      ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + Nvtotal + Netotal + fID - 1, fID);CHKERRQ(ierr);
     }  
   }
   

@@ -39,7 +39,7 @@ int main(int argc, char *argv[])
   PetscMPIInt    rank;
   AppCtx         ctx;
   PetscErrorCode ierr;
-  Mat neConnectP, nfConnectP;
+  Mat            neConnectP, nfConnectP;
   PetscContainer egadsNE, egadsNF, egadsModel;
 
   ierr = PetscInitialize(&argc, &argv, NULL, help); if (ierr) return ierr;

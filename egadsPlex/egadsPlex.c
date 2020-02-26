@@ -273,7 +273,7 @@ int main(int argc, char *argv[])
         fid  = EG_indexBodyTopo(body, fobjs[0]);CHKERRQ(ierr);
         ierr = DMLabelSetValue(faceLabel, cell, fid);CHKERRQ(ierr);
       }
-
+      
       ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &objs, &senses);CHKERRQ(ierr);
       for (e = 0; e < Ne; ++e) {
         ego edge = objs[e];

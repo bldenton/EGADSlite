@@ -390,7 +390,7 @@ int main(int argc, char *argv[])
         //  ego loop = lobjs[l];
         //  ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
           
-          int fid   = EG_indexBodyTopo(body, face);CHKERRQ(ierr);
+          int fid = EG_indexBodyTopo(body, face);CHKERRQ(ierr);
           
           int midFaceID = Nvtotal + Netotal + fid-1;    // fid-1 was f
           //ierr = PetscPrintf(PETSC_COMM_SELF, "    midFaceID = %d \n", midFaceID);
@@ -455,6 +455,8 @@ int main(int argc, char *argv[])
     ierr = DMPlexGetHeightStratum(dmNozzle, jj, &cStart, &cEnd);CHKERRQ(ierr);
     for (int ii = cStart; ii < cEnd; ++ii){
       ierr = DMLabelSetValue(bodyLabel, ii, 0);CHKERRQ(ierr);    // Need to change this to be more flexible for multi-body parts
+      ierr = DMLabelSetValue(edgeLabel, ii, -1);CHKERRQ(ierr);
+      ierr = DMLabelSetValue(faceLabel, ii, -1);CHKERRQ(ierr);
     }
   }
   
@@ -487,6 +489,7 @@ int main(int argc, char *argv[])
   
   
   /* Set Label Values to EGADS faces & edges */
+  int eCntr = 0;
   for (b = 0; b < nbodies; ++b){
     ego body = bodies[b];
     ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &fobjs);CHKERRQ(ierr);
@@ -497,7 +500,7 @@ int main(int argc, char *argv[])
       
       fID = EG_indexBodyTopo(body, face);CHKERRQ(ierr);    // face ID
       
-      ierr = EG_getBodyTopos(body, face, EDGE,  &Ne, &eobjs);CHKERRQ(ierr);
+      ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs);CHKERRQ(ierr);
       
       for (int e = 0; e < Ne; ++e){
         ego edge = eobjs[e];
@@ -505,7 +508,7 @@ int main(int argc, char *argv[])
         
         eID = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);    // edge ID
       
-        ierr = EG_getBodyTopos(body, edge, NODE,  &Nv, &nobjs);CHKERRQ(ierr);
+        ierr = EG_getBodyTopos(body, edge, NODE, &Nv, &nobjs);CHKERRQ(ierr);
         
         for (int v = 0; v < Nv; ++v){
           ego vertex = nobjs[v];
@@ -517,7 +520,7 @@ int main(int argc, char *argv[])
           ierr = DMLabelSetValue(edgeLabel, nStart + vID - 1, eID);CHKERRQ(ierr);
           ierr = DMLabelSetValue(faceLabel, nStart + vID - 1, fID);CHKERRQ(ierr);
           //ierr = DMLabelSetValue(edgeLabel, Nftotal + Netotal + vID - 1, eID);CHKERRQ(ierr);
-          //ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + vID - 1, fID);CHKERRQ(ierr);  
+          //ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + vID - 1, fID);CHKERRQ(ierr);
         }
         // Edge MidPoint
         ierr = DMLabelSetValue(edgeLabel, nStart + Nvtotal + eID - 1, eID);CHKERRQ(ierr);
@@ -545,35 +548,54 @@ int main(int argc, char *argv[])
       
       ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
       
-      //for (int e = 0; e < Ne; ++e){
-      for (int jj = 0; jj < 2*Ne; ++jj){
-        PetscInt coneSize = 0;
-        PetscInt *cone = NULL;
-        
-        ierr = DMLabelSetValue(faceLabel, cellCntr, fID);CHKERRQ(ierr);
-        ierr = DMPlexGetConeSize(dmNozzle, cellCntr, &coneSize); CHKERRQ(ierr);
-        ierr = DMPlexGetCone(dmNozzle, cellCntr, &cone); CHKERRQ(ierr);
-        
-        ierr = PetscPrintf(PETSC_COMM_SELF, "   coneSize = %d \n", coneSize);CHKERRQ(ierr);
-        
-        for (int kk = 0; kk < coneSize; ++kk){
-          ierr = DMLabelSetValue(faceLabel, cone[kk], fID);CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "   cone[%d] = %d \n", kk, cone[kk]);CHKERRQ(ierr);
+      for (int e = 0; e < Ne; ++e){
+        ego edge = eobjs[e];
+        int eID = EG_indexBodyTopo(body, edge); CHKERRQ(ierr);  // edge ID
+      
+        //for (int jj = 0; jj < 2*Ne; ++jj){
+        for (int jj = 0; jj < 2; ++jj){
+          PetscInt coneSize = 0, coneSizeN = 0;
+          PetscInt *cone = NULL, *coneN = NULL;
+          
+          ierr = PetscPrintf(PETSC_COMM_SELF, "   cell :: %d \n", cellCntr);CHKERRQ(ierr);
+          ierr = DMLabelSetValue(faceLabel, cellCntr, fID);CHKERRQ(ierr);
+          ierr = DMPlexGetConeSize(dmNozzle, cellCntr, &coneSize); CHKERRQ(ierr);
+          ierr = DMPlexGetCone(dmNozzle, cellCntr, &cone); CHKERRQ(ierr);
+          
+          ierr = PetscPrintf(PETSC_COMM_SELF, "   coneSize = %d \n", coneSize);CHKERRQ(ierr);
+          
+          for (int kk = 0; kk < coneSize; ++kk){
+            ierr = DMLabelSetValue(faceLabel, cone[kk], fID);CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "   cone[%d] = %d :: fID = %d \n", kk, cone[kk], fID);CHKERRQ(ierr);
+            
+            /* Stupid Add */
+            ierr = DMPlexGetConeSize(dmNozzle, cone[kk], &coneSizeN); CHKERRQ(ierr);
+            ierr = DMPlexGetCone(dmNozzle, cone[kk], &coneN); CHKERRQ(ierr);
+            for (int ll = 0; ll < coneSizeN; ++ll){
+              ierr = PetscPrintf(PETSC_COMM_SELF, "   coneN[%d] = %d \n", ll, coneN[ll]);CHKERRQ(ierr);
+            }
+            /* Stupid Add End */
+          }
+          
+          //ierr = DMLabelSetValue(edgeLabel, cone[0], -1);CHKERRQ(ierr);
+          ierr = DMLabelSetValue(edgeLabel, cone[1], eID);CHKERRQ(ierr);
+          //ierr = DMLabelSetValue(edgeLabel, cone[2], -1);CHKERRQ(ierr);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "   cone[1] = %d :: eID = %d \n", cone[1], eID);CHKERRQ(ierr);
+          
+          //ierr = DMLabelSetValue(faceLabel, cellCntr+1, fID);CHKERRQ(ierr);
+          //ierr = DMPlexGetConeSize(dmNozzle, cellCntr+1, &coneSize); CHKERRQ(ierr);
+          //ierr = DMPlexGetCone(dmNozzle, cellCntr+1, &cone); CHKERRQ(ierr);
+          //
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "   +1 coneSize = %d \n", coneSize);CHKERRQ(ierr);
+          //
+          //for (int jj = 0; jj < coneSize; ++jj){
+          //  ierr = DMLabelSetValue(faceLabel, cone[jj], fID);CHKERRQ(ierr);
+          //}
+          //
+          //cellCntr = cellCntr + 2;
+          cellCntr = cellCntr + 1;
         }
-        
-        //ierr = DMLabelSetValue(faceLabel, cellCntr+1, fID);CHKERRQ(ierr);
-        //ierr = DMPlexGetConeSize(dmNozzle, cellCntr+1, &coneSize); CHKERRQ(ierr);
-        //ierr = DMPlexGetCone(dmNozzle, cellCntr+1, &cone); CHKERRQ(ierr);
-        //
-        //ierr = PetscPrintf(PETSC_COMM_SELF, "   +1 coneSize = %d \n", coneSize);CHKERRQ(ierr);
-        //
-        //for (int jj = 0; jj < coneSize; ++jj){
-        //  ierr = DMLabelSetValue(faceLabel, cone[jj], fID);CHKERRQ(ierr);
-        //}
-        //
-        //cellCntr = cellCntr + 2;
-        cellCntr = cellCntr + 1;
-      } 
+      }
     }
   }
   

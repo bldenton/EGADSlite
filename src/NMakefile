@@ -35,24 +35,27 @@ start:
 	xcopy $(SDIR)\..\util\emp.c         /Q /Y
 	xcopy $(SDIR)\..\util\evaluate.c    /Q /Y
 	xcopy $(SDIR)\..\util\rational.c    /Q /Y
+	xcopy $(SDIR)\..\util\regQuads.c    /Q /Y
+	xcopy $(SDIR)\..\util\regQuads.h    /Q /Y
 
 $(LDIR)\egadslite.dll:	$(OBJS) liteTess.obj liteTris.obj liteQuads.obj \
-			liteTessInp.obj emp.obj evaLite.obj rational.obj \
-			egadsRobust.obj egadslite.res
+			liteTessInp.obj emp.obj evaLite.obj ratLite.obj \
+			egadsRobust.obj liteRegQuads.obj egadslite.res
 	-del $(LDIR)\egadslite.dll $(LDIR)\egadslite.lib $(LDIR)\egadslite.exp
 	link /out:$(LDIR)\egadslite.dll /dll /def:egadslite.def $(OBJS) \
 		liteTess.obj liteTris.obj liteQuads.obj liteTessInp.obj \
-		emp.obj evaLite.obj rational.obj egadsRobust.obj egadslite.res
+		emp.obj evaLite.obj ratLite.obj egadsRobust.obj \
+		liteRegQuads.obj egadslite.res
         $(MCOMP) /manifest $(LDIR)\egadslite.dll.manifest \
                 /outputresource:$(LDIR)\egadslite.dll;2
 
 $(LDIR)/egadslitestatic.lib:	$(OBJS) liteTess.obj liteTris.obj \
 				liteQuads.obj liteTessInp.obj emp.obj \
-				evaLite.obj rational.obj
+				evaLite.obj ratLite.obj liteRegQuads.obj
 	-del $(LDIR)\egadslitestatic.lib
 	lib /out:$(LDIR)\egadslitestatic.lib $(OBJS) liteTess.obj liteTris.obj \
 		liteQuads.obj liteTessInp.obj egadsRobust.obj emp.obj \
-		evaLite.obj rational.obj
+		evaLite.obj ratLite.obj liteRegQuads.obj
 
 egadslite.res:	egadslite.rc
 	rc egadslite
@@ -89,8 +92,12 @@ emp.obj:	emp.c
 evaLite.obj:	evaluate.c
 	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) evaluate.c /FoevaLite.obj
 
-rational.obj:	rational.c
-	cl /c $(COPTS) $(DEFINE) rational.c
+ratLite.obj:	rational.c
+	cl /c $(COPTS) $(DEFINE) /DLITE rational.c /ForatLite.obj
+
+liteRegQuads.obj:	regQuads.c regQuads.h
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I. regQuads.c \
+		/FoliteRegQuads.obj
 
 egadsRobust.obj:	egadsRobust.c
 	cl /c $(COPTS) $(DEFINE) egadsRobust.c
@@ -115,7 +122,7 @@ liteQuads.obj:	$(INCD)\egadsErrors.h $(EDIR)\egadsInternals.h \
 liteTessInp.obj:	$(INCD)\egadsErrors.h $(EDIR)\egadsInternals.h \
 			$(INCD)\egadsTypes.h liteClasses.h ..\src\egadsTessInp.c
 	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
-		..\src\egadsTessInp.c /FoliteTessInp.obj
+		/I..\util ..\src\egadsTessInp.c /FoliteTessInp.obj
 
 emp.obj:	..\util\emp.c
 	cl /c $(COPTS) $(DEFINE) /I$(INCD) ..\util\emp.c
@@ -124,8 +131,12 @@ evaLite.obj:	..\util\evaluate.c
 	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I$(EDIR) /I. \
 		..\util\evaluate.c /FoevaLite.obj
 
-rational.obj:	..\util\rational.c
-	cl /c $(COPTS) $(DEFINE) ..\util\rational.c
+ratLite.obj:	..\util\rational.c
+	cl /c $(COPTS) $(DEFINE) /DLITE ..\util\rational.c /ForatLite.obj
+
+liteRegQuads.obj:	..\util\regQuads.c ..\util\regQuads.h
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I. ..\util\regQuads.c \
+		/FoliteRegQuads.obj
 
 egadsRobust.obj:	..\src\egadsRobust.c
 	cl /c $(COPTS) $(DEFINE) ..\src\egadsRobust.c
@@ -138,7 +149,8 @@ end:
 
 clean:
 	cd $(ODIR)
-	-del $(OBJS) liteTess.obj liteTris.obj liteQuads.obj liteTessInp.obj
+	-del $(OBJS) liteTess.obj liteTris.obj liteQuads.obj liteTessInp.obj \
+		liteRegQuads.obj
 	cd $(SDIR)
 
 cleanall:	clean

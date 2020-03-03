@@ -3,7 +3,7 @@
  *
  *             Lite Memory Handling Functions
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "egads.h"
 #include "egadsTypes.h"
 
 
@@ -64,3 +63,4 @@ EG_strdup(/*@null@*/ const char *str)
 
   return dup;
 }
+

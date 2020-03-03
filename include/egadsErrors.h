@@ -5,18 +5,19 @@
  *
  *             Error Code Header
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
  */
 
+#define EGADS_CNTXTHRD -33
 #define EGADS_READERR  -32
 #define EGADS_TESSTATE -31
 #define EGADS_EXISTS   -30
 #define EGADS_ATTRERR  -29
 #define EGADS_TOPOCNT  -28
-#define EGADS_OCSEGFLT -27
+#define EGADS_OCSEGFLT -27           /* obsolete */
 #define EGADS_BADSCALE -26
 #define EGADS_NOTORTHO -25
 #define EGADS_DEGEN    -24

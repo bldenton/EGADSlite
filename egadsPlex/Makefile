@@ -1,7 +1,7 @@
-EGADS_LIBDIR = /PETSc3/cad/EGADSlite/src
-EGADS_LIBDIR2= ../src
+#EGADS_LIBDIR = /PETSc3/cad/EGADSlite/src
+#EGADS_LIBDIR2= ../src
 #EGADS_LIBDIR2=$ESP_ROOT/lib
-CFLAGS = -I../include
+#CFLAGS = -I../include
 
 # Note: I replaced -legadslite with -legads
 

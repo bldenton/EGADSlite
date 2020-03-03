@@ -3,7 +3,7 @@
  *
  *             Lite Base Object Functions
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -12,10 +12,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "egads.h"
 #include "egadsTypes.h"
 #include "egadsInternals.h"
 #include "liteClasses.h"
+#include "emp.h"
 
 #if !defined(WIN32) && !defined(__CYGWIN__)
 #include <execinfo.h>
@@ -29,8 +29,8 @@ extern int  EG_importModel(egObject *context, const size_t nbytes,
                            const char *stream, egObject **model);
 extern void EG_exactInit( );
 
-static const char *EGADSprop[2] = {STR(EGADSPROP),
-                                   "\nEGADSprop: Copyright 2011-2018 MIT. All Rights Reserved."};
+static char *EGADSprop[2] = {STR(EGADSPROP),
+                             "\nEGADSprop: Copyright 2011-2020 MIT. All Rights Reserved."};
 
 
 static void
@@ -41,7 +41,7 @@ EG_traceback()
   void   *array[100];
   size_t size;
   char   **strings;
-
+  
   size = backtrace(array, 100);
   strings = backtrace_symbols (array, size);
   i = size;
@@ -69,7 +69,7 @@ EG_freeBlind(egObject *object)
   if ((object->oclass < PCURVE) ||
       (object->oclass > MODEL))      return EGADS_NOTTOPO;
   if (object->blind == NULL)         return EGADS_SUCCESS;
-
+  
   if (object->oclass <= SURFACE) {
     lgeom = (liteGeometry *) object->blind;
     if (lgeom->header != NULL) EG_free(lgeom->header);
@@ -100,7 +100,7 @@ EG_freeBlind(egObject *object)
     lmodel = (liteModel *) object->blind;
     EG_free(lmodel->bodies);
   }
-
+  
   EG_free(object->blind);
   object->blind = NULL;
   return EGADS_SUCCESS;
@@ -113,14 +113,15 @@ EG_makeObject(/*@null@*/ egObject *context, egObject **obj)
   int      outLevel;
   egObject *object, *prev;
   egCntxt  *cntx;
-
+  
   if (context == NULL)               return EGADS_NULLOBJ;
   if (context->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (context->oclass != CONTXT)     return EGADS_NOTCNTX;
   cntx = (egCntxt *) context->blind;
   if (cntx == NULL)                  return EGADS_NODATA;
   outLevel = cntx->outLevel;
-
+  if (cntx->mutex != NULL) EMP_LockSet(cntx->mutex);
+  
   /* any objects in the pool? */
   object = cntx->pool;
   if (object == NULL) {
@@ -128,13 +129,14 @@ EG_makeObject(/*@null@*/ egObject *context, egObject **obj)
     if (object == NULL) {
       if (outLevel > 0)
         printf(" EGADS Error: Malloc on Object (EG_makeObject)!\n");
+      if (cntx->mutex != NULL) EMP_LockRelease(cntx->mutex);
       return EGADS_MALLOC;
     }
   } else {
     cntx->pool   = object->next;
     object->prev = NULL;
   }
-
+  
   prev                = cntx->last;
   object->magicnumber = MAGIC;
   object->oclass      = NIL;
@@ -146,15 +148,16 @@ EG_makeObject(/*@null@*/ egObject *context, egObject **obj)
   object->prev        = prev;
   object->next        = NULL;
   prev->next          = object;
-
+  
   *obj = object;
   cntx->last = *obj;
+  if (cntx->mutex != NULL) EMP_LockRelease(cntx->mutex);
   return EGADS_SUCCESS;
 }
 
 
 void
-EG_revision(int *major, int *minor, const char **OCCrev)
+EG_revision(int *major, int *minor, char **OCCrev)
 {
   *major  = EGADSMAJOR;
   *minor  = EGADSMINOR;
@@ -168,7 +171,7 @@ EG_open(egObject **context)
   int      i;
   egObject *object;
   egCntxt  *cntx;
-
+  
   cntx   = (egCntxt *) EG_alloc(sizeof(egCntxt));
   if (cntx == NULL) return EGADS_MALLOC;
   object = (egObject *) EG_alloc(sizeof(egObject));
@@ -179,9 +182,14 @@ EG_open(egObject **context)
   for (i = 0; i < MTESSPARAM; i++) cntx->tess[i] = 0.0;
   cntx->outLevel  = 1;
   cntx->signature = EGADSprop;
+  cntx->usrPtr    = NULL;
+  cntx->threadID  = EMP_ThreadID();
+  cntx->mutex     = EMP_LockCreate();
   cntx->pool      = NULL;
   cntx->last      = object;
-
+  if (cntx->mutex == NULL)
+    printf(" EMP Error: mutex creation = NULL (EG_open)!\n");
+  
   object->magicnumber = MAGIC;
   object->oclass      = CONTXT;
   object->mtype       = 1;                /* lite version */
@@ -219,7 +227,7 @@ EG_context(const egObject *obj)
 {
   int      cnt;
   egObject *object, *topObj;
-
+  
   if (obj == NULL) {
     printf(" EGADS Internal: EG_context called with NULL!\n");
     return NULL;
@@ -229,7 +237,7 @@ EG_context(const egObject *obj)
     return NULL;
   }
   if (obj->oclass == CONTXT) return (egObject *) obj;
-
+  
   object = obj->topObj;
   if (object == NULL) {
     printf(" EGADS Internal: EG_context topObj is NULL!\n");
@@ -240,7 +248,7 @@ EG_context(const egObject *obj)
     return NULL;
   }
   if (object->oclass == CONTXT) return object;
-
+  
   cnt = 0;
   do {
     topObj = object->topObj;
@@ -258,10 +266,27 @@ EG_context(const egObject *obj)
     object = topObj;
     cnt++;
   } while (object != NULL);
-
+  
   printf(" EGADS Internal: Cannot find context -- depth = %d!\n", cnt);
   EG_traceback();
   return NULL;
+}
+
+
+int
+EG_sameThread(const egObject *obj)
+{
+  egObject *context;
+  egCntxt  *cntxt;
+  
+  if (obj == NULL)               return 1;
+  if (obj->magicnumber != MAGIC) return 1;
+  context = EG_context(obj);
+  if (context == NULL)           return 1;
+  
+  cntxt = (egCntxt *) context->blind;
+  if (cntxt->threadID == EMP_ThreadID()) return 0;
+  return 1;
 }
 
 
@@ -270,12 +295,12 @@ EG_outLevel(const egObject *obj)
 {
   egObject *context;
   egCntxt  *cntxt;
-
+  
   if (obj == NULL)               return 0;
   if (obj->magicnumber != MAGIC) return 0;
   context = EG_context(obj);
   if (context == NULL)           return 0;
-
+  
   cntxt = (egCntxt *) context->blind;
   return cntxt->outLevel;
 }
@@ -286,7 +311,7 @@ EG_setOutLevel(egObject *context, int outLevel)
 {
   int     old;
   egCntxt *cntx;
-
+  
   if  (context == NULL)                 return EGADS_NULLOBJ;
   if  (context->magicnumber != MAGIC)   return EGADS_NOTOBJ;
   if  (context->oclass != CONTXT)       return EGADS_NOTCNTX;
@@ -295,7 +320,7 @@ EG_setOutLevel(egObject *context, int outLevel)
   if  (cntx == NULL)                    return EGADS_NODATA;
   old            = cntx->outLevel;
   cntx->outLevel = outLevel;
-
+  
   return old;
 }
 
@@ -304,7 +329,7 @@ int
 EG_setTessParam(egObject *context, int iParam, double value, double *oldValue)
 {
   egCntxt *cntx;
-
+  
   *oldValue = 0.0;
   if  (context == NULL)                      return EGADS_NULLOBJ;
   if  (context->magicnumber != MAGIC)        return EGADS_NOTOBJ;
@@ -314,7 +339,7 @@ EG_setTessParam(egObject *context, int iParam, double value, double *oldValue)
   if  (cntx == NULL)                          return EGADS_NODATA;
   *oldValue            = cntx->tess[iParam-1];
   cntx->tess[iParam-1] = value;
-
+  
   return EGADS_SUCCESS;
 }
 
@@ -373,7 +398,7 @@ EG_deleteObject(egObject *object)
   egObject *pobj, *nobj, *context;
   egCntxt  *cntx;
   egTessel *tess;
-
+  
   if (object == NULL)               return EGADS_NULLOBJ;
   if (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (object->oclass == EMPTY)      return EGADS_EMPTY;
@@ -384,6 +409,7 @@ EG_deleteObject(egObject *object)
     if (context == NULL)            return EGADS_NOTCNTX;
     cntx = (egCntxt *) context->blind;
     if (cntx == NULL)               return EGADS_NODATA;
+    if (cntx->mutex != NULL) EMP_LockSet(cntx->mutex);
     tess = (egTessel *) object->blind;
     if (tess != NULL) {
       if (tess->xyzs != NULL) EG_free(tess->xyzs);
@@ -446,7 +472,7 @@ EG_deleteObject(egObject *object)
       EG_free(tess);
       object->oclass = EMPTY;
       object->blind  = NULL;
-
+      
       /* patch up the lists & put the object in the pool */
       pobj = object->prev;          /* always have a previous -- context! */
       nobj = object->next;
@@ -465,13 +491,14 @@ EG_deleteObject(egObject *object)
       object->prev = NULL;
       object->next = cntx->pool;
       cntx->pool   = object;
+      if (cntx->mutex != NULL) EMP_LockRelease(cntx->mutex);
     }
     return EGADS_SUCCESS;
   }
 
   /* report other deletes? */
-
-
+  
+  
   return EGADS_SUCCESS;
 }
 
@@ -491,7 +518,7 @@ EG_close(egObject *context)
   if (cntx == NULL)                  return EGADS_NODATA;
 
   /* delete tessellation objects */
-
+  
   obj  = context->next;
   last = NULL;
   while (obj != NULL) {
@@ -510,7 +537,8 @@ EG_close(egObject *context)
   }
 
   /* delete all objects */
-
+  if (cntx->mutex != NULL) EMP_LockSet(cntx->mutex);
+  
   obj = context->next;
   while (obj != NULL) {
     next = obj->next;
@@ -538,9 +566,9 @@ EG_close(egObject *context)
     EG_free(obj);
     obj = next;
   }
-
+  
   /* clean up the pool */
-
+  
   obj = cntx->pool;
   while (obj != NULL) {
     if (obj->magicnumber != MAGIC) {
@@ -556,7 +584,9 @@ EG_close(egObject *context)
   context->magicnumber = 0;
   context->oclass      = EMPTY;
   EG_free(context);
+  if (cntx->mutex != NULL) EMP_LockRelease(cntx->mutex);
+  if (cntx->mutex != NULL) EMP_LockDestroy(cntx->mutex);
   EG_free(cntx);
-
+  
   return EGADS_SUCCESS;
 }

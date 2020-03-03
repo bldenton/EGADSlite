@@ -3,7 +3,7 @@
  *
  *             Internal Geometry Evaluation Functions
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -28,8 +28,12 @@ typedef int bool;
 #include "egadsInternals.h"
 #ifdef LITE
 #include "liteClasses.h"
+#define TEMPLATE
+#define DOUBLE double
 #else
 #include "egadsClasses.h"
+#define TEMPLATE template<class TT>
+#define DOUBLE TT
 #endif
 
 
@@ -79,15 +83,19 @@ typedef struct {
                                /*@null@*/ egObject ***topos );
   extern int  EG_getBody( const egObject *object, egObject **body );
 
+  /* forward prototype for EG_eval3deriv */
+  extern int  EG_evaluateGeom( const egObject *geom, const double *param,
+                               double *result );
+
 #else
-  extern "C" void EG_EvaluateQuotientRule(  int dim, int der_count, int v_stride,
-                                            double *v );
-  extern "C" void EG_EvaluateQuotientRule2( int dim, int der_count, int v_stride,
-                                            double *v );
-  extern "C" bool EG_Bezier1DRat( int dim, int order, int cv_stride,
-                                  const double *cv, double t0, double t1,
-                                  int der_count, double t, int v_stride,
-                                  double *v );
+  TEMPLATE   void EG_EvaluateQuotientRule(  int dim, int der_count,
+                                            int v_stride, DOUBLE *v );
+  TEMPLATE   void EG_EvaluateQuotientRule2( int dim, int der_count,
+                                            int v_stride, DOUBLE *v );
+  TEMPLATE   bool EG_Bezier1DRat( int dim, int order, int cv_stride,
+                                  const DOUBLE *cv, double t0, double t1,
+                                  int der_count, DOUBLE t, int v_stride,
+                                  DOUBLE *v );
 
   extern "C" int  EG_attributeRet( const egObject *obj, const char *name,
                                    int *atype, int *len,
@@ -112,23 +120,23 @@ typedef struct {
   extern "C" int  EG_getBody( const egObject *object, egObject **body );
 
   extern "C" int  EG_getWindingAngle( egObject *edge, double t, double *angle );
-#endif
 
   /* forward prototype for EG_eval3deriv */
-  extern     int  EG_evaluateGeom( const egObject *geom, const double *param,
-                                   double *result );
+  TEMPLATE   int EG_evaluateGeom( const egObject *geom, const DOUBLE *param,
+                                  DOUBLE *result );
+#endif
 
 
 
-static int
-FindSpan(int nKnots, int degree, double u, double *U)
+TEMPLATE static int
+FindSpan(int nKnots, int degree, DOUBLE u, DOUBLE *U)
 {
   int n, low, mid, high;
-
+  
   if (u <= U[degree]) return degree;
   n = nKnots - degree - 1;
   if (u >= U[n]) return n-1;
-
+  
   low  = degree;
   high = n;
   mid  = (low+high)/2;
@@ -140,18 +148,18 @@ FindSpan(int nKnots, int degree, double u, double *U)
     }
     mid = (low+high)/2;
   }
-
+  
   return mid;
 }
 
 
-static void
-DersBasisFuns(int i, int p, double u, double *knot, int der, double **ders)
+TEMPLATE static void
+DersBasisFuns(int i, int p, DOUBLE u, DOUBLE *knot, int der, DOUBLE **ders)
 {
   int    j, k, j1, j2, r, s1, s2, rk, pk;
-  double d, saved, temp, ndu[MAXDEG+1][MAXDEG+1];
-  double a[2][MAXDEG+1], left[MAXDEG+1], right[MAXDEG+1];
-
+  DOUBLE d, saved, temp, ndu[MAXDEG+1][MAXDEG+1];
+  DOUBLE a[2][MAXDEG+1], left[MAXDEG+1], right[MAXDEG+1];
+  
   ndu[0][0] = 1.0;
   for (j = 1; j <= p; j++) {
     left[j]  = u - knot[i+1-j];
@@ -165,9 +173,9 @@ DersBasisFuns(int i, int p, double u, double *knot, int der, double **ders)
     }
     ndu[j][j] = saved;
   }
-
+  
   for (j = 0; j <= p; j++) ders[0][j] = ndu[j][p];  /* basis function */
-
+  
   /* compute derivatives */
   for (r = 0; r <= p; r++ ) {
     s1      = 0;
@@ -179,18 +187,18 @@ DersBasisFuns(int i, int p, double u, double *knot, int der, double **ders)
       rk = r - k;
       pk = p - k;
       if (r >= k) {
-	a[s2][0] = a[s1][0]/ndu[pk+1][rk];
-	d        = a[s2][0]*ndu[rk][pk];
+        a[s2][0] = a[s1][0]/ndu[pk+1][rk];
+        d        = a[s2][0]*ndu[rk][pk];
       }
       j1 = rk >= -1  ? 1   : -rk;
       j2 = (r-1<=pk) ? k-1 : p-r;
       for (j = j1; j <= j2; j++) {
-	a[s2][j] = (a[s1][j]-a[s1][j-1])/ndu[pk+1][rk+j];
-	d       +=  a[s2][j]*ndu[rk+j][pk];
+        a[s2][j] = (a[s1][j]-a[s1][j-1])/ndu[pk+1][rk+j];
+        d       +=  a[s2][j]*ndu[rk+j][pk];
       }
       if (r <= pk) {
-	a[s2][k] = -a[s1][k-1]/ndu[pk+1][r];
-	d       +=  a[s2][k]*ndu[r][pk];
+        a[s2][k] = -a[s1][k-1]/ndu[pk+1][r];
+        d       +=  a[s2][k]*ndu[r][pk];
       }
       ders[k][r] = d;
       /* switch rows */
@@ -199,26 +207,26 @@ DersBasisFuns(int i, int p, double u, double *knot, int der, double **ders)
       s2 = j;
     }
   }
-
+  
   r = p;
   for (k = 1; k <= der; k++) {
     for (j = 0; j <= p; j++ ) ders[k][j] *= r;
     r *= p - k;
   }
-
+  
 }
 
 
-static int
-EG_splinePCDeriv(int *ivec, double *data, double t, double *deriv)
+TEMPLATE static int
+EG_splinePCDeriv(int *ivec, DOUBLE *data, DOUBLE t, DOUBLE *deriv)
 {
   int    der = 2;
   int    i, j, k, degree, nKnots, span, dt;
-  double Nders[MAXDEG+1][MAXDEG+1], *Nder[MAXDEG+1], *CP, *w;
-  double x, y, wsum, v[9];  /* note: v is sized for der <= 2! */
-
+  DOUBLE Nders[MAXDEG+1][MAXDEG+1], *Nder[MAXDEG+1], *CP, *w;
+  DOUBLE x, y, wsum, v[9];  /* note: v is sized for der <= 2! */
+  
   for (k = 0; k <= der; k++) deriv[2*k  ] = deriv[2*k+1] = 0.0;
-
+  
   degree = ivec[1];
   nKnots = ivec[3];
   CP     = data + ivec[3];
@@ -233,19 +241,19 @@ EG_splinePCDeriv(int *ivec, double *data, double t, double *deriv)
     return EGADS_CONSTERR;
   }
   for (i = 0; i <= degree; i++) Nder[i] = &Nders[i][0];
-
+  
   span = FindSpan(nKnots, degree, t, data);
   DersBasisFuns(span,     degree, t, data, dt, Nder);
-
+  
   if (ivec[0] == 0) {
-
+    
     for (k = 0; k <= dt; k++)
       for (j = 0; j <= degree; j++) {
         i             = span-degree+j;
         deriv[2*k  ] += Nders[k][j]*CP[2*i  ];
         deriv[2*k+1] += Nders[k][j]*CP[2*i+1];
       }
-
+    
   } else {
 
     for (k = 0; k <= dt; k++) {
@@ -271,16 +279,16 @@ EG_splinePCDeriv(int *ivec, double *data, double t, double *deriv)
 }
 
 
-static int
-EG_spline1dDeriv(int *ivec, double *data, double t, double *deriv)
+TEMPLATE static int
+EG_spline1dDeriv(int *ivec, DOUBLE *data, DOUBLE t, DOUBLE *deriv)
 {
   int    der = 2;
   int    i, j, k, degree, nKnots, span, dt;
-  double Nders[MAXDEG+1][MAXDEG+1], *Nder[MAXDEG+1], *CP, *w;
-  double x, y, z, wsum, v[12];  /* note: v is sized for der <= 2! */
-
+  DOUBLE Nders[MAXDEG+1][MAXDEG+1], *Nder[MAXDEG+1], *CP, *w;
+  DOUBLE x, y, z, wsum, v[12];  /* note: v is sized for der <= 2! */
+  
   for (k = 0; k <= der; k++) deriv[3*k  ] = deriv[3*k+1] = deriv[3*k+2] = 0.0;
-
+  
   degree = ivec[1];
   nKnots = ivec[3];
   CP     = data + ivec[3];
@@ -295,12 +303,12 @@ EG_spline1dDeriv(int *ivec, double *data, double t, double *deriv)
     return EGADS_CONSTERR;
   }
   for (i = 0; i <= degree; i++) Nder[i] = &Nders[i][0];
-
+  
   span = FindSpan(nKnots, degree, t, data);
   DersBasisFuns(span,     degree, t, data, dt, Nder);
-
+  
   if (ivec[0] == 0) {
-
+    
     for (k = 0; k <= dt; k++)
       for (j = 0; j <= degree; j++) {
         i             = span-degree+j;
@@ -308,9 +316,9 @@ EG_spline1dDeriv(int *ivec, double *data, double t, double *deriv)
         deriv[3*k+1] += Nders[k][j]*CP[3*i+1];
         deriv[3*k+2] += Nders[k][j]*CP[3*i+2];
       }
-
+    
   } else {
-
+    
     for (k = 0; k <= dt; k++) {
       x = y = z = wsum = 0.0;
       for (j = 0; j <= degree; j++) {
@@ -337,15 +345,15 @@ EG_spline1dDeriv(int *ivec, double *data, double t, double *deriv)
 }
 
 
-static int
-EG_spline2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
+TEMPLATE static int
+EG_spline2dDeriv(int *ivec, DOUBLE *data, const DOUBLE *uv, DOUBLE *deriv)
 {
   int    der = 2;
   int    i, j, k, l, m, s, degu, degv, nKu, nKv, nCPu, spanu, spanv, du, dv;
-  double *Kv, *CP, *w, *NderU[MAXDEG+1], *NderV[MAXDEG+1];
-  double Nu[MAXDEG+1][MAXDEG+1], Nv[MAXDEG+1][MAXDEG+1], temp[4*MAXDEG];
-  double v[24];  /* note: v is sized for der <= 2! */
-
+  DOUBLE *Kv, *CP, *w, *NderU[MAXDEG+1], *NderV[MAXDEG+1];
+  DOUBLE Nu[MAXDEG+1][MAXDEG+1], Nv[MAXDEG+1][MAXDEG+1], temp[4*MAXDEG];
+  DOUBLE v[24];  /* note: v is sized for der <= 2! */
+  
   degu = ivec[1];
   nCPu = ivec[2];
   nKu  = ivec[3];
@@ -375,14 +383,14 @@ EG_spline2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
   }
   for (i = 0; i <= degu; i++) NderU[i] = &Nu[i][0];
   for (i = 0; i <= degv; i++) NderV[i] = &Nv[i][0];
-
+  
   spanu = FindSpan(nKu, degu, uv[0], data);
   DersBasisFuns(spanu,  degu, uv[0], data, du, NderU);
   spanv = FindSpan(nKv, degv, uv[1], Kv);
   DersBasisFuns(spanv,  degv, uv[1], Kv, dv, NderV);
 
   if (ivec[0] == 0) {
-
+    
     for (m = l = 0; l <= dv; l++)
       for (k = 0; k <= der-l; k++, m++) {
         if (k > du) continue;
@@ -411,7 +419,7 @@ EG_spline2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
     deriv[ 9] = temp[0];
     deriv[10] = temp[1];
     deriv[11] = temp[2];
-
+    
   } else {
 
     for (m = l = 0; l <= dv; l++)
@@ -460,15 +468,15 @@ EG_spline2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
 }
 
 
-static int
-EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
+TEMPLATE static int
+EG_bezierPCDeriv(int *ivec, DOUBLE *data, DOUBLE t, DOUBLE *deriv)
 {
   bool   stat;
   int    i, k, degree;
-  double Q[2*MAXDEG+2], S[2*MAXDEG], T[2*MAXDEG-2], CP[3*MAXDEG+3], *w;
-
+  DOUBLE Q[2*MAXDEG+2], S[2*MAXDEG], T[2*MAXDEG-2], CP[3*MAXDEG+3], *w;
+  
   for (k = 0; k < 6; k++) deriv[k] = 0.0;
-
+  
   degree = ivec[2]-1;
   w      = data + 2*ivec[2];
   if ((ivec[0] != 0) && (ivec[0] != 2)) {
@@ -484,14 +492,14 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
     printf(" EG_bezierPCDeriv: degree %d >= %d!\n", degree, MAXDEG);
     return EGADS_CONSTERR;
   }
-
+  
   if (ivec[0] == 0) {
-
+    
     for (i = 0; i <= degree; i++) {
       Q[2*i  ] = data[2*i  ];
       Q[2*i+1] = data[2*i+1];
     }
-
+    
     for (k = 1; k <= degree; k++)
       for (i = 0; i <= degree-k; i++) {
         Q[2*i  ] = (1.0-t)*Q[2*i  ] + t*Q[2*i+2];
@@ -499,14 +507,14 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
       }
     deriv[0] = Q[0];
     deriv[1] = Q[1];
-
+    
     for (i = 0; i < degree; i++) {
       Q[2*i  ] = data[2*i  ];
       Q[2*i+1] = data[2*i+1];
       S[2*i  ] = data[2*i+2];
       S[2*i+1] = data[2*i+3];
     }
-
+    
     for (k = 1; k < degree; k++)
       for (i = 0; i < degree-k; i++) {
         Q[2*i  ] = (1.0-t)*Q[2*i  ] + t*Q[2*i+2];
@@ -516,7 +524,7 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
       }
     deriv[2] = degree*(S[0] - Q[0]);
     deriv[3] = degree*(S[1] - Q[1]);
-
+    
     if (degree > 1) {
       for (i = 0; i < degree-1; i++) {
         Q[2*i  ] = data[2*i  ];
@@ -526,7 +534,7 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
         T[2*i  ] = data[2*i+4];
         T[2*i+1] = data[2*i+5];
       }
-
+      
       for (k = 1; k < degree-1; k++)
         for (i = 0; i < degree-k-1; i++) {
           Q[2*i  ] = (1.0-t)*Q[2*i  ] + t*Q[2*i+2];
@@ -539,9 +547,9 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
       deriv[4] = degree*(degree-1)*(T[0] - 2.0*S[0] + Q[0]);
       deriv[5] = degree*(degree-1)*(T[1] - 2.0*S[1] + Q[1]);
     }
-
+    
   } else {
-
+    
     for (i = 0; i <= degree; i++) {
       CP[3*i  ] = data[2*i  ]*w[i];
       CP[3*i+1] = data[2*i+1]*w[i];
@@ -549,44 +557,44 @@ EG_bezierPCDeriv(int *ivec, double *data, double t, double *deriv)
     }
     stat = EG_Bezier1DRat(2, ivec[2], 3, CP, 0.0, 1.0, 2, t, 2, deriv);
     if (!stat) return EGADS_GEOMERR;
-
+    
   }
   return EGADS_SUCCESS;
 }
 
 
-static void
-deCasteljau(double *P, int n, double u, double *C)
+TEMPLATE static void
+deCasteljau(DOUBLE *P, int n, DOUBLE u, DOUBLE *C)
 {
   int    i, k;
-  double Q[3*MAXDEG+3];
-
+  DOUBLE Q[3*MAXDEG+3];
+  
   Q[0] = Q[1] = Q[2] = 0.0;
   for (i = 0; i <= n; i++) {
     Q[3*i  ] = P[3*i  ];
     Q[3*i+1] = P[3*i+1];
     Q[3*i+2] = P[3*i+2];
   }
-
+  
   for (k = 1; k <= n; k++)
     for (i = 0; i <= n-k; i++) {
       Q[3*i  ] = (1.0-u)*Q[3*i  ] + u*Q[3*i+3];
       Q[3*i+1] = (1.0-u)*Q[3*i+1] + u*Q[3*i+4];
       Q[3*i+2] = (1.0-u)*Q[3*i+2] + u*Q[3*i+5];
     }
-
+  
   C[0] = Q[0];
   C[1] = Q[1];
   C[2] = Q[2];
 }
 
 
-static void
-deCasteljauD1(double *P, int n, double u, double *C)
+TEMPLATE static void
+deCasteljauD1(DOUBLE *P, int n, DOUBLE u, DOUBLE *C)
 {
   int    i, k;
-  double Q[3*MAXDEG], S[3*MAXDEG];
-
+  DOUBLE Q[3*MAXDEG], S[3*MAXDEG];
+  
   Q[0] = Q[1] = Q[2] = 0.0;
   S[0] = S[1] = S[2] = 0.0;
   for (i = 0; i < n; i++) {
@@ -597,7 +605,7 @@ deCasteljauD1(double *P, int n, double u, double *C)
     S[3*i+1] = P[3*i+4];
     S[3*i+2] = P[3*i+5];
   }
-
+  
   for (k = 1; k < n; k++)
     for (i = 0; i < n-k; i++) {
       Q[3*i  ] = (1.0-u)*Q[3*i  ] + u*Q[3*i+3];
@@ -607,22 +615,22 @@ deCasteljauD1(double *P, int n, double u, double *C)
       S[3*i+1] = (1.0-u)*S[3*i+1] + u*S[3*i+4];
       S[3*i+2] = (1.0-u)*S[3*i+2] + u*S[3*i+5];
     }
-
+  
   C[0] = n*(S[0] - Q[0]);
   C[1] = n*(S[1] - Q[1]);
   C[2] = n*(S[2] - Q[2]);
 }
 
 
-static void
-deCasteljauD2(double *P, int n, double u, double *C)
+TEMPLATE static void
+deCasteljauD2(DOUBLE *P, int n, DOUBLE u, DOUBLE *C)
 {
   int    i, k;
-  double Q[3*MAXDEG-3], S[3*MAXDEG-3], T[3*MAXDEG-3];
-
+  DOUBLE Q[3*MAXDEG-3], S[3*MAXDEG-3], T[3*MAXDEG-3];
+  
   C[0] = C[1] = C[2] = 0.0;
   if (n <= 1) return;
-
+  
   for (i = 0; i < n-1; i++) {
     Q[3*i  ] = P[3*i  ];
     Q[3*i+1] = P[3*i+1];
@@ -634,7 +642,7 @@ deCasteljauD2(double *P, int n, double u, double *C)
     T[3*i+1] = P[3*i+7];
     T[3*i+2] = P[3*i+8];
   }
-
+  
   for (k = 1; k < n-1; k++)
     for (i = 0; i < n-k-1; i++) {
       Q[3*i  ] = (1.0-u)*Q[3*i  ] + u*Q[3*i+3];
@@ -647,22 +655,22 @@ deCasteljauD2(double *P, int n, double u, double *C)
       T[3*i+1] = (1.0-u)*T[3*i+1] + u*T[3*i+4];
       T[3*i+2] = (1.0-u)*T[3*i+2] + u*T[3*i+5];
     }
-
+  
   C[0] = n*(n-1)*(T[0] - 2.0*S[0] + Q[0]);
   C[1] = n*(n-1)*(T[1] - 2.0*S[1] + Q[1]);
   C[2] = n*(n-1)*(T[2] - 2.0*S[2] + Q[2]);
 }
 
 
-static int
-EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
+TEMPLATE static int
+EG_bezier1dDeriv(int *ivec, DOUBLE *data, DOUBLE t, DOUBLE *deriv)
 {
   bool   stat;
   int    i, k, degree;
-  double Q[3*MAXDEG+3], S[3*MAXDEG], T[3*MAXDEG-3], CP[4*MAXDEG+4], *w;
-
+  DOUBLE Q[3*MAXDEG+3], S[3*MAXDEG], T[3*MAXDEG-3], CP[4*MAXDEG+4], *w;
+  
   for (k = 0; k < 9; k++) deriv[k] = 0.0;
-
+  
   degree = ivec[2]-1;
   w      = data + 3*ivec[2];
   if ((ivec[0] != 0) && (ivec[0] != 2)) {
@@ -677,15 +685,15 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
     printf(" EG_bezier1dDeriv: degree %d >= %d!\n", degree, MAXDEG);
     return EGADS_CONSTERR;
   }
-
+  
   if (ivec[0] == 0) {
-
+    
     for (i = 0; i <= degree; i++) {
       Q[3*i  ] = data[3*i  ];
       Q[3*i+1] = data[3*i+1];
       Q[3*i+2] = data[3*i+2];
     }
-
+    
     for (k = 1; k <= degree; k++)
       for (i = 0; i <= degree-k; i++) {
         Q[3*i  ] = (1.0-t)*Q[3*i  ] + t*Q[3*i+3];
@@ -695,7 +703,7 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
     deriv[0] = Q[0];
     deriv[1] = Q[1];
     deriv[2] = Q[2];
-
+    
     for (i = 0; i < degree; i++) {
       Q[3*i  ] = data[3*i  ];
       Q[3*i+1] = data[3*i+1];
@@ -704,7 +712,7 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
       S[3*i+1] = data[3*i+4];
       S[3*i+2] = data[3*i+5];
     }
-
+    
     for (k = 1; k < degree; k++)
       for (i = 0; i < degree-k; i++) {
         Q[3*i  ] = (1.0-t)*Q[3*i  ] + t*Q[3*i+3];
@@ -717,7 +725,7 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
     deriv[3] = degree*(S[0] - Q[0]);
     deriv[4] = degree*(S[1] - Q[1]);
     deriv[5] = degree*(S[2] - Q[2]);
-
+    
     if (degree > 1) {
       for (i = 0; i < degree-1; i++) {
         Q[3*i  ] = data[3*i  ];
@@ -730,7 +738,7 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
         T[3*i+1] = data[3*i+7];
         T[3*i+2] = data[3*i+8];
       }
-
+      
       for (k = 1; k < degree-1; k++)
         for (i = 0; i < degree-k-1; i++) {
           Q[3*i  ] = (1.0-t)*Q[3*i  ] + t*Q[3*i+3];
@@ -747,7 +755,7 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
       deriv[7] = degree*(degree-1)*(T[1] - 2.0*S[1] + Q[1]);
       deriv[8] = degree*(degree-1)*(T[2] - 2.0*S[2] + Q[2]);
     }
-
+    
   } else {
 
     for (i = 0; i <= degree; i++) {
@@ -764,14 +772,14 @@ EG_bezier1dDeriv(int *ivec, double *data, double t, double *deriv)
 }
 
 
-static int
-EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
+TEMPLATE static int
+EG_bezier2dDeriv(int *ivec, DOUBLE *data, const DOUBLE *uv, DOUBLE *deriv)
 {
   int    i, j, n, m, header[7];
-  double Q[3*MAXDEG+3], P[3*MAXDEG+3], D[2*MAXDEG+4+4*(MAXDEG+1)*(MAXDEG+1)];
-
+  DOUBLE Q[3*MAXDEG+3], P[3*MAXDEG+3], D[2*MAXDEG+4+4*(MAXDEG+1)*(MAXDEG+1)];
+  
   for (j = 0; j < 18; j++) deriv[j] = 0.0;
-
+  
   n = ivec[2]-1;
   m = ivec[4]-1;
   if ((ivec[0] != 0) && (ivec[0] != 2)) {
@@ -782,19 +790,19 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
     printf(" EG_bezier2dDeriv: degree %d or %d >= %d!\n", n, m, MAXDEG);
     return EGADS_CONSTERR;
   }
-
+  
   if (ivec[0] == 0) {
-
+    
     if (n <= m) {
-
+      
       for (j = 0; j <= m; j++)
         deCasteljau(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljau(Q, m, uv[1], deriv);
-
+      
       for (j = 0; j <= m; j++)
         deCasteljauD1(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljau(Q, m, uv[1], &deriv[3]);
-
+      
       for (j = 0; j <= m; j++)
         deCasteljau(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljauD1(Q, m, uv[1], &deriv[6]);
@@ -802,17 +810,17 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
       for (j = 0; j <= m; j++)
         deCasteljauD2(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljau(Q, m, uv[1], &deriv[9]);
-
+      
       for (j = 0; j <= m; j++)
         deCasteljauD1(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljauD1(Q, m, uv[1], &deriv[12]);
-
+      
       for (j = 0; j <= m; j++)
         deCasteljau(&data[3*j*ivec[2]], n, uv[0], &Q[3*j]);
       deCasteljauD2(Q, m, uv[1], &deriv[15]);
-
+      
     } else {
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -822,7 +830,7 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
         deCasteljau(P, m, uv[1], &Q[3*i]);
       }
       deCasteljau(Q, n, uv[0], deriv);
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -832,7 +840,7 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
         deCasteljau(P, m, uv[1], &Q[3*i]);
       }
       deCasteljauD1(Q, n, uv[0], &deriv[3]);
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -842,7 +850,7 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
         deCasteljauD1(P, m, uv[1], &Q[3*i]);
       }
       deCasteljau(Q, n, uv[0], &deriv[6]);
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -852,7 +860,7 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
         deCasteljau(P, m, uv[1], &Q[3*i]);
       }
       deCasteljauD2(Q, n, uv[0], &deriv[9]);
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -862,7 +870,7 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
         deCasteljauD1(P, m, uv[1], &Q[3*i]);
       }
       deCasteljauD1(Q, n, uv[0], &deriv[12]);
-
+      
       for (i = 0; i <= n; i++) {
         for (j = 0; j <= m; j++) {
           P[3*j  ] = data[3*(i+j*ivec[2])  ];
@@ -873,9 +881,9 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
       }
       deCasteljau(Q, n, uv[0], &deriv[15]);
     }
-
+    
   } else {
-
+    
     /* convert to BSpline and evaluate */
     header[0] =   ivec[0];
     header[1] =   ivec[1];
@@ -892,15 +900,15 @@ EG_bezier2dDeriv(int *ivec, double *data, const double *uv, double *deriv)
     if ((ivec[0]&2) != 0) m += ivec[2]*ivec[4];
     for (    i = 0; i < m; i++, n++) D[n] = data[i];
     return EG_spline2dDeriv(header, D, uv, deriv);
-
+    
   }
-
+  
   return EGADS_SUCCESS;
 }
 
 
-static void
-EG_rotatePC(double *axes, double *data, double *result)
+TEMPLATE static void
+EG_rotatePC(DOUBLE *axes, DOUBLE *data, DOUBLE *result)
 {
   result[0] = data[0]*axes[2] + data[1]*axes[4] + axes[0];
   result[1] = data[0]*axes[3] + data[1]*axes[5] + axes[1];
@@ -911,11 +919,11 @@ EG_rotatePC(double *axes, double *data, double *result)
 }
 
 
-static void
-EG_rotate2D(double *axes, double *data, double *result)
+TEMPLATE static void
+EG_rotate2D(DOUBLE *axes, DOUBLE *data, DOUBLE *result)
 {
-  double zaxis[3], *xaxis, *yaxis;
-
+  DOUBLE zaxis[3], *xaxis, *yaxis;
+  
   xaxis = &axes[3];
   yaxis = &axes[6];
   CROSS(zaxis, xaxis, yaxis);
@@ -931,8 +939,8 @@ EG_rotate2D(double *axes, double *data, double *result)
 }
 
 
-static void
-EG_rotate3D(double *axes, double *data, double *result)
+TEMPLATE static void
+EG_rotate3D(DOUBLE *axes, DOUBLE *data, DOUBLE *result)
 {
   result[ 0] = data[ 0]*axes[3] + data[ 1]*axes[6] + data[ 2]*axes[ 9] + axes[0];
   result[ 1] = data[ 0]*axes[4] + data[ 1]*axes[7] + data[ 2]*axes[10] + axes[1];
@@ -955,17 +963,18 @@ EG_rotate3D(double *axes, double *data, double *result)
 }
 
 
-/*
+/* 
  * 3rd derivatives are needed for only the Offset evaulations
  *     for now use finite differences -- later should be made analytic!
  */
 
-static int
-EG_eval3deriv(const egObject *geom, const double *param, double *result)
+TEMPLATE static int
+EG_eval3deriv(const egObject *geom, const DOUBLE *param, DOUBLE *result)
 {
   int    stat;
-  double uminus[18], uplus[18], vminus[18], vplus[18], uv[2], step = 1.e-7;
-
+  double step = 1.e-7;
+  DOUBLE uv[2], uminus[18], uplus[18], vminus[18], vplus[18];
+  
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if ((geom->oclass != PCURVE) &&
@@ -975,7 +984,7 @@ EG_eval3deriv(const egObject *geom, const double *param, double *result)
 
   uv[1] = 0.0;
   if (geom->oclass == PCURVE) {
-
+    
     uv[0] = *param - step;
     stat  = EG_evaluateGeom(geom, uv, uminus);
     if (stat != EGADS_SUCCESS) return stat;
@@ -984,9 +993,9 @@ EG_eval3deriv(const egObject *geom, const double *param, double *result)
     if (stat != EGADS_SUCCESS) return stat;
     result[0] = (uplus[4] - uminus[4])/(2.0*step);
     result[1] = (uplus[5] - uminus[5])/(2.0*step);
-
+    
   } else if (geom->oclass == CURVE) {
-
+    
     uv[0] = *param - step;
     stat  = EG_evaluateGeom(geom, uv, uminus);
     if (stat != EGADS_SUCCESS) return stat;
@@ -998,7 +1007,7 @@ EG_eval3deriv(const egObject *geom, const double *param, double *result)
     result[2] = (uplus[8] - uminus[8])/(2.0*step);
 
   } else {
-
+    
     uv[0] = param[0] - step;
     uv[1] = param[1];
     stat  = EG_evaluateGeom(geom, uv, uminus);
@@ -1025,19 +1034,29 @@ EG_eval3deriv(const egObject *geom, const double *param, double *result)
     result[ 9] = (vplus[15] - vminus[15])/(2.0*step);
     result[10] = (vplus[16] - vminus[16])/(2.0*step);
     result[11] = (vplus[17] - vminus[17])/(2.0*step);
-
+    
   }
-
+  
   return EGADS_SUCCESS;
 }
 
 
-int
-EG_evaluateGeom(const egObject *geom, const double *param, double *result)
+#ifndef LITE
+template<class egadsClass>
+static void
+getGeomData(egadsClass* lgeom, double **data)      { *data = lgeom->data;     }
+template<class egadsClass>
+static void
+getGeomData(egadsClass* lgeom, SurrealS<1> **data) { *data = lgeom->data_dot; }
+#endif
+
+
+TEMPLATE int
+EG_evaluateGeom(const egObject *geom, const DOUBLE *param, DOUBLE *result)
 {
-  int          i, stat;
-  double       data[18], norm[3], axes[15], d, dist, dum[3], radius, der3[12];
-  double       *tan, *tanv, ru;
+  int    i, stat;
+  DOUBLE data[18], norm[3], axes[15], d, dist, dum[3], radius, der3[12];
+  DOUBLE *tan, *tanv, ru, *gdata;
 #ifdef LITE
   liteGeometry *lgeom;
 #endif
@@ -1047,81 +1066,85 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
   if ((geom->oclass != PCURVE) && (geom->oclass != CURVE) &&
       (geom->oclass != SURFACE))   return EGADS_NOTGEOM;
   if  (geom->blind == NULL)        return EGADS_NODATA;
-
+  
   stat = EGADS_NOTFOUND;
+
   if (geom->oclass == PCURVE) {
 #ifdef LITE
     lgeom = (liteGeometry *) geom->blind;
+    gdata = lgeom->data;
 #else
     egadsPCurve *lgeom = (egadsPCurve *) geom->blind;
+    getGeomData(lgeom, &gdata);
 #endif
+    if (gdata == NULL) return EGADS_NODATA;
     switch (geom->mtype) {
       case LINE:
-        result[0] = *param*lgeom->data[2] + lgeom->data[0];
-        result[1] = *param*lgeom->data[3] + lgeom->data[1];
-        result[2] = lgeom->data[2];
-        result[3] = lgeom->data[3];
-        result[4] = result[5] =  0.0;
+        result[0] = *param*gdata[2] + gdata[0];
+        result[1] = *param*gdata[3] + gdata[1];
+        result[2] = gdata[2];
+        result[3] = gdata[3];
+        result[4] = result[5] = 0.0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CIRCLE:
-        data[0] =  lgeom->data[6]*cos(*param);
-        data[1] =  lgeom->data[6]*sin(*param);
-        data[2] = -lgeom->data[6]*sin(*param);
-        data[3] =  lgeom->data[6]*cos(*param);
-        data[4] = -lgeom->data[6]*cos(*param);
-        data[5] = -lgeom->data[6]*sin(*param);
-        EG_rotatePC(lgeom->data, data, result);
+        data[0] =  gdata[6]*cos(*param);
+        data[1] =  gdata[6]*sin(*param);
+        data[2] = -gdata[6]*sin(*param);
+        data[3] =  gdata[6]*cos(*param);
+        data[4] = -gdata[6]*cos(*param);
+        data[5] = -gdata[6]*sin(*param);
+        EG_rotatePC(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case ELLIPSE:
-        data[0] =  lgeom->data[6]*cos(*param);
-        data[1] =  lgeom->data[7]*sin(*param);
-        data[2] = -lgeom->data[6]*sin(*param);
-        data[3] =  lgeom->data[7]*cos(*param);
-        data[4] = -lgeom->data[6]*cos(*param);
-        data[5] = -lgeom->data[7]*sin(*param);
-        EG_rotatePC(lgeom->data, data, result);
+        data[0] =  gdata[6]*cos(*param);
+        data[1] =  gdata[7]*sin(*param);
+        data[2] = -gdata[6]*sin(*param);
+        data[3] =  gdata[7]*cos(*param);
+        data[4] = -gdata[6]*cos(*param);
+        data[5] = -gdata[7]*sin(*param);
+        EG_rotatePC(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case PARABOLA:
-        if (lgeom->data[6] == 0.0) return EGADS_GEOMERR;
+        if (gdata[6] == 0.0) return EGADS_GEOMERR;
         data[1] = *param;
-        data[0] = 0.25*data[1]*data[1]/lgeom->data[6];
-        data[2] = 0.5*data[1]/lgeom->data[6];
+        data[0] = 0.25*data[1]*data[1]/gdata[6];
+        data[2] = 0.5*data[1]/gdata[6];
         data[3] = 1.0;
-        data[4] = 0.5/lgeom->data[6];
+        data[4] = 0.5/gdata[6];
         data[5] = 0.0;
-        EG_rotatePC(lgeom->data, data, result);
+        EG_rotatePC(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case HYPERBOLA:
-        data[0] = lgeom->data[6]*cosh(*param);
-        data[1] = lgeom->data[7]*sinh(*param);
-        data[2] = lgeom->data[6]*sinh(*param);
-        data[3] = lgeom->data[7]*cosh(*param);
-        data[4] = lgeom->data[6]*cosh(*param);
-        data[5] = lgeom->data[7]*sinh(*param);
-        EG_rotatePC(lgeom->data, data, result);
+        data[0] = gdata[6]*cosh(*param);
+        data[1] = gdata[7]*sinh(*param);
+        data[2] = gdata[6]*sinh(*param);
+        data[3] = gdata[7]*cosh(*param);
+        data[4] = gdata[6]*cosh(*param);
+        data[5] = gdata[7]*sinh(*param);
+        EG_rotatePC(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case TRIMMED:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         break;
-
+        
       case BEZIER:
-        stat = EG_bezierPCDeriv(lgeom->header, lgeom->data, param[0], result);
+        stat = EG_bezierPCDeriv(lgeom->header, gdata, param[0], result);
         break;
-
+        
       case BSPLINE:
-        stat = EG_splinePCDeriv(lgeom->header, lgeom->data, param[0], result);
+        stat = EG_splinePCDeriv(lgeom->header, gdata, param[0], result);
         break;
-
+        
       case OFFSET:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         if (stat == EGADS_SUCCESS) {
@@ -1131,155 +1154,159 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           norm[1] = -result[2];
           dist    = sqrt(norm[0]*norm[0] + norm[1]*norm[1]);
           if (dist != 0.0) {
-            result[0] += norm[0]*lgeom->data[0]/dist;
-            result[1] += norm[1]*lgeom->data[0]/dist;
+            result[0] += norm[0]*gdata[0]/dist;
+            result[1] += norm[1]*gdata[0]/dist;
             axes[0]    =  result[5];
             axes[1]    = -result[4];
             radius     = (norm[0]*axes[0] + norm[1]*axes[1])/(dist*dist*dist);
-            result[2] += axes[0]*lgeom->data[0]/dist - norm[0]*radius;
-            result[3] += axes[1]*lgeom->data[0]/dist - norm[1]*radius;
+            result[2] += axes[0]*gdata[0]/dist - norm[0]*radius;
+            result[3] += axes[1]*gdata[0]/dist - norm[1]*radius;
             /* second derivatives -- need 3rd from pcurve! */
             axes[2]    =  der3[1];
             axes[3]    = -der3[0];
-            axes[4]    = axes[2]*lgeom->data[0]/dist;
-            axes[5]    = axes[3]*lgeom->data[0]/dist;
-            axes[4]   -= 2.0*axes[0]*lgeom->data[3]*radius;
-            axes[5]   -= 2.0*axes[1]*lgeom->data[3]*radius;
+            axes[4]    = axes[2]*gdata[0]/dist;
+            axes[5]    = axes[3]*gdata[0]/dist;
+            axes[4]   -= 2.0*axes[0]*gdata[3]*radius;
+            axes[5]   -= 2.0*axes[1]*gdata[3]*radius;
             d          = (norm[0]*axes[2] + norm[1]*axes[3] +
                           axes[0]*axes[0] + axes[1]*axes[1])/(dist*dist*dist);
-            axes[4]   += norm[0]*lgeom->data[0]*(3.0*radius*radius*dist - d);
-            axes[5]   += norm[1]*lgeom->data[0]*(3.0*radius*radius*dist - d);
+            axes[4]   += norm[0]*gdata[0]*(3.0*radius*radius*dist - d);
+            axes[5]   += norm[1]*gdata[0]*(3.0*radius*radius*dist - d);
             result[4] += axes[4];
             result[5] += axes[5];
           }
         }
         break;
     }
+    
   } else if (geom->oclass == CURVE) {
 #ifdef LITE
     lgeom = (liteGeometry *) geom->blind;
+    gdata = lgeom->data;
 #else
     egadsCurve *lgeom = (egadsCurve *) geom->blind;
+    getGeomData(lgeom, &gdata);
 #endif
+    if (gdata == NULL) return EGADS_NODATA;
     switch (geom->mtype) {
       case LINE:
-        result[0] = *param*lgeom->data[3] + lgeom->data[0];
-        result[1] = *param*lgeom->data[4] + lgeom->data[1];
-        result[2] = *param*lgeom->data[5] + lgeom->data[2];
-        result[3] = lgeom->data[3];
-        result[4] = lgeom->data[4];
-        result[5] = lgeom->data[5];
+        result[0] = *param*gdata[3] + gdata[0];
+        result[1] = *param*gdata[4] + gdata[1];
+        result[2] = *param*gdata[5] + gdata[2];
+        result[3] = gdata[3];
+        result[4] = gdata[4];
+        result[5] = gdata[5];
         result[6] = result[7] = result[8] =  0.0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CIRCLE:
-        data[0] =  lgeom->data[9]*cos(*param);
-        data[1] =  lgeom->data[9]*sin(*param);
+        data[0] =  gdata[9]*cos(*param);
+        data[1] =  gdata[9]*sin(*param);
         data[2] =  0.0;
-        data[3] = -lgeom->data[9]*sin(*param);
-        data[4] =  lgeom->data[9]*cos(*param);
+        data[3] = -gdata[9]*sin(*param);
+        data[4] =  gdata[9]*cos(*param);
         data[5] =  0.0;
-        data[6] = -lgeom->data[9]*cos(*param);
-        data[7] = -lgeom->data[9]*sin(*param);
+        data[6] = -gdata[9]*cos(*param);
+        data[7] = -gdata[9]*sin(*param);
         data[8] =  0.0;
-        EG_rotate2D(lgeom->data, data, result);
+        EG_rotate2D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case ELLIPSE:
-        data[0] =  lgeom->data[ 9]*cos(*param);
-        data[1] =  lgeom->data[10]*sin(*param);
+        data[0] =  gdata[ 9]*cos(*param);
+        data[1] =  gdata[10]*sin(*param);
         data[2] =  0.0;
-        data[3] = -lgeom->data[ 9]*sin(*param);
-        data[4] =  lgeom->data[10]*cos(*param);
+        data[3] = -gdata[ 9]*sin(*param);
+        data[4] =  gdata[10]*cos(*param);
         data[5] =  0.0;
-        data[6] = -lgeom->data[ 9]*cos(*param);
-        data[7] = -lgeom->data[10]*sin(*param);
+        data[6] = -gdata[ 9]*cos(*param);
+        data[7] = -gdata[10]*sin(*param);
         data[8] =  0.0;
-        EG_rotate2D(lgeom->data, data, result);
+        EG_rotate2D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case PARABOLA:
-        if (lgeom->data[9] == 0.0) return EGADS_GEOMERR;
+        if (gdata[9] == 0.0) return EGADS_GEOMERR;
         data[1] = *param;
-        data[0] = 0.25*data[1]*data[1]/lgeom->data[9];
+        data[0] = 0.25*data[1]*data[1]/gdata[9];
         data[2] = 0.0;
-        data[3] = 0.5*data[1]/lgeom->data[9];
+        data[3] = 0.5*data[1]/gdata[9];
         data[4] = 1.0;
         data[5] = 0.0;
-        data[6] = 0.5/lgeom->data[9];
+        data[6] = 0.5/gdata[9];
         data[7] = 0.0;
         data[8] = 0.0;
-        EG_rotate2D(lgeom->data, data, result);
+        EG_rotate2D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case HYPERBOLA:
-        data[0] = lgeom->data[ 9]*cosh(*param);
-        data[1] = lgeom->data[10]*sinh(*param);
+        data[0] = gdata[ 9]*cosh(*param);
+        data[1] = gdata[10]*sinh(*param);
         data[2] = 0.0;
-        data[3] = lgeom->data[ 9]*sinh(*param);
-        data[4] = lgeom->data[10]*cosh(*param);
+        data[3] = gdata[ 9]*sinh(*param);
+        data[4] = gdata[10]*cosh(*param);
         data[5] = 0.0;
-        data[6] = lgeom->data[ 9]*cosh(*param);
-        data[7] = lgeom->data[10]*sinh(*param);
+        data[6] = gdata[ 9]*cosh(*param);
+        data[7] = gdata[10]*sinh(*param);
         data[8] = 0.0;
-        EG_rotate2D(lgeom->data, data, result);
+        EG_rotate2D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case TRIMMED:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         break;
-
+        
       case BEZIER:
-        stat = EG_bezier1dDeriv(lgeom->header, lgeom->data, param[0], result);
+        stat = EG_bezier1dDeriv(lgeom->header, gdata, param[0], result);
         break;
-
+        
       case BSPLINE:
-        stat = EG_spline1dDeriv(lgeom->header, lgeom->data, param[0], result);
+        stat = EG_spline1dDeriv(lgeom->header, gdata, param[0], result);
         break;
-
+        
       case OFFSET:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         if (stat == EGADS_SUCCESS) {
           stat = EG_eval3deriv(lgeom->ref, param, der3);
           if (stat != EGADS_SUCCESS) break;
           tan  = &result[3];
-          CROSS(norm, tan, lgeom->data);
+          CROSS(norm, tan, gdata);
           dist = sqrt(norm[0]*norm[0] + norm[1]*norm[1] + norm[2]*norm[2]);
           if (dist != 0.0) {
-            result[0] += norm[0]*lgeom->data[3]/dist;
-            result[1] += norm[1]*lgeom->data[3]/dist;
-            result[2] += norm[2]*lgeom->data[3]/dist;
+            result[0] += norm[0]*gdata[3]/dist;
+            result[1] += norm[1]*gdata[3]/dist;
+            result[2] += norm[2]*gdata[3]/dist;
             tanv       = &result[6];
-            CROSS(axes, tanv, lgeom->data);
+            CROSS(axes, tanv, gdata);
             radius     = norm[0]*axes[0] + norm[1]*axes[1] + norm[2]*axes[2];
             radius    /= dist*dist*dist;
-            result[3] += axes[0]*lgeom->data[3]/dist - norm[0]*radius;
-            result[4] += axes[1]*lgeom->data[3]/dist - norm[1]*radius;
-            result[5] += axes[2]*lgeom->data[3]/dist - norm[2]*radius;
+            result[3] += axes[0]*gdata[3]/dist - norm[0]*radius;
+            result[4] += axes[1]*gdata[3]/dist - norm[1]*radius;
+            result[5] += axes[2]*gdata[3]/dist - norm[2]*radius;
             /* second derivatives -- need 3rd from curve! */
 #ifndef __clang_analyzer__
             tanv       = &axes[3];
-            CROSS(tanv, der3, lgeom->data);
+            CROSS(tanv, der3, gdata);
 #else
             axes[3]    = axes[4] = axes[5] = 0.0;
 #endif
-            axes[6]    = axes[3]*lgeom->data[3]/dist;
-            axes[7]    = axes[4]*lgeom->data[3]/dist;
-            axes[8]    = axes[5]*lgeom->data[3]/dist;
-            axes[6]   -= 2.0*axes[0]*lgeom->data[3]*radius;
-            axes[7]   -= 2.0*axes[1]*lgeom->data[3]*radius;
-            axes[8]   -= 2.0*axes[2]*lgeom->data[3]*radius;
+            axes[6]    = axes[3]*gdata[3]/dist;
+            axes[7]    = axes[4]*gdata[3]/dist;
+            axes[8]    = axes[5]*gdata[3]/dist;
+            axes[6]   -= 2.0*axes[0]*gdata[3]*radius;
+            axes[7]   -= 2.0*axes[1]*gdata[3]*radius;
+            axes[8]   -= 2.0*axes[2]*gdata[3]*radius;
             d          = norm[0]*axes[3] + norm[1]*axes[4] + norm[2]*axes[5] +
                          axes[0]*axes[0] + axes[1]*axes[1] + axes[2]*axes[2];
             d         /= dist*dist*dist;
-            axes[6]   += norm[0]*lgeom->data[3]*(3.0*radius*radius*dist - d);
-            axes[7]   += norm[1]*lgeom->data[3]*(3.0*radius*radius*dist - d);
-            axes[8]   += norm[2]*lgeom->data[3]*(3.0*radius*radius*dist - d);
+            axes[6]   += norm[0]*gdata[3]*(3.0*radius*radius*dist - d);
+            axes[7]   += norm[1]*gdata[3]*(3.0*radius*radius*dist - d);
+            axes[8]   += norm[2]*gdata[3]*(3.0*radius*radius*dist - d);
             result[6] += axes[6];
             result[7] += axes[7];
             result[8] += axes[8];
@@ -1287,39 +1314,40 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
         }
         break;
     }
+    
   } else {
 #ifdef LITE
     lgeom = (liteGeometry *) geom->blind;
+    gdata = lgeom->data;
 #else
     egadsSurface *lgeom = (egadsSurface *) geom->blind;
+    getGeomData(lgeom, &gdata);
 #endif
+    if (gdata == NULL) return EGADS_NODATA;
     switch (geom->mtype) {
       case PLANE:
-        result[ 0] = param[0]*lgeom->data[3] + param[1]*lgeom->data[6] +
-                              lgeom->data[0];
-        result[ 1] = param[0]*lgeom->data[4] + param[1]*lgeom->data[7] +
-                              lgeom->data[1];
-        result[ 2] = param[0]*lgeom->data[5] + param[1]*lgeom->data[8] +
-                              lgeom->data[2];
-        result[ 3] = lgeom->data[3];
-        result[ 4] = lgeom->data[4];
-        result[ 5] = lgeom->data[5];
-        result[ 6] = lgeom->data[6];
-        result[ 7] = lgeom->data[7];
-        result[ 8] = lgeom->data[8];
+        result[ 0] = param[0]*gdata[3] + param[1]*gdata[6] + gdata[0];
+        result[ 1] = param[0]*gdata[4] + param[1]*gdata[7] + gdata[1];
+        result[ 2] = param[0]*gdata[5] + param[1]*gdata[8] + gdata[2];
+        result[ 3] = gdata[3];
+        result[ 4] = gdata[4];
+        result[ 5] = gdata[5];
+        result[ 6] = gdata[6];
+        result[ 7] = gdata[7];
+        result[ 8] = gdata[8];
         result[ 9] = result[10] = result[11] = 0.0;
         result[12] = result[13] = result[14] = 0.0;
         result[15] = result[16] = result[17] = 0.0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case SPHERICAL:
-        radius =  lgeom->data[9];
-        tan    = &lgeom->data[3];
-        tanv   = &lgeom->data[6];
+        radius =  gdata[9];
+        tan    = &gdata[3];
+        tanv   = &gdata[6];
         CROSS(norm, tan, tanv);
         dist   = sqrt(norm[0]*norm[0] + norm[1]*norm[1] + norm[2]*norm[2]);
-        if (lgeom->data[9] < 0.0) {
+        if (gdata[9] < 0.0) {
           dist   = -dist;
           radius = -radius;
         }
@@ -1328,7 +1356,7 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           norm[1] /= dist;
           norm[2] /= dist;
         }
-        for (i = 0; i < 9; i++) axes[i]   = lgeom->data[i];
+        for (i = 0; i < 9; i++) axes[i]   = gdata[i];
         for (i = 0; i < 3; i++) axes[i+9] = norm[i];
         data[ 0] =  radius*cos(param[0])*cos(param[1]);
         data[ 1] =  radius*sin(param[0])*cos(param[1]);
@@ -1351,76 +1379,76 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
         EG_rotate3D(axes, data, result);
         stat     = EGADS_SUCCESS;
         break;
-
+        
       case CONICAL:
-        radius   =  lgeom->data[13] + param[1]*sin(lgeom->data[12]);
+        radius   =  gdata[13] + param[1]*sin(gdata[12]);
         data[ 0] =  radius*cos(param[0]);
         data[ 1] =  radius*sin(param[0]);
-        data[ 2] =  param[1]*cos(lgeom->data[12]);
+        data[ 2] =  param[1]*cos(gdata[12]);
         data[ 3] = -radius*sin(param[0]);
         data[ 4] =  radius*cos(param[0]);
         data[ 5] =  0.0;
-        data[ 6] =  sin(lgeom->data[12])*cos(param[0]);
-        data[ 7] =  sin(lgeom->data[12])*sin(param[0]);
-        data[ 8] =  cos(lgeom->data[12]);
+        data[ 6] =  sin(gdata[12])*cos(param[0]);
+        data[ 7] =  sin(gdata[12])*sin(param[0]);
+        data[ 8] =  cos(gdata[12]);
         data[ 9] = -radius*cos(param[0]);
         data[10] = -radius*sin(param[0]);
         data[11] =  0.0;
-        data[12] = -sin(lgeom->data[12])*sin(param[0]);
-        data[13] =  sin(lgeom->data[12])*cos(param[0]);
+        data[12] = -sin(gdata[12])*sin(param[0]);
+        data[13] =  sin(gdata[12])*cos(param[0]);
         data[14] =  0.0;
         data[15] = data[16] = data[17] = 0.0;
-        EG_rotate3D(lgeom->data, data, result);
+        EG_rotate3D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case CYLINDRICAL:
-        data[ 0] =  lgeom->data[12]*cos(param[0]);
-        data[ 1] =  lgeom->data[12]*sin(param[0]);
+        data[ 0] =  gdata[12]*cos(param[0]);
+        data[ 1] =  gdata[12]*sin(param[0]);
         data[ 2] =  param[1];
-        data[ 3] = -lgeom->data[12]*sin(param[0]);
-        data[ 4] =  lgeom->data[12]*cos(param[0]);
+        data[ 3] = -gdata[12]*sin(param[0]);
+        data[ 4] =  gdata[12]*cos(param[0]);
         data[ 5] =  0.0;
         data[ 6] =  0.0;
         data[ 7] =  0.0;
         data[ 8] =  1.0;
-        data[ 9] = -lgeom->data[12]*cos(param[0]);
-        data[10] = -lgeom->data[12]*sin(param[0]);
+        data[ 9] = -gdata[12]*cos(param[0]);
+        data[10] = -gdata[12]*sin(param[0]);
         data[11] =  0.0;
         data[12] = data[13] = data[14] = 0.0;
         data[15] = data[16] = data[17] = 0.0;
-        EG_rotate3D(lgeom->data, data, result);
+        EG_rotate3D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case TOROIDAL:
-        radius   =  lgeom->data[12] + lgeom->data[13]*cos(param[1]);
+        radius   =  gdata[12] + gdata[13]*cos(param[1]);
         data[ 0] =  radius*cos(param[0]);
         data[ 1] =  radius*sin(param[0]);
-        data[ 2] =  lgeom->data[13]*sin(param[1]);
+        data[ 2] =  gdata[13]*sin(param[1]);
         data[ 3] = -radius*sin(param[0]);
         data[ 4] =  radius*cos(param[0]);
         data[ 5] =  0.0;
-        data[ 6] =  -lgeom->data[13]*sin(param[1])*cos(param[0]);
-        data[ 7] =  -lgeom->data[13]*sin(param[1])*sin(param[0]);
-        data[ 8] =   lgeom->data[13]*cos(param[1]);
+        data[ 6] =  -gdata[13]*sin(param[1])*cos(param[0]);
+        data[ 7] =  -gdata[13]*sin(param[1])*sin(param[0]);
+        data[ 8] =   gdata[13]*cos(param[1]);
         data[ 9] = -radius*cos(param[0]);
         data[10] = -radius*sin(param[0]);
         data[11] =  0.0;
-        data[12] =  lgeom->data[13]*sin(param[1])*sin(param[0]);
-        data[13] = -lgeom->data[13]*sin(param[1])*cos(param[0]);
+        data[12] =  gdata[13]*sin(param[1])*sin(param[0]);
+        data[13] = -gdata[13]*sin(param[1])*cos(param[0]);
         data[14] =  0.0;
-        data[15] = -lgeom->data[13]*cos(param[1])*cos(param[0]);
-        data[16] = -lgeom->data[13]*cos(param[1])*sin(param[0]);
-        data[17] = -lgeom->data[13]*sin(param[1]);
-        EG_rotate3D(lgeom->data, data, result);
+        data[15] = -gdata[13]*cos(param[1])*cos(param[0]);
+        data[16] = -gdata[13]*cos(param[1])*sin(param[0]);
+        data[17] = -gdata[13]*sin(param[1]);
+        EG_rotate3D(gdata, data, result);
         stat    = EGADS_SUCCESS;
         break;
-
+        
       case REVOLUTION:
         stat = EG_evaluateGeom(lgeom->ref, &param[1], data);
         if (stat == EGADS_SUCCESS) {
-          tan        = &lgeom->data[3];
+          tan        = &gdata[3];
           tanv       = &data[3];
           CROSS(norm, tan, tanv);
           axes[6]    = norm[0];
@@ -1431,9 +1459,9 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           axes[9]    = norm[0];
           axes[10]   = norm[1];
           axes[11]   = norm[2];
-          axes[0]    = data[0] - lgeom->data[0];
-          axes[1]    = data[1] - lgeom->data[1];
-          axes[2]    = data[2] - lgeom->data[2];
+          axes[0]    = data[0] - gdata[0];
+          axes[1]    = data[1] - gdata[1];
+          axes[2]    = data[2] - gdata[2];
           CROSS(norm, tan, axes);
           axes[3]    = norm[0];
           axes[4]    = norm[1];
@@ -1441,71 +1469,68 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           norm[0]   *= sin(param[0]);
           norm[1]   *= sin(param[0]);
           norm[2]   *= sin(param[0]);
-          dist       = (lgeom->data[3]*axes[0] + lgeom->data[4]*axes[1] +
-                        lgeom->data[5]*axes[2])*(1.0-cos(param[0]));
-          norm[0]   += lgeom->data[3]*dist;
-          norm[1]   += lgeom->data[4]*dist;
-          norm[2]   += lgeom->data[5]*dist;
-          result[ 0] = axes[0]*cos(param[0]) + norm[0] + lgeom->data[0];
-          result[ 1] = axes[1]*cos(param[0]) + norm[1] + lgeom->data[1];
-          result[ 2] = axes[2]*cos(param[0]) + norm[2] + lgeom->data[2];
-
-          dist       = (lgeom->data[3]*axes[0] + lgeom->data[4]*axes[1] +
-                        lgeom->data[5]*axes[2]);
+          dist       = (gdata[3]*axes[0] + gdata[4]*axes[1] +
+                        gdata[5]*axes[2])*(1.0-cos(param[0]));
+          norm[0]   += gdata[3]*dist;
+          norm[1]   += gdata[4]*dist;
+          norm[2]   += gdata[5]*dist;
+          result[ 0] = axes[0]*cos(param[0]) + norm[0] + gdata[0];
+          result[ 1] = axes[1]*cos(param[0]) + norm[1] + gdata[1];
+          result[ 2] = axes[2]*cos(param[0]) + norm[2] + gdata[2];
+          
+          dist       = (gdata[3]*axes[0] + gdata[4]*axes[1] + gdata[5]*axes[2]);
           result[ 3] = axes[3]*cos(param[0]) +
-                       (lgeom->data[3]*dist  - axes[0])*sin(param[0]);
+                       (gdata[3]*dist  - axes[0])*sin(param[0]);
           result[ 4] = axes[4]*cos(param[0]) +
-                       (lgeom->data[4]*dist  - axes[1])*sin(param[0]);
+                       (gdata[4]*dist  - axes[1])*sin(param[0]);
           result[ 5] = axes[5]*cos(param[0]) +
-                       (lgeom->data[5]*dist  - axes[2])*sin(param[0]);
-
+                       (gdata[5]*dist  - axes[2])*sin(param[0]);
+          
           result[ 9] = -axes[3]*sin(param[0]) +
-                       (lgeom->data[3]*dist  - axes[0])*cos(param[0]);
+                        (gdata[3]*dist  - axes[0])*cos(param[0]);
           result[10] = -axes[4]*sin(param[0]) +
-                       (lgeom->data[4]*dist  - axes[1])*cos(param[0]);
+                        (gdata[4]*dist  - axes[1])*cos(param[0]);
           result[11] = -axes[5]*sin(param[0]) +
-                       (lgeom->data[5]*dist  - axes[2])*cos(param[0]);
-
-          dist       = (lgeom->data[3]*data[3] + lgeom->data[4]*data[4] +
-                        lgeom->data[5]*data[5]);
+                        (gdata[5]*dist  - axes[2])*cos(param[0]);
+          
+          dist       = (gdata[3]*data[3] + gdata[4]*data[4] + gdata[5]*data[5]);
           result[ 6] = data[3]*cos(param[0]) + axes[6]*sin(param[0]) +
-                       lgeom->data[3]*(1.0-cos(param[0]))*dist;
+                       gdata[3]*(1.0-cos(param[0]))*dist;
           result[ 7] = data[4]*cos(param[0]) + axes[7]*sin(param[0]) +
-                       lgeom->data[4]*(1.0-cos(param[0]))*dist;
+                       gdata[4]*(1.0-cos(param[0]))*dist;
           result[ 8] = data[5]*cos(param[0]) + axes[8]*sin(param[0]) +
-                       lgeom->data[5]*(1.0-cos(param[0]))*dist;
-
+                       gdata[5]*(1.0-cos(param[0]))*dist;
+          
           result[12] = axes[6]*cos(param[0]) +
-                       (lgeom->data[3]*dist - data[3])*sin(param[0]);
+                       (gdata[3]*dist - data[3])*sin(param[0]);
           result[13] = axes[7]*cos(param[0]) +
-                       (lgeom->data[4]*dist - data[4])*sin(param[0]);
+                       (gdata[4]*dist - data[4])*sin(param[0]);
           result[14] = axes[8]*cos(param[0]) +
-                       (lgeom->data[5]*dist - data[5])*sin(param[0]);
-
-          dist       = (lgeom->data[3]*data[6] + lgeom->data[4]*data[7] +
-                        lgeom->data[5]*data[8]);
+                       (gdata[5]*dist - data[5])*sin(param[0]);
+          
+          dist       = (gdata[3]*data[6] + gdata[4]*data[7] + gdata[5]*data[8]);
           result[15] = data[6]*cos(param[0]) + axes[ 9]*sin(param[0]) +
-                       lgeom->data[3]*(1.0-cos(param[0]))*dist;
+                       gdata[3]*(1.0-cos(param[0]))*dist;
           result[16] = data[7]*cos(param[0]) + axes[10]*sin(param[0]) +
-                       lgeom->data[4]*(1.0-cos(param[0]))*dist;
+                       gdata[4]*(1.0-cos(param[0]))*dist;
           result[17] = data[8]*cos(param[0]) + axes[11]*sin(param[0]) +
-                       lgeom->data[5]*(1.0-cos(param[0]))*dist;
+                       gdata[5]*(1.0-cos(param[0]))*dist;
         }
         break;
-
+        
       case EXTRUSION:
         stat = EG_evaluateGeom(lgeom->ref, param, data);
         if (stat == EGADS_SUCCESS) {
-          result[ 0] = data[0] + param[1]*lgeom->data[0];
-          result[ 1] = data[1] + param[1]*lgeom->data[1];
-          result[ 2] = data[2] + param[1]*lgeom->data[2];
+          result[ 0] = data[0] + param[1]*gdata[0];
+          result[ 1] = data[1] + param[1]*gdata[1];
+          result[ 2] = data[2] + param[1]*gdata[2];
           result[ 3] = data[3];
           result[ 4] = data[4];
           result[ 5] = data[5];
-
-          result[ 6] = lgeom->data[0];
-          result[ 7] = lgeom->data[1];
-          result[ 8] = lgeom->data[2];
+          
+          result[ 6] = gdata[0];
+          result[ 7] = gdata[1];
+          result[ 8] = gdata[2];
           result[ 9] = data[6];
           result[10] = data[7];
           result[11] = data[8];
@@ -1513,19 +1538,19 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           result[15] = result[16] = result[17] = 0.0;
         }
         break;
-
+        
       case TRIMMED:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         break;
-
+        
       case BEZIER:
-        stat = EG_bezier2dDeriv(lgeom->header, lgeom->data, param, result);
+        stat = EG_bezier2dDeriv(lgeom->header, gdata, param, result);
         break;
-
+        
       case BSPLINE:
-        stat = EG_spline2dDeriv(lgeom->header, lgeom->data, param, result);
+        stat = EG_spline2dDeriv(lgeom->header, gdata, param, result);
         break;
-
+        
       case OFFSET:
         stat = EG_evaluateGeom(lgeom->ref, param, result);
         if (stat == EGADS_SUCCESS) {
@@ -1536,10 +1561,10 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
           CROSS(norm, tan, tanv);
           dist = sqrt(norm[0]*norm[0] + norm[1]*norm[1] + norm[2]*norm[2]);
           if (dist != 0.0) {
-            result[ 0] += norm[0]*lgeom->data[0]/dist;
-            result[ 1] += norm[1]*lgeom->data[0]/dist;
-            result[ 2] += norm[2]*lgeom->data[0]/dist;
-
+            result[ 0] += norm[0]*gdata[0]/dist;
+            result[ 1] += norm[1]*gdata[0]/dist;
+            result[ 2] += norm[2]*gdata[0]/dist;
+            
             tan         = &result[9];
             tanv        = &result[6];
             CROSS(dum, tan, tanv);
@@ -1564,7 +1589,7 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
             axes[3]    += dum[0];
             axes[4]    += dum[1];
             axes[5]    += dum[2];
-
+            
             /* second derivatives -- need 3rd from surface! */
 #ifdef __clang_analyzer__
             der3[0]     = der3[1] = der3[2] = der3[3] = der3[ 4] = der3[ 5] = 0;
@@ -1588,7 +1613,7 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
             axes[6]    += 2.0*dum[0];
             axes[7]    += 2.0*dum[1];
             axes[8]    += 2.0*dum[2];
-
+            
             tan         = &der3[6];
             tanv        = &result[6];
             CROSS(dum, tan, tanv);
@@ -1607,7 +1632,7 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
             axes[ 9]   += 2.0*dum[0];
             axes[10]   += 2.0*dum[1];
             axes[11]   += 2.0*dum[2];
-
+            
             tan         = &result[12];
             tanv        = &result[6];
             CROSS(dum, tan, tanv);
@@ -1626,90 +1651,114 @@ EG_evaluateGeom(const egObject *geom, const double *param, double *result)
             axes[12]   += 2.0*dum[0];
             axes[13]   += 2.0*dum[1];
             axes[14]   += 2.0*dum[2];
-
+            
             radius      = norm[0]*axes[0] + norm[1]*axes[1] + norm[2]*axes[2];
-            radius     *= lgeom->data[0]/(dist*dist*dist);
-            result[ 3] += axes[0]*lgeom->data[0]/dist - norm[0]*radius;
-            result[ 4] += axes[1]*lgeom->data[0]/dist - norm[1]*radius;
-            result[ 5] += axes[2]*lgeom->data[0]/dist - norm[2]*radius;
+            radius     *= gdata[0]/(dist*dist*dist);
+            result[ 3] += axes[0]*gdata[0]/dist - norm[0]*radius;
+            result[ 4] += axes[1]*gdata[0]/dist - norm[1]*radius;
+            result[ 5] += axes[2]*gdata[0]/dist - norm[2]*radius;
             d           = norm[0]*axes[6] + norm[1]*axes[7] + norm[2]*axes[8];
             d          += axes[0]*axes[0] + axes[1]*axes[1] + axes[2]*axes[2];
-            d          *= lgeom->data[0]/(dist*dist*dist);
-            d           = 3.0*radius*radius*dist/lgeom->data[0] - d;
-            result[ 9] += axes[6]*lgeom->data[0]/dist - 2.0*axes[0]*radius +
-                          norm[0]*d;
-            result[10] += axes[7]*lgeom->data[0]/dist - 2.0*axes[1]*radius +
-                          norm[1]*d;
-            result[11] += axes[8]*lgeom->data[0]/dist - 2.0*axes[2]*radius +
-                          norm[2]*d;
+            d          *= gdata[0]/(dist*dist*dist);
+            d           = 3.0*radius*radius*dist/gdata[0] - d;
+            result[ 9] += axes[6]*gdata[0]/dist - 2.0*axes[0]*radius + norm[0]*d;
+            result[10] += axes[7]*gdata[0]/dist - 2.0*axes[1]*radius + norm[1]*d;
+            result[11] += axes[8]*gdata[0]/dist - 2.0*axes[2]*radius + norm[2]*d;
             ru          = radius;
-
+            
             radius      = norm[0]*axes[3] + norm[1]*axes[4] + norm[2]*axes[5];
-            radius     *= lgeom->data[0]/(dist*dist*dist);
-            result[ 6] += axes[3]*lgeom->data[0]/dist - norm[0]*radius;
-            result[ 7] += axes[4]*lgeom->data[0]/dist - norm[1]*radius;
-            result[ 8] += axes[5]*lgeom->data[0]/dist - norm[2]*radius;
+            radius     *= gdata[0]/(dist*dist*dist);
+            result[ 6] += axes[3]*gdata[0]/dist - norm[0]*radius;
+            result[ 7] += axes[4]*gdata[0]/dist - norm[1]*radius;
+            result[ 8] += axes[5]*gdata[0]/dist - norm[2]*radius;
             d           = norm[0]*axes[9] + norm[1]*axes[10] + norm[2]*axes[11];
             d          += axes[3]*axes[3] + axes[4]*axes[ 4] + axes[5]*axes[ 5];
-            d          *= lgeom->data[0]/(dist*dist*dist);
-            d           = 3.0*radius*radius*dist/lgeom->data[0] - d;
-            result[15] += axes[ 9]*lgeom->data[0]/dist - 2.0*axes[3]*radius +
-                          norm[0]*d;
-            result[16] += axes[10]*lgeom->data[0]/dist - 2.0*axes[4]*radius +
-                          norm[1]*d;
-            result[17] += axes[11]*lgeom->data[0]/dist - 2.0*axes[5]*radius +
-                          norm[2]*d;
-
+            d          *= gdata[0]/(dist*dist*dist);
+            d           = 3.0*radius*radius*dist/gdata[0] - d;
+            result[15] += axes[ 9]*gdata[0]/dist - 2.0*axes[3]*radius + norm[0]*d;
+            result[16] += axes[10]*gdata[0]/dist - 2.0*axes[4]*radius + norm[1]*d;
+            result[17] += axes[11]*gdata[0]/dist - 2.0*axes[5]*radius + norm[2]*d;
+            
             d           = axes[3]*axes[ 0] + axes[4]*axes[ 1] + axes[5]*axes[ 2];
             d          += norm[0]*axes[12] + norm[1]*axes[13] + norm[2]*axes[14];
-            d          *= lgeom->data[0]/(dist*dist*dist);
-            d           = 3.0*radius*ru*dist/lgeom->data[0] - d;
-            result[12] += axes[12]*lgeom->data[0]/dist - axes[0]*radius -
+            d          *= gdata[0]/(dist*dist*dist);
+            d           = 3.0*radius*ru*dist/gdata[0] - d;
+            result[12] += axes[12]*gdata[0]/dist - axes[0]*radius -
                           axes[ 3]*ru + norm[0]*d;
-            result[13] += axes[13]*lgeom->data[0]/dist - axes[1]*radius -
+            result[13] += axes[13]*gdata[0]/dist - axes[1]*radius -
                           axes[ 4]*ru + norm[1]*d;
-            result[14] += axes[14]*lgeom->data[0]/dist - axes[2]*radius -
+            result[14] += axes[14]*gdata[0]/dist - axes[2]*radius -
                           axes[ 5]*ru + norm[2]*d;
           }
         }
         break;
     }
-
+    
   }
-
+  
   return stat;
 }
+
+
+#ifndef LITE
+/* explicitly instantiate */
+template int EG_evaluateGeom(const egObject *geom, const double *param,
+                             double *result);
+template int EG_evaluateGeom(const egObject *geom, const SurrealS<1> *param,
+                             SurrealS<1> *result);
+#endif
 
 
 static int
 EG_nearestOnPCurve(const egObject *geom, const double *coor, double *range,
                    double *t, double *uv)
 {
-  int    i, stat;
-  double a, b, dist, pw[2], result[6];
-
-  /* netwon-raphson from picked position  */
-  for (i = 0; i < 20; i++) {
-    if ((*t < range[0]) || (*t > range[1])) break;
-    stat = EG_evaluateGeom(geom, t, result);
-    if (stat != EGADS_SUCCESS) return stat;
-    pw[0] = result[0] - coor[0];
-    pw[1] = result[1] - coor[1];
-    dist  = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
-    if (dist < 1.e-8) break;
-    b     = -(    pw[0]*result[2] +     pw[1]*result[3]);
-    a     =  (result[2]*result[2] + result[3]*result[3]) +
-             (    pw[0]*result[4] +     pw[1]*result[5]);
+  int    i, j, stat;
+  double a, b = 0.0, dt = 0.0, tt, dist, ldist = 0.0, pw[2], result[6];
+  
+  /* netwon-raphson from picked position */
+  for (i = 0; i < 40; i++) {
+    
+    /* line search */
+    for (j = 0; j < 20; j++) {
+      
+      if (j == 19) dt = 0.0;
+      tt = *t + dt;
+      stat = EG_evaluateGeom(geom, &tt, result);
+      if (stat != EGADS_SUCCESS) return stat;
+      pw[0] = result[0] - coor[0];
+      pw[1] = result[1] - coor[1];
+      dist  = sqrt(pw[0]*pw[0] + pw[1]*pw[1]);
+      if (dist < 1.e-08) break;
+      b     = -(pw[0]*result[2] + pw[1]*result[3]);
+      
+      if ((i == 0) || (dist < ldist)) {
+        break;
+      } else {
+        dt /= 2.0;
+      }
+    }
+    
+    *t = tt;
+    if (j                 ==     20) break;  /* line search failed */
+    if (dist               < 1.e-08) break;  /* converged! */
+    if (fabs(ldist - dist) < 1.e-08) break;
+    
+    a  = (result[2]*result[2] + result[3]*result[3]) +
+         (    pw[0]*result[4] +     pw[1]*result[5]);
     if (a == 0.0) break;
-    b  /= a;
-    *t += b;
+    dt = b/a;
+    ldist = dist;
+
+    /* limit dt within the valid range */
+    tt = *t + dt;
+    if (tt < range[0]) dt = range[0] - *t;
+    if (tt > range[1]) dt = range[1] - *t;
   }
-  if (*t < range[0]) *t = range[0];
-  if (*t > range[1]) *t = range[1];
-
-  stat = EG_evaluateGeom(geom, t, result);
-  if (stat != EGADS_SUCCESS) return stat;
-
+/*
+  if (i == 40 || j == 20)
+    printf(" EGADS Info: %d NearestOnPCurve not Converged!\n", geom->mtype);  */
+  
   uv[0] = result[0];
   uv[1] = result[1];
   return EGADS_SUCCESS;
@@ -1720,32 +1769,53 @@ static int
 EG_nearestOnCurve(const egObject *geom, const double *coor, double *range,
                   double *t, double *xyz)
 {
-  int    i, stat;
-  double a, b, dist, pw[3], result[9];
-
+  int    i, j, stat;
+  double a, b = 0.0, dt = 0.0, tt, dist, ldist = 0.0, pw[3], result[9];
+  
   /* netwon-raphson from picked position */
-  for (i = 0; i < 20; i++) {
-    if ((*t < range[0]) || (*t > range[1])) break;
-    stat = EG_evaluateGeom(geom, t, result);
-    if (stat != EGADS_SUCCESS) return stat;
-    pw[0] = result[0] - coor[0];
-    pw[1] = result[1] - coor[1];
-    pw[2] = result[2] - coor[2];
-    dist  = sqrt(pw[0]*pw[0] + pw[1]*pw[1] + pw[2]*pw[2]);
-    if (dist < 1.e-8) break;
-    b     = -(    pw[0]*result[3] +     pw[1]*result[4] +     pw[2]*result[5]);
-    a     =  (result[3]*result[3] + result[4]*result[4] + result[5]*result[5]) +
-             (    pw[0]*result[6] +     pw[1]*result[7] +     pw[2]*result[8]);
+  for (i = 0; i < 40; i++) {
+    
+    /* line search */
+    for (j = 0; j < 20; j++) {
+      
+      if (j == 19) dt = 0.0;
+      tt = *t + dt;
+      stat = EG_evaluateGeom(geom, &tt, result);
+      if (stat != EGADS_SUCCESS) return stat;
+      pw[0] = result[0] - coor[0];
+      pw[1] = result[1] - coor[1];
+      pw[2] = result[2] - coor[2];
+      dist  = sqrt(pw[0]*pw[0] + pw[1]*pw[1] + pw[2]*pw[2]);
+      if (dist < 1.e-08) break;
+      b     = -(pw[0]*result[3] + pw[1]*result[4] + pw[2]*result[5]);
+      
+      if ((i == 0) || (dist < ldist)) {
+        break;
+      } else {
+        dt /= 2.0;
+      }
+    }
+    
+    *t = tt;
+    if (j                 ==     20) break;  /* line search failed */
+    if (dist               < 1.e-08) break;  /* converged! */
+    if (fabs(ldist - dist) < 1.e-08) break;
+
+    a  = (result[3]*result[3] + result[4]*result[4] + result[5]*result[5]) +
+         (    pw[0]*result[6] +     pw[1]*result[7] +     pw[2]*result[8]);
     if (a == 0.0) break;
-    b  /= a;
-    *t += b;
+    dt = b/a;
+    ldist = dist;
+
+    /* limit dt within the valid range */
+    tt = *t + dt;
+    if (tt < range[0]) dt = range[0] - *t;
+    if (tt > range[1]) dt = range[1] - *t;
   }
-  if (*t < range[0]) *t = range[0];
-  if (*t > range[1]) *t = range[1];
-
-  stat = EG_evaluateGeom(geom, t, result);
-  if (stat != EGADS_SUCCESS) return stat;
-
+/*
+  if (i == 40 || j == 20)
+    printf(" EGADS Info: %d NearestOnCurve not Converged!\n", geom->mtype);  */
+  
   xyz[0] = result[0];
   xyz[1] = result[1];
   xyz[2] = result[2];
@@ -1757,35 +1827,49 @@ static int
 EG_nearestOnSurface(const egObject *geom, const double *point, double *uv,
                     double *coor)
 {
-  int    count, stat;
-  double a00, a10, a11, b0, b1, det, dist, ldist, dx[3], uvs[2], result[18];
+  int    count, j, stat, per;
+  double a00, a10, a11, det, dist, ldist, dx[3], uvs[2], result[18];
+  double range[4], b0 = 0.0, b1 = 0.0, delta[2] = {0.0, 0.0};
+  
+  stat = EG_getRange(geom, range, &per);
+  if (stat != EGADS_SUCCESS) return stat;
 
   /* newton iteration */
   ldist = uvs[0] = uvs[1] = 0.0;
-  for (count = 0; count < 15; count++) {
-    stat = EG_evaluateGeom(geom, uv, result);
-    if (stat != EGADS_SUCCESS) return stat;
-    dx[0] = result[0] - point[0];
-    dx[1] = result[1] - point[1];
-    dx[2] = result[2] - point[2];
-    dist  = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
-    if (dist < 1.e-8) break;
-    if (count != 0) {
-      if (fabs(dist-ldist) < 1.e-8) break;
-      if (dist > ldist) {
-        uv[0] = uvs[0];
-        uv[1] = uvs[1];
-        stat  = EG_evaluateGeom(geom, uv, result);
-        if (stat != EGADS_SUCCESS) return stat;
-        coor[0] = result[0];
-        coor[1] = result[1];
-        coor[2] = result[2];
-        return EGADS_EMPTY;
+  for (count = 0; count < 40; count++) {
+
+    /* line search */
+    for (j = 0; j < 20; j++) {
+
+      if (j == 19) delta[0] = delta[1] = 0.0;
+      uvs[0] = uv[0] + delta[0];
+      uvs[1] = uv[1] + delta[1];
+
+      stat = EG_evaluateGeom(geom, uvs, result);
+      if (stat != EGADS_SUCCESS) return stat;
+      dx[0] = result[0] - point[0];
+      dx[1] = result[1] - point[1];
+      dx[2] = result[2] - point[2];
+      dist  = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
+      if (dist < 1.e-8) break;
+      b0  =    -dx[0]*result[ 3] -     dx[1]*result[ 4] -     dx[2]*result[ 5];
+      b1  =    -dx[0]*result[ 6] -     dx[1]*result[ 7] -     dx[2]*result[ 8];
+      if ((count == 0) || (dist < ldist)) {
+        break;
+      } else {
+        delta[0] /= 2.0;
+        delta[1] /= 2.0;
       }
     }
 
-    b0  =    -dx[0]*result[ 3] -     dx[1]*result[ 4] -     dx[2]*result[ 5];
-    b1  =    -dx[0]*result[ 6] -     dx[1]*result[ 7] -     dx[2]*result[ 8];
+    /* update the solution */
+    uv[0] = uvs[0];
+    uv[1] = uvs[1];
+
+    if (j               ==    20) break;  /* line search failed */
+    if (fabs(dist-ldist) < 1.e-8) break;
+    if (dist             < 1.e-8) break;
+
     a00 = result[3]*result[ 3] + result[4]*result[ 4] + result[5]*result[ 5] +
               dx[0]*result[ 9] +     dx[1]*result[10] +     dx[2]*result[11];
     a10 = result[3]*result[ 6] + result[4]*result[ 7] + result[5]*result[ 8] +
@@ -1800,22 +1884,174 @@ EG_nearestOnSurface(const egObject *geom, const double *point, double *uv,
       coor[2] = result[2];
       return EGADS_DEGEN;
     }
-    det    = 1.0/det;
-    uvs[0] = uv[0];
-    uvs[1] = uv[1];
-    uv[0] += det*(b0*a11 - b1*a10);
-    uv[1] += det*(b1*a00 - b0*a10);
+    det      = 1.0/det;
+    delta[0] = det*(b0*a11 - b1*a10);
+    delta[1] = det*(b1*a00 - b0*a10);
+
+    /* limit delta within the valid uv range */
+    uvs[0]   = uv[0] + delta[0];
+    uvs[1]   = uv[1] + delta[1];
+    if (uvs[0] < range[0]) delta[0] = range[0] - uv[0];
+    if (uvs[0] > range[1]) delta[0] = range[1] - uv[0];
+    if (uvs[1] < range[2]) delta[1] = range[2] - uv[1];
+    if (uvs[1] > range[3]) delta[1] = range[3] - uv[1];
+
+    /* save off the last distance */
     ldist  = dist;
+
+    /* stop if delta is very small */
+    if (sqrt(delta[0]*delta[0] + delta[1]*delta[1]) < 1.e-12) break;
 /*  printf("   %d: %lf %lf   %le\n", count, uv[0], uv[1], ldist);  */
   }
 
-  stat  = EG_evaluateGeom(geom, uv, result);
-  if (stat != EGADS_SUCCESS) return stat;
   coor[0] = result[0];
   coor[1] = result[1];
   coor[2] = result[2];
-  if (count == 15) return EGADS_EMPTY;
+  if (j     == 20) return EGADS_EMPTY;
+  if (count == 40) return EGADS_EMPTY;
 
+  return EGADS_SUCCESS;
+}
+
+
+static int
+EG_nearestOnPCurveLM(const egObject *geom, const double *point, double *range,
+                     double *t, double *coor)
+{
+  int    status, istep, i;
+  double lambda, ts, tt, result[6], A, b, delta;
+  double obj_old, obj_tmp, data[6];
+  
+  /* initialize Levenberg-Marquardt */
+  lambda = 1.0;
+  
+  ts     = *t;
+  status = EG_evaluateGeom(geom, &ts, result);
+  if (status != EGADS_SUCCESS) return status;
+  coor[0] = result[0];
+  coor[1] = result[1];
+  
+  obj_old = (point[0] - result[0])*(point[0] - result[0]) +
+            (point[1] - result[1])*(point[1] - result[1]);
+  if (obj_old < 1.e-14) return EGADS_SUCCESS;
+  
+  /* take Levenberg-Marquardt steps */
+  for (istep = 0; istep < 250; istep++) {
+    
+    /* set up A  = (J' * J + lambda * diag(J' * J))
+          and b  =  J' * (point - result)
+       where  J' = transpose(J) */
+    A = (result[2]*result[2] + result[3]*result[3]) * (1.0 + lambda);
+    if (A == 0.0) break;
+    b = result[2]*(point[0] - result[0]) + result[3]*(point[1] - result[1]);
+    
+    /* find a temp uv and associated objective function */
+    delta = b/A;
+    tt    = ts + delta;
+    if (tt < range[0]) tt = range[0];
+    if (tt > range[1]) tt = range[1];
+    status = EG_evaluateGeom(geom, &tt, data);
+    if (status != EGADS_SUCCESS) return status;
+    
+    obj_tmp = (point[0] - data[0])*(point[0] - data[0]) +
+              (point[1] - data[1])*(point[1] - data[1]);
+    
+    /* if step is better, accept it and halve lambda (making it more Newton) */
+    if (obj_tmp < obj_old) {
+      obj_old = obj_tmp;
+      ts      = tt;
+      for (i  = 0; i < 4; i++) result[i] = data[i];
+      lambda /= 2.0;
+      if (lambda  < 1.e-14) lambda = 1.e-14;
+      if (obj_old < 1.e-14) break;
+    } else {
+      /* otherwise, reject it and double lambda (more gradient-descent-like) */
+      lambda *= 2.0;
+    }
+    if ((tt == range[0]) || (tt == range[1])) break;
+    
+    /* stop if delta is very small */
+    if (fabs(delta) < 1.e-12) break;
+  }
+  
+  /* return the solution */
+  *t      = ts;
+  coor[0] = result[0];
+  coor[1] = result[1];
+  return EGADS_SUCCESS;
+}
+
+
+static int
+EG_nearestOnCurveLM(const egObject *geom, const double *point, double *range,
+                    double *t, double *coor)
+{
+  int    status, istep, i;
+  double lambda, ts, tt, result[9], A, b, delta;
+  double obj_old, obj_tmp, data[9];
+  
+  /* initialize Levenberg-Marquardt */
+  lambda = 1.0;
+  
+  ts     = *t;
+  status = EG_evaluateGeom(geom, &ts, result);
+  if (status != EGADS_SUCCESS) return status;
+  coor[0] = result[0];
+  coor[1] = result[1];
+  coor[2] = result[2];
+  
+  obj_old = (point[0] - result[0])*(point[0] - result[0]) +
+            (point[1] - result[1])*(point[1] - result[1]) +
+            (point[2] - result[2])*(point[2] - result[2]);
+  if (obj_old < 1.e-14) return EGADS_SUCCESS;
+  
+  /* take Levenberg-Marquardt steps */
+  for (istep = 0; istep < 250; istep++) {
+    
+    /* set up A  = (J' * J + lambda * diag(J' * J))
+          and b  =  J' * (point - result)
+       where  J' = transpose(J) */
+    A = (result[3]*result[3] + result[4]*result[4] + result[5]*result[5]) *
+        (1.0 + lambda);
+    if (A == 0.0) break;
+    b = result[3]*(point[0] - result[0]) + result[4]*(point[1] - result[1]) +
+        result[5]*(point[2] - result[2]);
+    
+    /* find a temp uv and associated objective function */
+    delta = b/A;
+    tt    = ts + delta;
+    if (tt < range[0]) tt = range[0];
+    if (tt > range[1]) tt = range[1];
+    status = EG_evaluateGeom(geom, &tt, data);
+    if (status != EGADS_SUCCESS) return status;
+    
+    obj_tmp = (point[0] - data[0])*(point[0] - data[0]) +
+              (point[1] - data[1])*(point[1] - data[1]) +
+              (point[2] - data[2])*(point[2] - data[2]);
+    
+    /* if step is better, accept it and halve lambda (making it more Newton) */
+    if (obj_tmp < obj_old) {
+      obj_old = obj_tmp;
+      ts      = tt;
+      for (i  = 0; i < 6; i++) result[i] = data[i];
+      lambda /= 2.0;
+      if (lambda  < 1.e-14) lambda = 1.e-14;
+      if (obj_old < 1.e-14) break;
+    } else {
+      /* otherwise, reject it and double lambda (more gradient-descent-like) */
+      lambda *= 2.0;
+    }
+    if ((tt == range[0]) || (tt == range[1])) break;
+    
+    /* stop if delta is very small */
+    if (fabs(delta) < 1.e-12) break;
+  }
+  
+  /* return the solution */
+  *t      = ts;
+  coor[0] = result[0];
+  coor[1] = result[1];
+  coor[2] = result[2];
   return EGADS_SUCCESS;
 }
 
@@ -1824,13 +2060,13 @@ static int
 EG_nearestOnSurfaceLM(const egObject *geom, const double *point, double *uv,
                       double *coor)
 {
-  int    status, istep, i;
-  double lambda, uvs[2], uvt[2], result[18], A[4], b[2], denom, delta[2];
+  int    status, istep, i, per;
+  double lambda, uvs[2], uvt[2], result[18], A[4], b[2], denom, delta[2], range[4];
   double obj_old, obj_tmp, data[18];
-
+  
   /* initialize Levenberg-Marquardt */
   lambda = 1.0;
-
+  
   uvs[0] = uv[0];
   uvs[1] = uv[1];
   status = EG_evaluateGeom(geom, uvs, result);
@@ -1840,10 +2076,13 @@ EG_nearestOnSurfaceLM(const egObject *geom, const double *point, double *uv,
             (point[1] - result[1])*(point[1] - result[1]) +
             (point[2] - result[2])*(point[2] - result[2]);
   if (obj_old < 1.e-14) return EGADS_SUCCESS;
+  
+  status = EG_getRange(geom, range, &per);
+  if (status != EGADS_SUCCESS) return status;
 
   /* take Levenberg-Marquardt steps */
   for (istep = 0; istep < 250; istep++) {
-
+    
     /* set up A  = (J' * J + lambda * diag(J' * J))
           and b  =  J' * (point - result)
        where  J' = transpose(J) */
@@ -1853,28 +2092,32 @@ EG_nearestOnSurfaceLM(const egObject *geom, const double *point, double *uv,
     A[2] = A[1];
     A[3] = (result[6]*result[6] + result[7]*result[7] + result[8]*result[8]) *
            (1.0 + lambda);
-
+    
     b[0] = result[3]*(point[0] - result[0]) + result[4]*(point[1] - result[1]) +
            result[5]*(point[2] - result[2]);
     b[1] = result[6]*(point[0] - result[0]) + result[7]*(point[1] - result[1]) +
            result[8]*(point[2] - result[2]);
-
+    
     /* solve A*delta = b using Cramer's rule */
     denom    =  A[0]*A[3] - A[2]*A[1];
     if (denom == 0.0) break;
     delta[0] = (b[0]*A[3] - b[1]*A[1])/denom;
     delta[1] = (A[0]*b[1] - A[2]*b[0])/denom;
-
+    
     /* find a temp uv and associated objective function */
     uvt[0]   = uvs[0] + delta[0];
     uvt[1]   = uvs[1] + delta[1];
+    if (uvt[0] < range[0]) { uvt[0] = range[0]; delta[0] = uvt[0] - uvs[0]; }
+    if (uvt[0] > range[1]) { uvt[0] = range[1]; delta[0] = uvt[0] - uvs[0]; }
+    if (uvt[1] < range[2]) { uvt[1] = range[2]; delta[1] = uvt[1] - uvs[1]; }
+    if (uvt[1] > range[3]) { uvt[1] = range[3]; delta[1] = uvt[1] - uvs[1]; }
     status   = EG_evaluateGeom(geom, uvt, data);
     if (status != EGADS_SUCCESS) return status;
-
+    
     obj_tmp = (point[0] - data[0])*(point[0] - data[0]) +
               (point[1] - data[1])*(point[1] - data[1]) +
               (point[2] - data[2])*(point[2] - data[2]);
-
+    
     /* if step is better, accept it and halve lambda (making it more Newton) */
     if (obj_tmp < obj_old) {
       obj_old = obj_tmp;
@@ -1888,11 +2131,11 @@ EG_nearestOnSurfaceLM(const egObject *geom, const double *point, double *uv,
       /* otherwise, reject it and double lambda (more gradient-descent-like) */
       lambda *= 2.0;
     }
-
+    
     /* stop if delta is very small */
     if (sqrt(delta[0]*delta[0] + delta[1]*delta[1]) < 1.e-12) break;
   }
-
+  
   /* return the solution */
   uv[0]   = uvs[0];
   uv[1]   = uvs[1];
@@ -1907,7 +2150,7 @@ static void
 EG_orderCandidates(liteIndex *cand, double dist2, double *uv, int i, int j)
 {
   if (dist2 >= cand[3].dist2) return;
-
+  
   if (dist2 < cand[0].dist2) {
     cand[3]       = cand[2];
     cand[2]       = cand[1];
@@ -1915,7 +2158,7 @@ EG_orderCandidates(liteIndex *cand, double dist2, double *uv, int i, int j)
     cand[0].uk    = i;
     cand[0].vk    = j;
     cand[0].uv[0] = uv[0];
-    cand[0].uv[1] = uv[1];
+    if (j != 0) cand[0].uv[1] = uv[1];
     cand[0].dist2 = dist2;
   } else if (dist2 < cand[1].dist2) {
     cand[3]       = cand[2];
@@ -1923,54 +2166,60 @@ EG_orderCandidates(liteIndex *cand, double dist2, double *uv, int i, int j)
     cand[1].uk    = i;
     cand[1].vk    = j;
     cand[1].uv[0] = uv[0];
-    cand[1].uv[1] = uv[1];
+    if (j != 0) cand[1].uv[1] = uv[1];
     cand[1].dist2 = dist2;
   } else if (dist2 < cand[2].dist2) {
     cand[3]       = cand[2];
     cand[2].uk    = i;
     cand[2].vk    = j;
     cand[2].uv[0] = uv[0];
-    cand[2].uv[1] = uv[1];
+    if (j != 0) cand[2].uv[1] = uv[1];
     cand[2].dist2 = dist2;
   } else {
     cand[3].uk    = i;
     cand[3].vk    = j;
     cand[3].uv[0] = uv[0];
-    cand[3].uv[1] = uv[1];
+    if (j != 0) cand[3].uv[1] = uv[1];
     cand[3].dist2 = dist2;
   }
 }
 
 
 int
-EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
+EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
                     const double *xyz, double *param, double toler,
                     double *result)
 {
-  int            i, j, ii, iii, jjj, k, stat, per, atype, alen, cnt;
-  double         a, b, tx, period, tol;
-  double         pt[3], uvs[2], uvx[2], range[4], srange[4] = {0,0,0,0}, data[18];
+  int            i, j, ii, iii, jjj, k, stat, per, atype, ulen, vlen, cnt;
+  int            jDiv, iDiv;
+  double         a, b, tx, tt, period, tol, coord[3], srange[4] = {0.,0.,0.,0.};
+  double         pt[3], uvs[2], uvx[2], range[4], data[18];
+  double         *urats = NULL, *vrats = NULL;
 #ifdef LITE
-  liteGeometry   *lgeom;
+  liteGeometry   *lgeom, *lref;
 #endif
   liteIndex      cand[4];
   const int      *ints;
   const double   *reals;
   const char     *str;
+  const egObject *geom;
   static double  ratios[5]  = {0.02, 0.25, 0.5,  0.75, 0.98};
   static double  finrat[10] = {0.02, 0.1,  0.2,  0.3,  0.4,
                                0.5,  0.6,  0.7,  0.8,  0.98};
   static double  xfinrt[20] = {0.02, 0.05, 0.1,  0.15, 0.2,
                                0.25, 0.3,  0.35, 0.4,  0.45,
                                0.5,  0.55, 0.6,  0.65, 0.7,
-                               0.75, 0.8,  8.85, 0.9,  0.98};
+                               0.75, 0.8,  0.85, 0.9,  0.98};
+  static double  percrv[11] = {0./8., 0.010, 1./8., 2./8., 3./8., 4./8.,
+                               5./8., 6./8., 7./8., 0.990, 8./8.};
 
+  geom = geomx;
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if ((geom->oclass != PCURVE) && (geom->oclass != CURVE) &&
       (geom->oclass != SURFACE))   return EGADS_NOTGEOM;
   if  (geom->blind == NULL)        return EGADS_NODATA;
-
+  
   stat = EG_getRange(geom, range, &per);
   if (stat != EGADS_SUCCESS) return stat;
   srange[0] = range[0];
@@ -1979,7 +2228,7 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
     srange[2] = range[2];
     srange[3] = range[3];
   }
-
+  
   /* do we re-limit? */
   if (limits != NULL) {
     range[0] = limits[0];
@@ -1989,9 +2238,18 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
       range[3] = limits[3];
     }
   }
-
+  
   if (geom->oclass == PCURVE) {
-
+    
+    while (geom->mtype == TRIMMED) {
+#ifdef LITE
+      lgeom = (liteGeometry *) geom->blind;
+#else
+      egadsPCurve *lgeom = (egadsPCurve *) geom->blind;
+#endif
+      geom = lgeom->ref;
+    }
+    
     /* find good starting point */
     b = 0.0;
     if (geom->mtype == BEZIER) {
@@ -2017,22 +2275,27 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
 #else
       egadsPCurve *lgeom = (egadsPCurve *) geom->blind;
 #endif
-      k     = 1;
-      stat  = EG_attributeRet(geom, ".Bad", &atype, &alen, &ints, &reals, &str);
+      cand[0].dist2 = cand[1].dist2 = cand[2].dist2 = cand[3].dist2 = 1.e308;
+      cand[0].uk    = cand[1].uk    = cand[2].uk    = cand[3].uk    = 0;
+      cand[0].vk    = cand[1].vk    = cand[2].vk    = cand[3].vk    = 0;
+      cand[0].uv[0] = cand[1].uv[0] = cand[2].uv[0] = cand[3].uv[0] = 0;
+      cand[0].uv[1] = cand[1].uv[1] = cand[2].uv[1] = cand[3].uv[1] = 0;
+      k    = lgeom->header[1];
+      stat = EG_attributeRet(geom, ".Bad", &atype, &ulen, &ints, &reals, &str);
       if ((stat == EGADS_SUCCESS) && (atype == ATTRSTRING))
-        if (strcmp(str, "fold") == 0) k = 2*lgeom->header[1];
+        if (strcmp(str, "fold") == 0) k *= 2;
       for (j = i = 1; i < lgeom->header[3]; i++) {
         if (lgeom->data[i-1] <  range[0])       continue;
         if (lgeom->data[i-1] == lgeom->data[i]) continue;
         tx = range[1];
         for (ii = 1; ii <= k; ii++) {
-          tx  = ii;
-          tx *= (lgeom->data[i-1] + lgeom->data[i])/(k+1);
+          tx = lgeom->data[i-1] + ii*(lgeom->data[i] - lgeom->data[i-1])/(k+1);
           if (tx > range[1]) break;
           stat = EG_evaluateGeom(geom, &tx, data);
           if (stat != EGADS_SUCCESS) return stat;
           a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
               (data[1]-xyz[1])*(data[1]-xyz[1]);
+          EG_orderCandidates(cand, a, &tx, i, 0);
           if (j == 1) {
             *param = tx;
             b      = a;
@@ -2053,6 +2316,7 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
           if (stat != EGADS_SUCCESS) return stat;
           a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
               (data[1]-xyz[1])*(data[1]-xyz[1]);
+          EG_orderCandidates(cand, a, &tx, i+1, 0);
           if (j == 1) {
             *param = tx;
             b      = a;
@@ -2065,26 +2329,22 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
           j++;
         }
       }
-    } else if (geom->mtype == LINE) {
-      for (i = 0; i < 5; i++) {
-        tx   = (1.0-ratios[i])*range[0] + ratios[i]*range[1];
-        stat = EG_evaluateGeom(geom, &tx, data);
-        if (stat != EGADS_SUCCESS) return stat;
-        a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-            (data[1]-xyz[1])*(data[1]-xyz[1]);
-        if (i == 0) {
-          *param = tx;
-          b      = a;
-        } else {
-          if (a < b) {
-            *param = tx;
-            b      = a;
-          }
-        }
-      }
     } else {
-      for (i = 0; i < 10; i++) {
-        tx   = (1.0-finrat[i])*range[0] + finrat[i]*range[1];
+      if (geom->mtype == BEZIER) {
+        urats = xfinrt;
+        ulen = 20;
+      } else if (geom->mtype == LINE) {
+        urats = ratios;
+        ulen = 1;
+      } else if ((geom->mtype == CIRCLE) || (geom->mtype == ELLIPSE)) {
+        urats = percrv;
+        ulen = 11;
+      } else {
+        urats = finrat;
+        ulen = 10;
+      }
+      for (i = 0; i < ulen; i++) {
+        tx   = (1.0-urats[i])*range[0] + urats[i]*range[1];
         stat = EG_evaluateGeom(geom, &tx, data);
         if (stat != EGADS_SUCCESS) return stat;
         a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
@@ -2100,22 +2360,67 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
         }
       }
     }
-    stat = EG_nearestOnPCurve(geom, xyz, range, param, result);
+    tx   = *param;
+    stat = EG_evaluateGeom(geom, &tx, data);
     if (stat != EGADS_SUCCESS) return stat;
-    /* this probably does nothing due to the range limitting */
+    result[0] = data[0];
+    result[1] = data[1];
+    a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+        (data[1]-xyz[1])*(data[1]-xyz[1]);
+    if (geom->mtype == BSPLINE) {
+      for (i = 0; i < 2; i++) {
+        if (cand[i].uk == 0) continue;
+        tt   = cand[i].uv[0];
+        stat = EG_nearestOnPCurve(geom, xyz, range, &tt, coord);
+        if (stat != EGADS_SUCCESS) return stat;
+        b = (coord[0]-xyz[0])*(coord[0]-xyz[0]) +
+            (coord[1]-xyz[1])*(coord[1]-xyz[1]);
+        if (b < a) {
+          a         = b;
+          tx        = *param;
+          data[0]   = result[0];
+          data[1]   = result[1];
+          *param    = tt;
+          result[0] = coord[0];
+          result[1] = coord[1];
+        }
+      }
+      EG_nearestOnPCurveLM(geom, xyz, range, param, result);
+    } else {
+      stat = EG_nearestOnPCurve(geom, xyz, range, param, result);
+      if (stat != EGADS_SUCCESS) return stat;
+    }
+    b = (result[0]-xyz[0])*(result[0]-xyz[0]) +
+        (result[1]-xyz[1])*(result[1]-xyz[1]);
+    if (b > a) {
+      printf(" EGADS Info: %d NearestOnP diverge %le vs %le\n",
+             geom->mtype, sqrt(a), sqrt(b));
+      *param    = tx;
+      result[0] = data[0];
+      result[1] = data[1];
+    }
+    /* this probably does nothing due to the range limiting */
     if ((per&1) != 0) {
       period = srange[1] - srange[0];
-      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1])) {
+      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1]))
         if (*param+PARAMACC < srange[0]) {
           if (*param+period-PARAMACC < srange[1]) *param += period;
         } else {
           if (*param-period+PARAMACC > srange[0]) *param -= period;
         }
-      }
     }
-
+    
   } else if (geom->oclass == CURVE) {
 
+    while (geom->mtype == TRIMMED) {
+#ifdef LITE
+      lgeom = (liteGeometry *) geom->blind;
+#else
+      egadsCurve *lgeom = (egadsCurve *) geom->blind;
+#endif
+      geom = lgeom->ref;
+    }
+    
     /* find good starting point */
     b = 0.0;
     if (geom->mtype == BSPLINE) {
@@ -2124,65 +2429,75 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
 #else
       egadsCurve *lgeom = (egadsCurve *) geom->blind;
 #endif
-      ii    = lgeom->header[1];
-      ii   *= lgeom->header[3] - 2*lgeom->header[1];
-      if (ii < 6) ii = 6;
-      for (i = 0; i < ii; i++) {
-        tx   = range[0] + i*(range[1]-range[0])/(ii-1);
-        stat = EG_evaluateGeom(geom, &tx, data);
-        if (stat != EGADS_SUCCESS) return stat;
-        a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-            (data[1]-xyz[1])*(data[1]-xyz[1]) +
-            (data[2]-xyz[2])*(data[2]-xyz[2]);
-        if (i == 0) {
-          *param = tx;
-          b      = a;
-        } else {
-          if (a < b) {
+      cand[0].dist2 = cand[1].dist2 = cand[2].dist2 = cand[3].dist2 = 1.e308;
+      cand[0].uk    = cand[1].uk    = cand[2].uk    = cand[3].uk    = 0;
+      cand[0].vk    = cand[1].vk    = cand[2].vk    = cand[3].vk    = 0;
+      cand[0].uv[0] = cand[1].uv[0] = cand[2].uv[0] = cand[3].uv[0] = 0;
+      cand[0].uv[1] = cand[1].uv[1] = cand[2].uv[1] = cand[3].uv[1] = 0;
+      k = lgeom->header[1];
+      for (j = i = 1; i < lgeom->header[3]; i++) {
+        if (lgeom->data[i-1] <  range[0])       continue;
+        if (lgeom->data[i-1] == lgeom->data[i]) continue;
+        tx = range[1];
+        for (ii = 1; ii <= k; ii++) {
+          tx = lgeom->data[i-1] + ii*(lgeom->data[i] - lgeom->data[i-1])/(k+1);
+          if (tx > range[1]) break;
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]);
+          EG_orderCandidates(cand, a, &tx, i, 0);
+          if (j == 1) {
             *param = tx;
             b      = a;
+          } else {
+            if (a < b) {
+              *param = tx;
+              b      = a;
+            }
           }
+          j++;
         }
+        if (tx > range[1]) break;
       }
-    } else if (geom->mtype == BEZIER) {
-      for (i = 0; i < 20; i++) {
-        tx   = (1.0-xfinrt[i])*range[0] + xfinrt[i]*range[1];
-        stat = EG_evaluateGeom(geom, &tx, data);
-        if (stat != EGADS_SUCCESS) return stat;
-        a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-            (data[1]-xyz[1])*(data[1]-xyz[1]) +
-            (data[2]-xyz[2])*(data[2]-xyz[2]);
-        if (i == 0) {
-          *param = tx;
-          b      = a;
-        } else {
-          if (a < b) {
+      if (j < 20) {
+        for (i = 0; i < 20; i++) {
+          tx   = (1.0-xfinrt[i])*range[0] + xfinrt[i]*range[1];
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]);
+          EG_orderCandidates(cand, a, &tx, i+1, 0);
+          if (j == 1) {
             *param = tx;
             b      = a;
+          } else {
+            if (a < b) {
+              *param = tx;
+              b      = a;
+            }
           }
-        }
-      }
-    } else if (geom->mtype == LINE) {
-      for (i = 0; i < 5; i++) {
-        tx   = (1.0-ratios[i])*range[0] + ratios[i]*range[1];
-        stat = EG_evaluateGeom(geom, &tx, data);
-        if (stat != EGADS_SUCCESS) return stat;
-        a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-            (data[1]-xyz[1])*(data[1]-xyz[1]) +
-            (data[2]-xyz[2])*(data[2]-xyz[2]);
-        if (i == 0) {
-          *param = tx;
-          b      = a;
-        } else {
-          if (a < b) {
-            *param = tx;
-            b      = a;
-          }
+          j++;
         }
       }
     } else {
-      for (i = 0; i < 10; i++) {
-        tx   = (1.0-finrat[i])*range[0] + finrat[i]*range[1];
+      if (geom->mtype == BEZIER) {
+        urats = xfinrt;
+        ulen = 20;
+      } else if (geom->mtype == LINE) {
+        urats = ratios;
+        ulen = 1;
+      } else if ((geom->mtype == CIRCLE) || (geom->mtype == ELLIPSE)) {
+        urats = percrv;
+        ulen = 11;
+      } else {
+        urats = finrat;
+        ulen = 10;
+      }
+      for (i = 0; i < ulen; i++) {
+        tx   = (1.0-urats[i])*range[0] + urats[i]*range[1];
         stat = EG_evaluateGeom(geom, &tx, data);
         if (stat != EGADS_SUCCESS) return stat;
         a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
@@ -2199,24 +2514,76 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
         }
       }
     }
-    stat = EG_nearestOnCurve(geom, xyz, range, param, result);
+    tx   = *param;
+    stat = EG_evaluateGeom(geom, &tx, data);
     if (stat != EGADS_SUCCESS) return stat;
-    /* this probably does nothing due to the range limitting */
+    result[0] = data[0];
+    result[1] = data[1];
+    result[2] = data[2];
+    a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+        (data[1]-xyz[1])*(data[1]-xyz[1]) +
+        (data[2]-xyz[2])*(data[2]-xyz[2]);
+    if (geom->mtype == BSPLINE) {
+      for (i = 0; i < 2; i++) {
+        if (cand[i].uk == 0) continue;
+        tt   = cand[i].uv[0];
+        stat = EG_nearestOnCurve(geom, xyz, range, &tt, coord);
+        if (stat != EGADS_SUCCESS) return stat;
+        b = (coord[0]-xyz[0])*(coord[0]-xyz[0]) +
+            (coord[1]-xyz[1])*(coord[1]-xyz[1]) +
+            (coord[2]-xyz[2])*(coord[2]-xyz[2]);
+        if (b < a) {
+          a         = b;
+          tx        = *param;
+          data[0]   = result[0];
+          data[1]   = result[1];
+          data[2]   = result[2];
+          *param    = tt;
+          result[0] = coord[0];
+          result[1] = coord[1];
+          result[2] = coord[2];
+        }
+      }
+      EG_nearestOnCurveLM(geom, xyz, range, param, result);
+    } else {
+      stat = EG_nearestOnCurve(geom, xyz, range, param, result);
+      if (stat != EGADS_SUCCESS) return stat;
+    }
+    b = (result[0]-xyz[0])*(result[0]-xyz[0]) +
+        (result[1]-xyz[1])*(result[1]-xyz[1]) +
+        (result[2]-xyz[2])*(result[2]-xyz[2]);
+    if (b > a) {
+      printf(" EGADS Info: %d NearestOnC diverge %le vs %le\n",
+             geom->mtype, sqrt(a), sqrt(b));
+      *param    = tx;
+      result[0] = data[0];
+      result[1] = data[1];
+      result[2] = data[2];
+    }
+    /* this probably does nothing due to the range limiting */
     if ((per&1) != 0) {
       period = srange[1] - srange[0];
-      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1])) {
+      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1]))
         if (*param+PARAMACC < srange[0]) {
           if (*param+period-PARAMACC < srange[1]) *param += period;
         } else {
           if (*param-period+PARAMACC > srange[0]) *param -= period;
         }
-      }
     }
 
   } else {
 
     tol = toler;
     if (tol == 0.0) tol = 1.e-8;
+
+    while (geom->mtype == TRIMMED) {
+#ifdef LITE
+      lgeom = (liteGeometry *) geom->blind;
+#else
+      egadsSurface *lgeom = (egadsSurface *) geom->blind;
+#endif
+      geom = lgeom->ref;
+    }
 
     /* do different things based on surface type */
     b = 1.e308;
@@ -2231,28 +2598,70 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
       cand[0].vk    = cand[1].vk    = cand[2].vk    = cand[3].vk    = 0;
       cand[0].uv[0] = cand[1].uv[0] = cand[2].uv[0] = cand[3].uv[0] = 0;
       cand[0].uv[1] = cand[1].uv[1] = cand[2].uv[1] = cand[3].uv[1] = 0;
-      cnt = 0;
-      for (j = lgeom->header[4]+1;
-           j < lgeom->header[6]-lgeom->header[4]; j++) {
-        if (lgeom->data[j+lgeom->header[3]  ] ==
-            lgeom->data[j+lgeom->header[3]-1]) continue;
-        uvs[1] = 0.5*(lgeom->data[j+lgeom->header[3]  ] +
-                      lgeom->data[j+lgeom->header[3]-1]);
-        if (uvs[1] < range[2]) continue;
-        if (uvs[1] > range[3]) break;
-        for (i = lgeom->header[1]+1;
-             i < lgeom->header[3]-lgeom->header[1]; i++) {
-          if (lgeom->data[i] == lgeom->data[i-1]) continue;
-          uvs[0] = 0.5*(lgeom->data[i] + lgeom->data[i-1]);
-          if (uvs[0] < range[0]) continue;
-          if (uvs[0] > range[1]) break;
-          stat   = EG_evaluateGeom(geom, uvs, data);
-          if (stat != EGADS_SUCCESS) continue;
-          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-              (data[1]-xyz[1])*(data[1]-xyz[1]) +
-              (data[2]-xyz[2])*(data[2]-xyz[2]);
-          EG_orderCandidates(cand, a, uvs, i, j);
-          cnt++;
+      cnt  = 0;
+      iDiv = lgeom->header[3]-2*lgeom->header[1];
+      jDiv = lgeom->header[6]-2*lgeom->header[4];
+      if ((iDiv > 2) && (jDiv > 2)) {
+        for (j = lgeom->header[4]+1;
+             j < lgeom->header[6]-lgeom->header[4]; j++) {
+          if (lgeom->data[j+lgeom->header[3]  ] ==
+              lgeom->data[j+lgeom->header[3]-1]) continue;
+          uvs[1] = 0.5*(lgeom->data[j+lgeom->header[3]  ] +
+                        lgeom->data[j+lgeom->header[3]-1]);
+          if (uvs[1] < range[2]) continue;
+          if (uvs[1] > range[3]) break;
+          for (i = lgeom->header[1]+1;
+               i < lgeom->header[3]-lgeom->header[1]; i++) {
+            if (lgeom->data[i] == lgeom->data[i-1]) continue;
+            uvs[0] = 0.5*(lgeom->data[i] + lgeom->data[i-1]);
+            if (uvs[0] < range[0]) continue;
+            if (uvs[0] > range[1]) break;
+            stat   = EG_evaluateGeom(geom, uvs, data);
+            if (stat != EGADS_SUCCESS) continue;
+            a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+                (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                (data[2]-xyz[2])*(data[2]-xyz[2]);
+            EG_orderCandidates(cand, a, uvs, i, j);
+            cnt++;
+          }
+        }
+      } else if ((iDiv > 2) && (jDiv <= 2)) {
+        for (j = 1; j < 4; j++) {
+          uvs[1] = range[2] + j*(range[3]-range[2])/4.0;
+          for (i = lgeom->header[1]+1;
+               i < lgeom->header[3]-lgeom->header[1]; i++) {
+            if (lgeom->data[i] == lgeom->data[i-1]) continue;
+            uvs[0] = 0.5*(lgeom->data[i] + lgeom->data[i-1]);
+            if (uvs[0] < range[0]) continue;
+            if (uvs[0] > range[1]) break;
+            stat   = EG_evaluateGeom(geom, uvs, data);
+            if (stat != EGADS_SUCCESS) continue;
+            a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+                (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                (data[2]-xyz[2])*(data[2]-xyz[2]);
+            EG_orderCandidates(cand, a, uvs, i, j);
+            cnt++;
+          }
+        }
+      } else if ((iDiv <= 2) && (jDiv > 2)) {
+        for (j = lgeom->header[4]+1;
+             j < lgeom->header[6]-lgeom->header[4]; j++) {
+          if (lgeom->data[j+lgeom->header[3]  ] ==
+              lgeom->data[j+lgeom->header[3]-1]) continue;
+          uvs[1] = 0.5*(lgeom->data[j+lgeom->header[3]  ] +
+                        lgeom->data[j+lgeom->header[3]-1]);
+          if (uvs[1] < range[2]) continue;
+          if (uvs[1] > range[3]) break;
+          for (i = 1; i < 4; i++) {
+            uvs[0] = range[0] + i*(range[1]-range[0])/4.0;
+            stat   = EG_evaluateGeom(geom, uvs, data);
+            if (stat != EGADS_SUCCESS) continue;
+            a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+                (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                (data[2]-xyz[2])*(data[2]-xyz[2]);
+            EG_orderCandidates(cand, a, uvs, i, j);
+            cnt++;
+          }
         }
       }
       /* was the sampling enough? */
@@ -2302,6 +2711,8 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
         for (k = 0; k < 4; k++) {
           i = cand[k].uk;
           j = cand[k].vk;
+          if (iDiv <= 2) i = lgeom->header[1]+1;
+          if (jDiv <= 2) j = lgeom->header[4]+1;
           if ((i == 0) || (j == 0)) continue;
           for (jjj = 1; jjj <= lgeom->header[4]; jjj++) {
             uvs[1] =      lgeom->data[j+lgeom->header[3]-1] +
@@ -2313,8 +2724,8 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
               stat   = EG_evaluateGeom(geom, uvs, data);
               if (stat != EGADS_SUCCESS) continue;
               a = tx = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-              (data[1]-xyz[1])*(data[1]-xyz[1]) +
-              (data[2]-xyz[2])*(data[2]-xyz[2]);
+                       (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                       (data[2]-xyz[2])*(data[2]-xyz[2]);
               uvx[0] = uvs[0];
               uvx[1] = uvs[1];
               stat   = EG_nearestOnSurface(geom, xyz, uvx, pt);
@@ -2352,99 +2763,130 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
       }
       /* sometimes the second derivative puts us in bad places! */
       EG_nearestOnSurfaceLM(geom, xyz, param, result);
-    } else if ((geom->mtype == SPHERICAL) || (geom->mtype == CONICAL) ||
-               (geom->mtype == TRIMMED)) {
-      for (j = 0; j < 10; j++) {
-        uvs[1] = (1.0-finrat[j])*range[2] + finrat[j]*range[3];
-        for (i = 0; i < 10; i++) {
-          uvs[0] = (1.0-finrat[i])*range[0] + finrat[i]*range[1];
-          stat   = EG_evaluateGeom(geom, uvs, data);
-          if (stat != EGADS_SUCCESS) continue;
-          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-              (data[1]-xyz[1])*(data[1]-xyz[1]) +
-              (data[2]-xyz[2])*(data[2]-xyz[2]);
-          if (a < b) {
-            b        = a;
-            param[0] = uvs[0];
-            param[1] = uvs[1];
+    } else if (geom->mtype == EXTRUSION) {
+#ifdef LITE
+      lgeom = (liteGeometry *) geom->blind;
+#else
+      egadsSurface *lgeom = (egadsSurface *) geom->blind;
+#endif
+      if (lgeom->ref->mtype == BSPLINE) {
+#ifdef LITE
+        lref = (liteGeometry *) lgeom->ref->blind;
+#else
+        egadsCurve *lref = (egadsCurve *) lgeom->ref->blind;
+#endif
+        ii  = lref->header[1];
+        ii *= lref->header[3] - 2*lref->header[1];
+        if (ii < 6) ii = 6;
+        for (j = 0; j < 10; j++) {
+          uvs[1] = (1.0-finrat[j])*range[2] + finrat[j]*range[3];
+          for (i = 0; i < ii; i++) {
+            uvs[0] = range[0] + i*(range[1]-range[0])/(ii-1);
+            stat   = EG_evaluateGeom(geom, uvs, data);
+            if (stat != EGADS_SUCCESS) continue;
+            a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+                (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                (data[2]-xyz[2])*(data[2]-xyz[2]);
+            if (a < b) {
+              b        = a;
+              param[0] = uvs[0];
+              param[1] = uvs[1];
+            }
           }
         }
-      }
-      uvs[0] = param[0];
-      uvs[1] = param[1];
-      stat   = EG_nearestOnSurface(geom, xyz, param, result);
-      a      = (result[0]-xyz[0])*(result[0]-xyz[0]) +
-               (result[1]-xyz[1])*(result[1]-xyz[1]) +
-               (result[2]-xyz[2])*(result[2]-xyz[2]);
-      if (b < a) {
-        printf(" Info: NR Extrusion fails -- Old point closer    stat = %d\n",
-               stat);
-        param[0] = uvs[0];
-        param[1] = uvs[1];
-      }
-    } else if ((geom->mtype == TOROIDAL) || (geom->mtype == EXTRUSION) ||
-               (geom->mtype == BEZIER)) {
-      for (j = 0; j < 20; j++) {
-        uvs[1] = (1.0-xfinrt[j])*range[2] + xfinrt[j]*range[3];
-        for (i = 0; i < 20; i++) {
-          uvs[0] = (1.0-xfinrt[i])*range[0] + xfinrt[i]*range[1];
-          stat   = EG_evaluateGeom(geom, uvs, data);
-          if (stat != EGADS_SUCCESS) continue;
-          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-              (data[1]-xyz[1])*(data[1]-xyz[1]) +
-              (data[2]-xyz[2])*(data[2]-xyz[2]);
-          if (a < b) {
-            b        = a;
-            param[0] = uvs[0];
-            param[1] = uvs[1];
+        uvs[0] = param[0];
+        uvs[1] = param[1];
+        stat   = EG_nearestOnSurface(geom, xyz, param, result);
+        a      = (result[0]-xyz[0])*(result[0]-xyz[0]) +
+                 (result[1]-xyz[1])*(result[1]-xyz[1]) +
+                 (result[2]-xyz[2])*(result[2]-xyz[2]);
+        if ((b < a) || (stat != EGADS_SUCCESS)) {
+/*        printf(" Info: NEAREST Fails -- Seed point closer    stat = %d\n",
+                 stat);  */
+          EG_evaluateGeom(geom, uvs, data);
+          param[0]  = uvs[0];
+          param[1]  = uvs[1];
+          result[0] = data[0];
+          result[1] = data[1];
+          result[2] = data[2];
+        }
+        /* sometimes the second derivative puts us in bad places! */
+        EG_nearestOnSurfaceLM(geom, xyz, param, result);
+      } else {
+        for (j = 0; j < 20; j++) {
+          uvs[1] = (1.0-xfinrt[j])*range[2] + xfinrt[j]*range[3];
+          for (i = 0; i < 20; i++) {
+            uvs[0] = (1.0-xfinrt[i])*range[0] + xfinrt[i]*range[1];
+            stat   = EG_evaluateGeom(geom, uvs, data);
+            if (stat != EGADS_SUCCESS) continue;
+            a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+                (data[1]-xyz[1])*(data[1]-xyz[1]) +
+                (data[2]-xyz[2])*(data[2]-xyz[2]);
+            if (a < b) {
+              b        = a;
+              param[0] = uvs[0];
+              param[1] = uvs[1];
+            }
           }
         }
-      }
-      uvs[0] = param[0];
-      uvs[1] = param[1];
-      stat   = EG_nearestOnSurface(geom, xyz, param, result);
-      a      = (result[0]-xyz[0])*(result[0]-xyz[0]) +
-               (result[1]-xyz[1])*(result[1]-xyz[1]) +
-               (result[2]-xyz[2])*(result[2]-xyz[2]);
-      if (b < a) {
-        printf(" Info: NR Extrusion fails -- Old point closer    stat = %d\n",
-               stat);
-        param[0] = uvs[0];
-        param[1] = uvs[1];
-      }
-    } else if (geom->mtype == REVOLUTION) {
-      for (j = 0; j < 20; j++) {
-        uvs[1] = (1.0-xfinrt[j])*range[2] + xfinrt[j]*range[3];
-        for (i = 0; i < 10; i++) {
-          uvs[0] = (1.0-finrat[i])*range[0] + finrat[i]*range[1];
-          stat   = EG_evaluateGeom(geom, uvs, data);
-          if (stat != EGADS_SUCCESS) continue;
-          a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
-              (data[1]-xyz[1])*(data[1]-xyz[1]) +
-              (data[2]-xyz[2])*(data[2]-xyz[2]);
-          if (a < b) {
-            b        = a;
-            param[0] = uvs[0];
-            param[1] = uvs[1];
-          }
+        uvs[0] = param[0];
+        uvs[1] = param[1];
+        stat   = EG_nearestOnSurface(geom, xyz, param, result);
+        a      = (result[0]-xyz[0])*(result[0]-xyz[0]) +
+                 (result[1]-xyz[1])*(result[1]-xyz[1]) +
+                 (result[2]-xyz[2])*(result[2]-xyz[2]);
+        if (b < a) {
+          printf(" EGADS Info: NearestOn EXTRUSION fails -- Seed closer stat = %d\n",
+                 stat);
+          EG_evaluateGeom(geom, uvs, data);
+          param[0]  = uvs[0];
+          param[1]  = uvs[1];
+          result[0] = data[0];
+          result[1] = data[1];
+          result[2] = data[2];
         }
-      }
-      uvs[0] = param[0];
-      uvs[1] = param[1];
-      stat   = EG_nearestOnSurface(geom, xyz, param, result);
-      a      = (result[0]-xyz[0])*(result[0]-xyz[0]) +
-               (result[1]-xyz[1])*(result[1]-xyz[1]) +
-               (result[2]-xyz[2])*(result[2]-xyz[2]);
-      if (b < a) {
-        printf(" Info: NR fails -- Old point closer    stat = %d\n", stat);
-        param[0] = uvs[0];
-        param[1] = uvs[1];
       }
     } else {
-      for (j = 0; j < 5; j++) {
-        uvs[1] = (1.0-ratios[j])*range[2] + ratios[j]*range[3];
-        for (i = 0; i < 5; i++) {
-          uvs[0] = (1.0-ratios[i])*range[0] + ratios[i]*range[1];
+
+      if ((geom->mtype == BEZIER) ||
+          (geom->mtype == OFFSET)) {
+        urats = xfinrt;
+        ulen = 20;
+        vrats = xfinrt;
+        vlen = 20;
+      } else if (geom->mtype == REVOLUTION) {
+        urats = percrv;
+        ulen = 11;
+        vrats = xfinrt;
+        vlen = 20;
+      } else if (geom->mtype == PLANE) {
+        urats = ratios;
+        ulen = 1;
+        vrats = ratios;
+        vlen = 1;
+      } else if ((geom->mtype == SPHERICAL) ||
+                 (geom->mtype == TOROIDAL)) {
+        urats = percrv;
+        ulen = 11;
+        vrats = percrv;
+        vlen = 11;
+      } else if ((geom->mtype == CYLINDRICAL) ||
+                 (geom->mtype == CONICAL)) {
+        urats = percrv;
+        ulen = 11;
+        vrats = finrat;
+        vlen = 10;
+      } else {
+        urats = finrat;
+        ulen = 10;
+        vrats = finrat;
+        vlen = 10;
+      }
+
+      for (j = 0; j < vlen; j++) {
+        uvs[1] = (1.0-vrats[j])*range[2] + vrats[j]*range[3];
+        for (i = 0; i < ulen; i++) {
+          uvs[0] = (1.0-urats[i])*range[0] + urats[i]*range[1];
           stat   = EG_evaluateGeom(geom, uvs, data);
           if (stat != EGADS_SUCCESS) continue;
           a = (data[0]-xyz[0])*(data[0]-xyz[0]) +
@@ -2464,35 +2906,38 @@ EG_invEvaGeomLimits(const egObject *geom, /*@null@*/ const double *limits,
                (result[1]-xyz[1])*(result[1]-xyz[1]) +
                (result[2]-xyz[2])*(result[2]-xyz[2]);
       if (b < a) {
-        printf(" Info: NR fails -- Old point closer    stat = %d\n", stat);
-        param[0] = uvs[0];
-        param[1] = uvs[1];
+        printf(" EGADS Info: NearestOn %d %dx%d fails -- Seed closer stat = %d\n",
+               geom->mtype, ulen, vlen, stat);
+        EG_evaluateGeom(geom, uvs, data);
+        param[0]  = uvs[0];
+        param[1]  = uvs[1];
+        result[0] = data[0];
+        result[1] = data[1];
+        result[2] = data[2];
       }
     }
 
     if ((per&1) != 0) {
       period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1])) {
+      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
         if (param[0]+PARAMACC < srange[0]) {
           if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
         } else {
           if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
         }
-      }
     }
     if ((per&2) != 0) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3])) {
+      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
         if (param[1]+PARAMACC < srange[2]) {
           if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
         } else {
           if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
         }
-      }
     }
-
+    
   }
-
+  
   return EGADS_SUCCESS;
 }
 
@@ -2503,21 +2948,21 @@ EG_invEvaluateGeomGuess(const egObject *geom, /*@null@*/ const double *limits,
 {
   int    stat, per;
   double range[2];
-
+  
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if ((geom->oclass != PCURVE) && (geom->oclass != CURVE)  &&
       (geom->oclass != SURFACE))   return EGADS_NOTGEOM;
   if  (geom->blind == NULL)        return EGADS_NODATA;
-
+  
   if (geom->oclass == PCURVE) {
 
     stat = EG_getRange(geom, range, &per);
     if (stat != EGADS_SUCCESS) return stat;
     stat = EG_nearestOnPCurve(geom, xyz, range, param, result);
-
+    
   } else if (geom->oclass == CURVE) {
-
+    
     if (limits == NULL) {
       stat = EG_getRange(geom, range, &per);
       if (stat != EGADS_SUCCESS) return stat;
@@ -2526,13 +2971,13 @@ EG_invEvaluateGeomGuess(const egObject *geom, /*@null@*/ const double *limits,
       range[1] = limits[1];
     }
     stat = EG_nearestOnCurve(geom, xyz, range, param, result);
-
+    
   } else {
-
+    
     /* Surfaces */
     stat = EG_nearestOnSurface(geom, xyz, param, result);
     if ((stat == EGADS_EMPTY) || (stat == EGADS_DEGEN)) stat = EGADS_SUCCESS;
-
+    
   }
 
   return stat;
@@ -2545,14 +2990,14 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
 {
   int      i, j, stat;
   double   a, b, tx, param[2], pt[3], xyz[3], tang[3], edata[9], data[18];
-  double   uvtol, nrm[3], norm[3], tng[3];
+  double   tol, uvtol, ttol, nrm[3], norm[3], tng[3];
   egObject *loop, *edge, *surface, *node;
 #ifdef LITE
   liteEdge *pedge;
   liteLoop *ploop;
   liteFace *pface;
 #endif
-
+  
   if (face == NULL)               return EGADS_NULLOBJ;
   if (face->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (face->oclass != FACE)       return EGADS_NOTTOPO;
@@ -2575,7 +3020,7 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
     if (uv[1]+uvtol < pface->vrange[0]) return EGADS_OUTSIDE;
     if (uv[1]-uvtol > pface->vrange[1]) return EGADS_OUTSIDE;
   }
-
+  
   /* get closest edge point to our UV and store away the tangent */
   node     = NULL;
   b        = 1.e308;
@@ -2599,8 +3044,10 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
       if (edge->mtype == DEGENERATE) continue;
 #ifdef LITE
       pedge = (liteEdge *) edge->blind;
+      tol   = pedge->tol;
 #else
       egadsEdge *pedge = (egadsEdge *) edge->blind;
+      tol              = BRep_Tool::Tolerance(pedge->edge);
 #endif
       stat = EG_invEvaluate(edge, data, &tx, xyz);
       if (stat != EGADS_SUCCESS) return stat;
@@ -2615,18 +3062,31 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
         pt[2] = xyz[2];
         stat  = EG_getEdgeUV(face, edge, ploop->senses[j], tx, param);
         if (stat != EGADS_SUCCESS) return stat;
-        stat  = EG_evaluate(edge, &tx, edata);
+        if (b < tol*tol) {
+          if (p != NULL) {
+            p[0]   = pt[0];
+            p[1]   = pt[1];
+            p[2]   = pt[2];
+          }
+          if (uvx != NULL) {
+            uvx[0] = param[0];
+            uvx[1] = param[1];
+          }
+          return EGADS_SUCCESS;
+        }
+        stat = EG_evaluate(edge, &tx, edata);
         if (stat != EGADS_SUCCESS) return stat;
         tang[0] = ploop->senses[j]*edata[3];
         tang[1] = ploop->senses[j]*edata[4];
         tang[2] = ploop->senses[j]*edata[5];
-        if (tx == pedge->trange[0]) node = pedge->nodes[0];
-        if (tx == pedge->trange[1]) node = pedge->nodes[1];
+        ttol    = (pedge->trange[1] - pedge->trange[0])*1.e-9;
+        if (tx <= pedge->trange[0]+ttol) node = pedge->nodes[0];
+        if (tx >= pedge->trange[1]-ttol) node = pedge->nodes[1];
       }
     }
   }
   if (b > 1.e307) return EGADS_NOTFOUND;
-
+  
   /* correct tangent (average of both endpoints) for hitting a Node */
   if (node != NULL) {
     tang[0] = tang[1] = tang[2] = 0.0;
@@ -2677,7 +3137,7 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
       }
     }
   }
-
+  
   /* got nearest point to an edge -- look at what side we are on */
   if (p != NULL) {
     p[0]   = pt[0];
@@ -2697,7 +3157,7 @@ EG_inFace3D(const egObject *face, const double *uv, /*@null@*/ double *p,
 #else
   if (a < BRep_Tool::Tolerance(pface->face)) return EGADS_SUCCESS;
 #endif
-
+  
   pt[0]   /= a;
   pt[1]   /= a;
   pt[2]   /= a;
@@ -2736,7 +3196,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
            /*@null@*/ double *uvx)
 {
   int      i, j, stat, sense, sper;
-  double   dist, d, dd, t, ts, utol, vtol, period;
+  double   dist, d, dd, t, ts, utol, vtol, ttol, etol, period;
   double   uv[2], srange[4], uvs[2], xyz[3], data[18], eval[9];
   egObject *loop, *edge, *surface, *pcurve, *pcurv, *node;
 #ifdef LITE
@@ -2745,7 +3205,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
   liteLoop *ploop;
   liteFace *pface;
 #endif
-
+  
   if (face == NULL)               return EGADS_NULLOBJ;
   if (face->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (face->oclass != FACE)       return EGADS_NOTTOPO;
@@ -2758,7 +3218,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
   surface = pface->surface;
   if (surface == NULL)            return EGADS_NULLOBJ;
   if (surface->mtype == PLANE)    return EG_inFace3D(face, uva, pt, uvx);
-
+  
   /* only works when there are PCurves */
   utol  = (pface->urange[1] - pface->urange[0])*1.e-9;
   vtol  = (pface->vrange[1] - pface->vrange[0])*1.e-9;
@@ -2772,23 +3232,21 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
   /* is uv in range? */
   if ((sper&1) != 0) {
     period = srange[1] - srange[0];
-    if ((uv[0]+utol < pface->urange[0]) || (uv[0]-utol > pface->urange[1])) {
+    if ((uv[0]+utol < pface->urange[0]) || (uv[0]-utol > pface->urange[1]))
       if (uv[0]+utol < pface->urange[0]) {
         while (uv[0]+period-utol < pface->urange[1]) uv[0] += period;
       } else {
         while (uv[0]-period+utol > pface->urange[0]) uv[0] -= period;
       }
-    }
   }
   if ((sper&2) != 0) {
     period = srange[3] - srange[2];
-    if ((uv[1]+vtol < pface->vrange[0]) || (uv[1]-vtol > pface->vrange[1])) {
+    if ((uv[1]+vtol < pface->vrange[0]) || (uv[1]-vtol > pface->vrange[1]))
       if (uv[1]+vtol < pface->vrange[0]) {
         while (uv[1]+period-vtol < pface->vrange[1]) uv[1] += period;
       } else {
         while (uv[1]-period+vtol > pface->vrange[0]) uv[1] -= period;
       }
-    }
   }
   if (pt == NULL) {
     if (uv[0]+utol < pface->urange[0]) return EGADS_OUTSIDE;
@@ -2804,7 +3262,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
   xyz[0] = data[0];
   xyz[1] = data[1];
   xyz[2] = data[2];
-
+  
   /* get closest edge point to our UV and store away the pcurve/t */
   dist  = 1.e300;
   pcurv = node = NULL;
@@ -2823,10 +3281,13 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
       edge = ploop->edges[j];
       if (edge == NULL) continue;
       if (edge->blind == NULL) continue;
+      if (edge->mtype == DEGENERATE) continue;
 #ifdef LITE
-      pedge  = (liteEdge *) edge->blind;
+      pedge = (liteEdge *) edge->blind;
+      etol  = pedge->tol;
 #else
       egadsEdge *pedge = (egadsEdge *) edge->blind;
+      etol             = BRep_Tool::Tolerance(pedge->edge);
 #endif
       pcurve = ploop->edges[j+ploop->nedges];
       if (pcurve == NULL) continue;
@@ -2836,25 +3297,45 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
         return stat;
       }
       /* are we as close as the relative UV tolerance? */
-      if ((fabs(uv[0]-uvs[0]) < utol) && (fabs(uv[1]-uvs[1]) < vtol))
+      if ((fabs(uv[0]-uvs[0]) < utol) && (fabs(uv[1]-uvs[1]) < vtol)) {
+        if (pt != NULL) {
+          stat = EG_evaluate(edge, &ts, eval);
+          if (stat != EGADS_SUCCESS) {
+            printf(" EG_evaluate e = %d in EG_inFace!\n", stat);
+            return stat;
+          }
+          pt[0]  = eval[0];
+          pt[1]  = eval[1];
+          pt[2]  = eval[2];
+        }
+        if (uvx != NULL) {
+          uvx[0] = uvs[0];
+          uvx[1] = uvs[1];
+        }
         return EGADS_SUCCESS;
+      }
       d = (uv[0]-uvs[0])*(uv[0]-uvs[0]) + (uv[1]-uvs[1])*(uv[1]-uvs[1]);
       if (d >= dist) continue;
       /* are we within the Edge tolerance? */
-      if (edge->mtype != DEGENERATE) {
-        stat = EG_evaluate(edge, &ts, eval);
-        if (stat != EGADS_SUCCESS) {
-          printf(" EG_evaluate E = %d in EG_inFace!\n", stat);
-          return stat;
+      stat = EG_evaluate(edge, &ts, eval);
+      if (stat != EGADS_SUCCESS) {
+        printf(" EG_evaluate E = %d in EG_inFace!\n", stat);
+        return stat;
+      }
+      dd = sqrt((xyz[0]-eval[0])*(xyz[0]-eval[0]) +
+                (xyz[1]-eval[1])*(xyz[1]-eval[1]) +
+                (xyz[2]-eval[2])*(xyz[2]-eval[2]));
+      if (dd <= etol) {
+        if (pt != NULL) {
+          pt[0]  = eval[0];
+          pt[1]  = eval[1];
+          pt[2]  = eval[2];
         }
-        dd = sqrt((xyz[0]-eval[0])*(xyz[0]-eval[0]) +
-                  (xyz[1]-eval[1])*(xyz[1]-eval[1]) +
-                  (xyz[2]-eval[2])*(xyz[2]-eval[2]));
-#ifdef LITE
-        if (dd <= pedge->tol) return EGADS_SUCCESS;
-#else
-        if (dd <= BRep_Tool::Tolerance(pedge->edge)) return EGADS_SUCCESS;
-#endif
+        if (uvx != NULL) {
+          uvx[0] = uvs[0];
+          uvx[1] = uvs[1];
+        }
+        return EGADS_SUCCESS;
       }
       if (d < dist) {
         dist  = d;
@@ -2863,10 +3344,11 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
         sense = ploop->senses[j];
         node  = NULL;
         /* hit Node (can't find internal Edge segment) */
-        if ((ts == pedge->trange[0]) || (ts == pedge->trange[1]))
+        ttol  = (pedge->trange[1] - pedge->trange[0])*1.e-9;
+        if ((ts <= pedge->trange[0]+ttol) || (ts >= pedge->trange[1]-ttol))
           if (pedge->nodes[0] != pedge->nodes[1]) {
-            if (ts == pedge->trange[0]) node = pedge->nodes[0];
-            if (ts == pedge->trange[1]) node = pedge->nodes[1];
+            if (ts <= pedge->trange[0]+ttol) node = pedge->nodes[0];
+            if (ts >= pedge->trange[1]-ttol) node = pedge->nodes[1];
           }
       }
     }
@@ -2879,7 +3361,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
   /* do we need to pivot around a Node (find min Edge dot)? */
   if (node != NULL) {
 #ifdef LITE
-    pnode = node->blind;
+    pnode = (liteNode *) node->blind;
 #else
     egadsNode *pnode = (egadsNode *) node->blind;
 #endif
@@ -2975,7 +3457,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
       }
     }
   }
-
+  
   /* what side of the Edge are we on? */
   stat = EG_evaluate(pcurv, &t, data);
   if (stat != EGADS_SUCCESS) {
@@ -3012,13 +3494,21 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
     for (i = 0; i < pface->nloops; i++) {
       loop  = pface->loops[i];
       if (loop == NULL) continue;
+#ifdef LITE
       ploop = (liteLoop *) loop->blind;
+#else
+      egadsLoop *ploop = (egadsLoop *) loop->blind;
+#endif
       if (ploop == NULL) continue;
       for (j = 0; j < ploop->nedges; j++) {
         edge = ploop->edges[j];
         if (edge == NULL) continue;
         if (edge->blind == NULL) continue;
+#ifdef LITE
         pedge  = (liteEdge *) edge->blind;
+#else
+        egadsEdge *pedge = (egadsEdge *) edge->blind;
+#endif
         pcurve = ploop->edges[j+ploop->nedges];
         if (pcurve != pcurv) continue;
         for (stat = 0; stat < 100; stat++) {
@@ -3036,7 +3526,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
     if (pt != NULL) {
       if (node != NULL) {
 #ifdef LITE
-        pnode = node->blind;
+        pnode = (liteNode *) node->blind;
 #else
         egadsNode *pnode = (egadsNode *) node->blind;
 #endif
@@ -3058,7 +3548,7 @@ EG_inFaceX(const egObject *face, const double *uva, /*@null@*/ double *pt,
     }
     return EGADS_OUTSIDE;
   }
-
+  
   return EGADS_SUCCESS;
 }
 
@@ -3068,7 +3558,7 @@ EG_getPerpDir(double *norm, egObject *edge, int sense, double t, double *dir)
 {
   int    stat;
   double dist, result[9], *dt;
-
+  
   dt   = &result[3];
   stat = EG_evaluate(edge, &t, result);
   if (stat != EGADS_SUCCESS) return stat;
@@ -3092,19 +3582,19 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   double   dist, ang, uv[2], lims[4], result[18], *du, *dv;
   double   norms[2][3], dir[2][3], n1[3], n2[3], x0[2], x1[2], p0[2], p1[2];
   egObject *body, *ref, *sur, **faces, **loops, **edges;
-
+  
   *angle = -90.0;
   if (edge == NULL)               return EGADS_NULLOBJ;
   if (edge->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (edge->oclass != EDGE)       return EGADS_NOTTOPO;
   if (edge->blind == NULL)        return EGADS_NODATA;
   if (edge->mtype == DEGENERATE)  return EGADS_DEGEN;
-
+  
   stat = EG_getBody(edge, &body);
   if (stat != EGADS_SUCCESS)      return stat;
   if (body == NULL)               return EGADS_NODATA;
   if (body->mtype != SOLIDBODY)   return EGADS_NOTBODY;
-
+  
   stat = EG_getBodyTopos(body, edge, FACE, &nface, &faces);
   if (stat != EGADS_SUCCESS) return stat;
   if (nface == 1) {
@@ -3115,7 +3605,7 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
     EG_free(faces);
     return EGADS_TOPOCNT;
   }
-
+  
   du = &result[3];
   dv = &result[6];
   for (i = 0; i < nface; i++) {
@@ -3168,7 +3658,7 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
     }
   }
   EG_free(faces);
-
+  
   /* project on to 2D by cross products of normals */
   CROSS(n2, norms[0], norms[1]);
   dist = sqrt(DOT(n2, n2));
@@ -3181,7 +3671,7 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   n2[1] /= dist;
   n2[2] /= dist;
   CROSS(n1, norms[0], n2);
-
+  
   x0[0] = DOT(norms[0], norms[0]);
   x0[1] = DOT(n1,       norms[0]);
   x1[0] = DOT(norms[0], norms[1]);
@@ -3190,12 +3680,17 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   p0[1] = DOT(n1,       dir[0]);
   p1[0] = DOT(norms[0], dir[1]);
   p1[1] = DOT(n1,       dir[1]);
-
+  
   /* are we convex? */
                                      cx = 0;
   if (x0[0]*p1[0]+x0[1]*p1[1] > 0.0) cx = 1;
   if (x1[0]*p0[0]+x1[1]*p0[1] > 0.0) cx = 1;
-  ang = acos(DOT(dir[0], dir[1]));
+  dist = DOT(dir[0], dir[1]);
+  if ((dist < -1.0) || (dist > 1.0))
+    printf(" EG_getWindingAngle: dot = %20.12lf\n", dist);
+  if (dist < -1.0) dist = -1.0;
+  if (dist >  1.0) dist =  1.0;
+  ang  = acos(dist);
   if (cx == 1) ang = 2.0*PI - ang;
 
   *angle = 180.0*ang/PI;

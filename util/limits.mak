@@ -1,5 +1,5 @@
 #
-!include ..\include\$(ESP_ARCH)
+!include ..\include\$(ESP_ARCH).$(MSVC)
 SDIR = $(MAKEDIR)
 IDIR = $(ESP_ROOT)\include
 LDIR = $(ESP_ROOT)\lib

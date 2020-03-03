@@ -3,12 +3,12 @@
  *
  *             Quad Tessellation Functions
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
  */
-
+ 
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
@@ -30,7 +30,7 @@
 
 typedef struct {
   int nodes[4];         /* quad indices into Node list */
-} Quad;
+} Quads;
 
 
 typedef struct {
@@ -47,7 +47,7 @@ typedef struct {
   int    nquad;
   int    ntris;
   Node   *verts;
-  Quad   *quads;
+  Quads  *quads;
   int    *tris;
   int    sizes[8];
   int    last[MAXSIDE];
@@ -65,7 +65,7 @@ typedef struct {
 
 /* Compute arclength basis functions for TFI use */
 
-static void
+static void 
 EG_arcBasis(qFill *q, int nx, int ny, int *sideptr[], double *abasis[2])
 {
   int    i, j, k, i0, im, j0, jm, nny = ny+1;
@@ -77,7 +77,7 @@ EG_arcBasis(qFill *q, int nx, int ny, int *sideptr[], double *abasis[2])
     for (i = 1; i <= nx; i++) {
       i0 = sideptr[k][i  ];
       im = sideptr[k][i-1];
-      abasis[0][nny*i+j] = abasis[0][nny*(i-1)+j] +
+      abasis[0][nny*i+j] = abasis[0][nny*(i-1)+j] + 
                                 sqrt((q->verts[i0].uv[0] - q->verts[im].uv[0]) *
                                      (q->verts[i0].uv[0] - q->verts[im].uv[0]) +
                                      (q->verts[i0].uv[1] - q->verts[im].uv[1]) *
@@ -101,7 +101,7 @@ EG_arcBasis(qFill *q, int nx, int ny, int *sideptr[], double *abasis[2])
     for (j = 1; j <= ny; j++) {
       j0 = sideptr[k][j  ];
       jm = sideptr[k][j-1];
-      abasis[1][nny*i+j] = abasis[1][nny*i+(j-1)] +
+      abasis[1][nny*i+j] = abasis[1][nny*i+(j-1)] + 
                                 sqrt((q->verts[j0].uv[0] - q->verts[jm].uv[0]) *
                                      (q->verts[j0].uv[0] - q->verts[jm].uv[0]) +
                                      (q->verts[j0].uv[1] - q->verts[jm].uv[1]) *
@@ -266,7 +266,7 @@ static int
 EG_getVertCnt(qFill *q, int len, int blocks[][6])
 {
   int k, cnt;
-
+  
   q->npatch = len;
   for (cnt = k = 0; k < len; k++) {
     q->patch[k][0] = q->sizes[blocks[k][0]] + 1;
@@ -280,14 +280,14 @@ EG_getVertCnt(qFill *q, int len, int blocks[][6])
 
 /* sets the individual quads by looping through the blocks */
 
-static void
+static void 
 EG_setQuads(qFill *q, int len, int blocks[][6], int *sideptr[])
 {
   int    i, j, k, i0, i1, i2, i3, ilast, nx, ny;
   int    ll, lr, ur, ul, j0, jm, ii, im, iv, sav;
   double et, xi;
   Node   *verts;
-  Quad   *quads;
+  Quads  *quads;
 
   verts = q->verts;
   quads = q->quads;
@@ -467,7 +467,7 @@ EG_smoothQuads(const egObject *face, qFill *q, int len, int npass)
       status = EG_evaluate(face, verts[j].uv, results);
       if (status != EGADS_SUCCESS) {
         if (q->outLevel > 0)
-          printf(" EGADS Info: EG_evaluate = %d (EG_smoothQuad)!\n",
+          printf(" EGADS Info: EG_evaluate = %d (EG_smoothQuad)!\n", 
                  status);
         return;
       }
@@ -665,7 +665,7 @@ EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
 
   cpts[6][0] = (cpts[1][0] + cpts[3][0] + cpts[5][0])/3.0;
   cpts[6][1] = (cpts[1][1] + cpts[3][1] + cpts[5][1])/3.0;
-
+  
   if (q->fillT == 0) {
     len       = EG_getVertCnt(q, 3, blocks);
     q->vpatch = (int *) EG_alloc(len*sizeof(int));
@@ -676,7 +676,7 @@ EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
 
   len      = MAX(elens[1], elens[2]);
   len      = MAX(elens[0], len);
-  q->quads = (Quad *) EG_alloc(len*len*sizeof(Quad));
+  q->quads = (Quads *) EG_alloc(len*len*sizeof(Quads));
   if (q->quads == NULL) {
     if (q->fillT == 0) EG_free(q->vpatch);
     return -1;
@@ -774,7 +774,7 @@ EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
     EG_free(q->verts);
     EG_free(q->quads);
     if (q->fillT == 0) EG_free(q->vpatch);
-    return -1;
+    return -1;    
   }
 
   /* calculate the actual coordinates */
@@ -789,7 +789,7 @@ EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
     uvb[2*j  ] = q->verts[j].uv[0];
     uvb[2*j+1] = q->verts[j].uv[1];
   }
-
+  
   if (q->fillT != 0) {
     q->ntris = 2*q->nquad;
     q->tris  = (int *) EG_alloc(3*q->ntris*sizeof(int));
@@ -890,14 +890,14 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
                                  {15,   14, 16, 21,  8, -1},
                                  {16,   15, 17, 22,  9, 25},
                                  {17,   16, 18, 12, -1, -1} };
-
+  
   /* get and check sizes */
 
   N =  elens[0];
   M =  elens[3];
   P =  elens[1] - M;
   Q = (elens[2] - N - P)/2;
-  if (Q*2 != elens[2]-N-P) {
+  if (Q*2 != elens[2]-N-P)
     if (q->fillT == 0) {
       if (q->outLevel > 0) {
         printf(" EGADS Info: General case off by 1 - %d %d  %d %d\n",
@@ -915,7 +915,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              N, M, P, Q);
 #endif
     }
-  }
+
   q->sizes[0] = q->sizes[1] = q->sizes[2] = N/3;
   if (q->sizes[0]+q->sizes[1]+q->sizes[2] != N) q->sizes[0]++;
   if (q->sizes[0]+q->sizes[1]+q->sizes[2] != N) q->sizes[2]++;
@@ -925,7 +925,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   q->sizes[6] = P;
   q->sizes[7] = Q;
   if ((extra == 0) && (q->sizes[1] == 1)) return -2;
-  for (i = 0; i < 8; i++)
+  for (i = 0; i < 8; i++) 
     if (q->sizes[i] > MAXSIDE-1) return -3;
 
   /* set the 26 critical points -- 16 exterior */
@@ -996,7 +996,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   cipt[ 1]    = indices[len];
 
   /* guess the interior */
-  for (j = 0; j < 10; j++)
+  for (j = 0; j < 10; j++) 
     cpts[interior[j][0]][0] = cpts[interior[j][0]][1] = 0.0;
   for (i = 0; i < 10; i++)
     for (j = 0; j < 10; j++) {
@@ -1016,11 +1016,11 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     q->vpatch = (int *) EG_alloc(len*sizeof(int));
     if (q->vpatch == NULL) return -1;
   }
-
+  
   /* allocate our temporary storage */
 
   len      = MAX(elens[1], elens[2]);
-  q->quads = (Quad *) EG_alloc(len*len*sizeof(Quad));
+  q->quads = (Quads *) EG_alloc(len*len*sizeof(Quads));
   if (q->quads == NULL) {
     if (q->fillT == 0) EG_free(q->vpatch);
     return -1;
@@ -1128,7 +1128,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     EG_free(q->verts);
     EG_free(q->quads);
     if (q->fillT == 0) EG_free(q->vpatch);
-    return -1;
+    return -1;    
   }
 
   /* calculate the actual coordinates */
@@ -1142,7 +1142,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     uvb[2*j  ] = q->verts[j].uv[0];
     uvb[2*j+1] = q->verts[j].uv[1];
   }
-
+  
   if (q->fillT != 0) {
     len = 6*q->nquad;
     if (extra != -1) len += 3;
@@ -1162,7 +1162,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
       q->tris[6*j+4] = q->quads[j].nodes[2];
       q->tris[6*j+5] = q->quads[j].nodes[3];
     }
-
+    
     len = 2*q->nquad;
     if (extra != -1) {
       k = -1;
@@ -1267,7 +1267,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   M =  elens[3];
   P =  elens[1] - M;
   Q = (elens[2] - N - P)/2;
-  if (Q*2 != elens[2]-N-P) {
+  if (Q*2 != elens[2]-N-P)
     if (q->fillT == 0) {
       if (q->outLevel > 0) {
         printf(" EGADS Info: Q Case off by 1 - %d %d  %d %d\n",
@@ -1285,7 +1285,6 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              N, M, P, Q);
 #endif
     }
-  }
   if (P != 0) return -2;
 
   q->sizes[0] = q->sizes[1] = q->sizes[2] = N/3;
@@ -1360,7 +1359,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   cipt[13]    = indices[len];
 
   /* guess the interior */
-  for (j = 0; j < 6; j++)
+  for (j = 0; j < 6; j++) 
     cpts[interior[j][0]][0] = cpts[interior[j][0]][1] = 0.0;
   for (i = 0; i < 10; i++)
     for (j = 0; j < 6; j++) {
@@ -1374,7 +1373,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
       cpts[interior[j][0]][0] = sums[0]/len;
       cpts[interior[j][0]][1] = sums[1]/len;
     }
-
+ 
   if (q->fillT == 0) {
     len       = EG_getVertCnt(q, 12, blocks);
     q->vpatch = (int *) EG_alloc(len*sizeof(int));
@@ -1384,7 +1383,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   /* allocate our temporary storage */
 
   len      = MAX(elens[1], elens[2]);
-  q->quads = (Quad *) EG_alloc(len*len*sizeof(Quad));
+  q->quads = (Quads *) EG_alloc(len*len*sizeof(Quads));
   if (q->quads == NULL) {
     if (q->fillT == 0) EG_free(q->vpatch);
     return -1;
@@ -1492,7 +1491,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     EG_free(q->verts);
     EG_free(q->quads);
     if (q->fillT == 0) EG_free(q->vpatch);
-    return -1;
+    return -1;    
   }
 
   /* calculate the actual coordinates */
@@ -1506,7 +1505,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     uvb[2*j  ] = q->verts[j].uv[0];
     uvb[2*j+1] = q->verts[j].uv[1];
   }
-
+  
   if (q->fillT != 0) {
     len = 6*q->nquad;
     if (extra != -1) len += 3;
@@ -1527,9 +1526,9 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
       q->tris[6*j+4] = q->quads[j].nodes[2];
       q->tris[6*j+5] = q->quads[j].nodes[3];
     }
-
+    
     /* fixup for an extra point */
-
+    
     len = 2*q->nquad;
     if (extra != -1) {
       k = -1;
@@ -1577,7 +1576,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   *npts = q->nvert;
   *uvs  = uvb;
   EG_free(q->verts);
-
+  
   return 0;
 }
 
@@ -1618,7 +1617,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
                                {1, 5,   30, 32, 26,  8},
                                {2, 5,   32,  6, 27,  7} };
 
-  /*                           center     stencil nodes     */
+  /*                           center     stencil nodes     */     
   static int interior[7][6] = { {14,    1, 13, 18, 16, 15},
                                 {15,    2,  4, 14, 17, -1},
                                 {16,   14, 17, 19, -1, -1},
@@ -1633,7 +1632,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   M =  elens[3];
   P =  elens[1] - M;
   Q = (elens[2] - N - P)/2;
-  if (Q*2 != elens[2]-N-P) {
+  if (Q*2 != elens[2]-N-P)
     if (q->fillT == 0) {
       if (q->outLevel > 0) {
         printf(" EGADS Info: P Case off by 1 - %d %d  %d %d\n",
@@ -1651,7 +1650,6 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              N, M, P, Q);
 #endif
     }
-  }
   if (Q != 0) return -2;
 
   q->sizes[0] = q->sizes[1] = q->sizes[2] = N/3;
@@ -1726,7 +1724,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   cipt[13]    = indices[len];
 
   /* guess the interior */
-  for (j = 0; j < 7; j++)
+  for (j = 0; j < 7; j++) 
     cpts[interior[j][0]][0] = cpts[interior[j][0]][1] = 0.0;
   for (i = 0; i < 10; i++)
     for (j = 0; j < 7; j++) {
@@ -1740,7 +1738,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
       cpts[interior[j][0]][0] = sums[0]/len;
       cpts[interior[j][0]][1] = sums[1]/len;
     }
-
+  
   if (q->fillT == 0) {
     len       = EG_getVertCnt(q, 13, blocks);
     q->vpatch = (int *) EG_alloc(len*sizeof(int));
@@ -1750,7 +1748,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
   /* allocate our temporary storage */
 
   len      = MAX(elens[1], elens[2]);
-  q->quads = (Quad *) EG_alloc(len*len*sizeof(Quad));
+  q->quads = (Quads *) EG_alloc(len*len*sizeof(Quads));
   if (q->quads == NULL) {
     if (q->fillT == 0) EG_free(q->vpatch);
     return -1;
@@ -1858,7 +1856,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     EG_free(q->verts);
     EG_free(q->quads);
     if (q->fillT == 0) EG_free(q->vpatch);
-    return -1;
+    return -1;    
   }
 
   /* calculate the actual coordinates */
@@ -1872,7 +1870,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
     uvb[2*j  ] = q->verts[j].uv[0];
     uvb[2*j+1] = q->verts[j].uv[1];
   }
-
+  
   if (q->fillT != 0) {
     len = 6*q->nquad;
     if (extra != -1) len += 3;
@@ -1892,9 +1890,9 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
       q->tris[6*j+4] = q->quads[j].nodes[2];
       q->tris[6*j+5] = q->quads[j].nodes[3];
     }
-
+    
     /* fixup for an extra point */
-
+    
     len = 2*q->nquad;
     if (extra != -1) {
       k = -1;
@@ -1999,7 +1997,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
   cipt[ 3] = len;
   q->sizes[0] = q->sizes[2] = nx;
   q->sizes[1] = q->sizes[3] = ny;
-
+  
   if (q->fillT == 0) {
     len       = (nx+1)*(ny+1);
     q->vpatch = (int *) EG_alloc(len*sizeof(int));
@@ -2012,7 +2010,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
   /* allocate our temporary storage */
 
   len      = nx*ny;
-  q->quads = (Quad *) EG_alloc(len*sizeof(Quad));
+  q->quads = (Quads *) EG_alloc(len*sizeof(Quads));
   if (q->quads == NULL) {
     if (q->fillT == 0) EG_free(q->vpatch);
     return -1;
@@ -2171,7 +2169,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
     EG_free(q->verts);
     EG_free(q->quads);
     if (q->fillT == 0) EG_free(q->vpatch);
-    return -1;
+    return -1;    
   }
 
   /* fill the memory to be returned */
@@ -2202,7 +2200,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
     *uvs  = NULL;
     return -6;
   }
-
+  
   if (q->fillT != 0) {
     len = 6*q->nquad;
     if (extra != -1) len += 3;
@@ -2222,9 +2220,9 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
       q->tris[6*j+4] = q->quads[j].nodes[2];
       q->tris[6*j+5] = q->quads[j].nodes[3];
     }
-
+    
     /* fixup for an extra point */
-
+    
     len = 2*q->nquad;
     if (extra != -1) {
       k = -1;
@@ -2296,7 +2294,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
  *                   should be free'd);  note -> the first set matches uv
  *        npat     - resultant number of quad patchs (max = 17)
  *        pat      - filled patch sizes (at least 2*17 in len)
- *        vpat     - pointer to patch indices of uvs that support the
+ *        vpat     - pointer to patch indices of uvs that support the 
  *                   quad patch(s) (returned, should be free'd)
  *
  * return codes:  0 - success
@@ -2309,7 +2307,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
  */
 
 int
-EG_quadFill(const egObject *face, double *parms, int *elens, double *uv,
+EG_quadFill(const egObject *face, double *parms, int *elens, double *uv, 
             int *npts, double **uvs, int *npat, int *pats, int **vpats)
 {
   int    i, j, k, m, N, M, P, Q, len, ret, lens[4], *indices;
@@ -2353,7 +2351,7 @@ EG_quadFill(const egObject *face, double *parms, int *elens, double *uv,
   sav[1] = elens[2];
   if (MAX(sav[0],sav[1])/MIN(sav[0],sav[1]) > sideRAT) {
     if (outLevel > 0)
-      printf(" EGADS Info: Edge ratio0 %lf exceeded: %g %g\n",
+      printf(" EGADS Info: Edge ratio0 %lf exceeded: %g %g\n", 
              sideRAT, sav[0], sav[1]);
     return -7;
   }
@@ -2432,7 +2430,7 @@ EG_quadFill(const egObject *face, double *parms, int *elens, double *uv,
       break;
     }
   }
-
+  
   /* fill up our 0 to 1 mapping in UV */
 
   for (i = 0; i < len; i++) indices[i] = i;
@@ -2593,7 +2591,7 @@ EG_quadFill(const egObject *face, double *parms, int *elens, double *uv,
     EG_free(uvx);
     EG_free(indices);
     if (outLevel > 0)
-      printf(" EGADS Info: Too small ->  %d %d (>3)   %d %d\n",
+      printf(" EGADS Info: Too small ->  %d %d (>3)   %d %d\n", 
              N, M, P, Q);
     return -2;
   }
@@ -2733,7 +2731,7 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
   double *uvx, *uv0, *uv1, *uv2, dist, sav[2], xylim[2][2], slim[4][2][2];
   double edgeTOL = 0.05, sideRAT = 3.0;
   qFill  q;
-
+  
   unmap    = *npts;
 
   *npts    = *ntris = 0;
@@ -2744,14 +2742,14 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
   q.fillT  = 1;
   q.ntris  = 0;
   q.quads  = NULL;
-
+  
   /* note: all zeros gives the default values */
   if ((parms[0] >= 0.001) && (parms[0] <= 0.5)) edgeTOL = parms[0];
   if ((parms[1] > 0.0) && (parms[1] <= 1000.0)) sideRAT = parms[1];
   if ((parms[2] > 0.5) && (parms[2] <= 100.0))  nsp     = parms[2]+0.1;
-
+  
   /* can we use a simple TFI scheme? */
-
+  
   ret = 9999;
   if ((elens[0] == elens[2]) && (elens[1] == elens[3])) {
     ret = EG_quadFillT(&q, elens, uv, npts, uvs);
@@ -2771,7 +2769,7 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
     *tris  = q.tris;
     return ret;
   }
-
+  
   sav[0] = elens[0];
   sav[1] = elens[2];
   if (MAX(sav[0],sav[1])/MIN(sav[0],sav[1]) > sideRAT) {
@@ -2788,9 +2786,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
              tID, sideRAT, sav[0], sav[1]);
     return -7;
   }
-
+  
   /* no -- use our 3 templates */
-
+  
   len     = elens[0] + elens[1] + elens[2] + elens[3] + 1;
   indices = (int *) EG_alloc(len*sizeof(int));
   if (indices == NULL) return -1;
@@ -2804,9 +2802,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
     uvx[2*j  ] = uv[2*i  ];
     uvx[2*j+1] = uv[2*i+1];
   }
-
+  
   /* determine if our quad sides align with U & V */
-
+  
   xylim[0][0] = xylim[1][0] = uv[0];
   xylim[0][1] = xylim[1][1] = uv[1];
   for (i = 1; i < len-1; i++) {
@@ -2855,9 +2853,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
       break;
     }
   }
-
+  
   /* fill up our 0 to 1 mapping in UV */
-
+  
   for (i = 0; i < len; i++) indices[i] = i;
   if ((unmap == 0) && (align == 0)) {
     for (j = i = 0; i < elens[0]; i++) {
@@ -2885,9 +2883,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
 #ifdef DEBUG
   printf("quad2tris unmap = %d,  align = %d!\n", unmap, align);
 #endif
-
+  
   /* rotate sides to get the biggest delta on side 2 */
-
+  
   lens[0] = elens[0];
   lens[1] = elens[1];
   lens[2] = elens[2];
@@ -2957,9 +2955,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
       lens[0] = elens[3];
     }
   }
-
+  
   /* make side 1 bigger than 3 */
-
+  
   if (lens[1] < lens[3]) {
 #ifdef DEBUG
     printf("  Side 1 <-> Side 3!\n");
@@ -2999,9 +2997,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
     lens[1] = i;
     q.flip  = -1.0;
   }
-
+  
   /* get the template & go */
-
+  
   len =  lens[0]+lens[1]+lens[2]+lens[3];
   N   =  lens[0];
   M   =  lens[3];
@@ -3020,7 +3018,7 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
              tID, N, M, P, Q);
     return -2;
   }
-
+  
   if (P == 0) {
     ret = EG_quadFillQ(face, &q, nsp, indices, lens, uvx, npts, uvs);
   } else if (Q == 0) {
@@ -3047,9 +3045,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
     if (q.tris != NULL) EG_free(q.tris);
     return -99;
   }
-
+  
   /* remap back to our UV */
-
+  
   if ((unmap == 0) && (align == 0)) {
     ret = EG_dQuadTFI(elens, uv, *npts, *uvs);
     if (ret != 0) {
@@ -3060,9 +3058,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
       return ret;
     }
   }
-
+  
   /* fix orientation if flipped direction */
-
+  
   indices = q.tris;
   uvx     = *uvs;
   if (q.flip < 0.0)
@@ -3071,9 +3069,9 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
       indices[3*i+2] = indices[3*i+1];
       indices[3*i+1] = len;
     }
-
+  
   /* make sure we are OK */
-
+  
   for (k = i = 0; i < q.ntris; i++) {
     uv0 = &uvx[2*indices[3*i  ]];
     uv1 = &uvx[2*indices[3*i+1]];
@@ -3092,7 +3090,7 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
     *uvs  = NULL;
     return -6;
   }
-
+      
   *ntris = q.ntris;
   *tris  = q.tris;
   return ret;
@@ -3106,18 +3104,18 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
   int    i, j, k, len, ret, lens[4], degen, collap[2], *indices;
   double *uvx, *uv0, *uv1, *uv2, xylim[2][2], slim[3][2][2];
   double edgeTOL = 0.05;
-
+  
   *ntris = 0;
   *uvs   = NULL;
   *tris  = NULL;
   if (elens[0] < 3) return -2;
   if (elens[1] < 3) return -2;
   if (elens[2] < 3) return -2;
-
+  
   if ((parms[0] >= 0.001) && (parms[0] <= 0.5)) edgeTOL = parms[0];
-
+  
   /* check side limits that have 2 min/maxs touching */
-
+  
   if ((elens[0] < 2) || (elens[1] < 2) || (elens[2] < 2)) return -2;
   len = elens[0] + elens[1] + elens[2];
   xylim[0][0] = xylim[1][0] = uv[0];
@@ -3152,20 +3150,18 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
   }
   for (i = 0; i < 3; i++) {
     lens[i] = 0;
-    if ((slim[i][1][0]-slim[i][0][0])/(xylim[1][0]-xylim[0][0]) < edgeTOL) {
+    if ((slim[i][1][0]-slim[i][0][0])/(xylim[1][0]-xylim[0][0]) < edgeTOL)
       if ((slim[i][1][0]-xylim[0][0])/(xylim[1][0]-xylim[0][0]) < 0.5) {
         lens[i] |= 1;
       } else {
         lens[i] |= 2;
       }
-    }
-    if ((slim[i][1][1]-slim[i][0][1])/(xylim[1][1]-xylim[0][1]) < edgeTOL) {
+    if ((slim[i][1][1]-slim[i][0][1])/(xylim[1][1]-xylim[0][1]) < edgeTOL)
       if ((slim[i][1][1]-xylim[0][1])/(xylim[1][1]-xylim[0][1]) < 0.5) {
         lens[i] |= 4;
       } else {
         lens[i] |= 8;
       }
-    }
   }
   for (i = 0; i < 3; i++)
     if ((lens[i] != 0) && (lens[i] != 1) && (lens[i] != 2) &&
@@ -3177,7 +3173,7 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
   printf(" side markers: %d %d    %d %d    %d %d\n", elens[0], lens[0],
          elens[1], lens[1], elens[2], lens[2]);
 #endif
-
+  
   /* do we need to test the end points? */
   degen = j = -1;
   if (((lens[0]==1) && (lens[1]==2)) || ((lens[0]==2) && (lens[1]==1)) ||
@@ -3199,13 +3195,13 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
     if ((lens[1]==4) || (lens[2]==4)) j = 1;
   }
   if (degen == -1) return -5;
-
+  
   /* expand the degenerate point */
-
+  
   len += elens[ret];
   uvx = (double *) EG_alloc(2*len*sizeof(double));
   if (uvx == NULL) return -1;
-
+  
   if (degen == 0) {
     for (k = 0, i = elens[0]+elens[1]; i >= elens[0]; i--) {
       if (j == 1) {
@@ -3300,15 +3296,15 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
     printf(" degen 2: lens = %d %d\n", k, lens[0]+lens[1]+lens[2]+lens[3]);
 #endif
   }
-
+  
   /* fill the area */
-
+  
   ret = EG_quad2tris(tID, face, parms, lens, uvx, npts, uvs, ntris, tris, &i);
   EG_free(uvx);
   if (ret != 0) return ret;
-
+  
   /* re-collapse the degenerate side */
-
+  
   uvx = *uvs;
   if (uvx == NULL) return -99;
   for (k = i = 0; i < *npts; i++)
@@ -3321,7 +3317,7 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
   uvx[2*len  ] = uv[2*len  ];
   uvx[2*len+1] = uv[2*len+1];
   *npts = k;
-
+  
   indices = *tris;
   if (indices == NULL) return -99;
   for (k = i = 0; i < *ntris; i++) {
@@ -3348,12 +3344,12 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
       indices[3*k+2] = indices[3*i+2];
       k++;
     }
-
+    
   }
   *ntris = k;
-
+  
   /* make sure we are OK */
-
+  
   for (k = i = 0; i < *ntris; i++) {
     uv0 = &uvx[2*indices[3*i  ]];
     uv1 = &uvx[2*indices[3*i+1]];
@@ -3361,7 +3357,7 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
     if (AREA2D(uv0, uv1, uv2) <= 0.0) k++;
   }
   if (k == 0) return 0;
-
+  
 #ifdef DEBUG
   printf(" Bad mapping3: %d of %d non-positive tris\n", k, *ntris);
 #endif
@@ -3380,28 +3376,28 @@ EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
 {
   int    i, k, ret, lens[4], *indices;
   double *uvx, *uv0, *uv1, *uv2;
-
+  
 #ifdef DEBUG
   printf("EG_quadfil3as4: Filling 3-sided Face as if it were 4-sided\n");
   printf("EG_quadfil3as4: %d %d %d\n", elens[0], elens[1], elens[2]);
 #endif
-
+  
   *ntris = 0;
   *uvs  = NULL;
   *tris = NULL;
   if (elens[0] < 3) return -2;
   if (elens[1] < 3) return -2;
   if (elens[2] < 3) return -2;
-
+  
   if (abs(elens[1]-elens[2]) < 2) {	/* Similar edge balance */
     ret = 0;
   } else if (abs(elens[0]-elens[2]) < 2) {
     ret = 1;
   } else if (abs(elens[0]-elens[1]) < 2) {
     ret = 2;
-
+    
     /* Split side with max points */
-
+    
   } else if ((elens[0] >= elens[1]) && (elens[0] >= elens[2])) {
     ret = 0;
   } else if  (elens[1] >= elens[2]) {
@@ -3409,7 +3405,7 @@ EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
   } else {
     ret = 2;
   }
-
+  
   if (ret == 0) {
     lens[0] = elens[0]/2;
     lens[1] = elens[0]-lens[0];
@@ -3426,17 +3422,17 @@ EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
     lens[2] = elens[2]/2;
     lens[3] = elens[2]-lens[2];
   }
-
+  
 #ifdef DEBUG
   printf("EG_quadfil3as4: Quad with %d %d %d %d\n",
          lens[0], lens[1], lens[2], lens[3]);
 #endif
-
+  
   /* fill the area */
-
+  
   ret = EG_quad2tris(tID, face, parms, lens, uv, npts, uvs, ntris, tris, &i);
   if (ret != 0) return ret;
-
+  
   uvx     = *uvs;
   indices = *tris;
   if ((indices == NULL) || (uvx == NULL)) return -99;
@@ -3447,7 +3443,7 @@ EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
     if (AREA2D(uv0, uv1, uv2) <= 0.0) k++;
   }
   if (k == 0) return 0;
-
+  
 #ifdef DEBUG
   printf(" Bad mapping3: %d of %d non-positive tris\n", k, *ntris);
 #endif
@@ -3501,7 +3497,7 @@ EG_quad2tris3(long tID, const egObject *face, double *parms, int *elens,
   int    i, j, k, n, ret, nsp, *indices;
   double *uvx, *uv0, *uv1, *uv2, dist;
   qFill  q;
-
+  
   *npts = 0;
   *flag = 1;
   /* try and make a conical mapping */
@@ -3511,7 +3507,7 @@ EG_quad2tris3(long tID, const egObject *face, double *parms, int *elens,
     ret   = EG_quadfil3(tID, face, parms, elens, uv, npts, uvs, ntris, tris);
     if (ret == -8) ret = -6;
   }
-
+  
   /* try the triangle template */
   if (ret != 0) {
     *flag      = 0;
@@ -3574,12 +3570,12 @@ EG_quad2tris3(long tID, const egObject *face, double *parms, int *elens,
       }
     }
   }
-
+  
   /* finally see if splitting an Edge gives us a good mapping */
   if (ret != 0) {
     *npts = 0;
     ret   = EG_quadfil3as4(tID, face, parms, elens, uv, npts, uvs, ntris, tris);
   }
-
+  
   return ret;
 }

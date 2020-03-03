@@ -3,7 +3,7 @@
  *
  *             Lite Geometry Functions
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -14,7 +14,6 @@
 #include <string.h>
 #include <math.h>
 
-#include "egads.h"
 #include "egadsTypes.h"
 #include "egadsInternals.h"
 #include "liteClasses.h"
@@ -23,6 +22,7 @@
 
 #define PARAMACC         1.0e-4         /* parameter accuracy */
 #define PI               3.1415926535897931159979635
+#define MIN(a,b)        (((a) < (b)) ? (a) : (b))
 #define ABS(x)           ((x) < 0 ? -(x) : (x))
 #define CROSS(a,b,c)       a[0] = (b[1]*c[2]) - (b[2]*c[1]);\
                            a[1] = (b[2]*c[0]) - (b[0]*c[2]);\
@@ -42,19 +42,22 @@
 
   extern int  EG_inFaceX( const egObject *face, const double *uv,
                           /*@null@*/ double *pt, /*@null@*/ double *uvx );
+  extern int  EG_getEdgeUV ( const egObject *face, const egObject *edge,
+                             int sense, double t, double *result );
 
 
 
 int
-EG_getGeometry(const ego     geom, int *oclass, int *type,
-                     ego *refGeom, int **ivec,  double **rvec)
+EG_getGeometry(const egObject     *geom, int *oclass, int *type,
+                     egObject **refGeom, /*@null@*/ int    **ivec,
+                                         /*@null@*/ double **rvec)
 {
   int          i, nreal, nint, *ints;
   double       *reals;
   liteGeometry *lgeom;
-
-  *ivec    = NULL;
-  *rvec    = NULL;
+  
+  if (ivec != NULL) *ivec = NULL;
+  if (rvec != NULL) *rvec = NULL;
   *refGeom = NULL;
   *oclass  = *type = 0;
   if  (geom == NULL)               return EGADS_NULLOBJ;
@@ -62,144 +65,145 @@ EG_getGeometry(const ego     geom, int *oclass, int *type,
   if ((geom->oclass < PCURVE) || (geom->oclass > SURFACE))
                                    return EGADS_NOTGEOM;
   if (geom->blind == NULL)         return EGADS_NODATA;
-
+  
   lgeom    = (liteGeometry *) geom->blind;
   *oclass  = geom->oclass;
   *type    = geom->mtype;
   *refGeom = lgeom->ref;
-
+  if ((rvec == NULL) || (ivec == NULL)) return EGADS_SUCCESS;
+  
   nreal    = nint = 0;
   if (geom->oclass == PCURVE) {
     switch (geom->mtype) {
-
+        
       case LINE:
         nreal = 4;
         break;
-
+        
       case CIRCLE:
         nreal = 7;
         break;
-
+        
       case ELLIPSE:
         nreal = 8;
         break;
-
+        
       case PARABOLA:
         nreal = 7;
         break;
-
+        
       case HYPERBOLA:
         nreal = 8;
         break;
-
+        
       case TRIMMED:
         nreal = 2;
         break;
-
+        
       case BEZIER:
         nint  = 3;
         nreal = 2*lgeom->header[2];
         if ((lgeom->header[0]&2) != 0) nreal += lgeom->header[2];
         break;
-
+        
       case BSPLINE:
         nint  = 4;
         nreal = lgeom->header[3] + 2*lgeom->header[2];
         if ((lgeom->header[0]&2) != 0) nreal += lgeom->header[2];
         break;
-
+        
       case OFFSET:
         nreal = 1;
         break;
     }
-
+    
   } else if (geom->oclass == CURVE) {
     switch (geom->mtype) {
-
+        
       case LINE:
         nreal = 6;
         break;
-
+        
       case CIRCLE:
         nreal = 10;
         break;
-
+        
       case ELLIPSE:
         nreal = 11;
         break;
-
+        
       case PARABOLA:
         nreal = 10;
         break;
-
+        
       case HYPERBOLA:
         nreal = 11;
         break;
-
+        
       case TRIMMED:
         nreal = 2;
         break;
-
+        
       case BEZIER:
         nint  = 3;
         nreal = 3*lgeom->header[2];
         if ((lgeom->header[0]&2) != 0) nreal += lgeom->header[2];
         break;
-
+        
       case BSPLINE:
         nint  = 4;
         nreal = lgeom->header[3] + 3*lgeom->header[2];
         if ((lgeom->header[0]&2) != 0) nreal += lgeom->header[2];
         break;
-
+        
       case OFFSET:
         nreal = 4;
         break;
     }
-
+    
   } else {
     /* surface */
     switch (geom->mtype) {
-
+        
       case PLANE:
         nreal = 9;
         break;
-
+        
       case SPHERICAL:
         nreal = 10;
         break;
-
+        
       case CONICAL:
         nreal = 14;
         break;
-
+        
       case CYLINDRICAL:
         nreal = 13;
         break;
-
+        
       case TOROIDAL:
         nreal = 14;
         break;
-
+        
       case REVOLUTION:
         nreal = 6;
         break;
-
+        
       case EXTRUSION:
         nreal = 3;
         break;
-
+        
       case TRIMMED:
         nreal = 4;
         break;
-
+        
       case BEZIER:
         nint  = 5;
         nreal = 3*lgeom->header[2]*lgeom->header[4];
         if ((lgeom->header[0]&2) != 0)
           nreal += lgeom->header[2]*lgeom->header[4];
         break;
-
+        
       case BSPLINE:
         nint  = 7;
         nreal = lgeom->header[3] + lgeom->header[6] +
@@ -207,7 +211,7 @@ EG_getGeometry(const ego     geom, int *oclass, int *type,
         if ((lgeom->header[0]&2) != 0)
           nreal += lgeom->header[2]*lgeom->header[5];
         break;
-
+        
       case OFFSET:
         nreal = 1;
         break;
@@ -235,20 +239,20 @@ EG_getGeometry(const ego     geom, int *oclass, int *type,
   }
   for (i = 0; i < nreal; i++) reals[i] = lgeom->data[i];
   *rvec = reals;
-
+  
   return EGADS_SUCCESS;
 }
 
 
 int
-EG_getRange(const ego geom, double *range, int *periodic)
+EG_getRange(const egObject *geom, double *range, int *periodic)
 {
-  int           stat, mtype;
-  ego           ref;
+  int          stat, mtype;
+  egObject     *ref;
   liteEdge     *ledge;
   liteFace     *lface;
   liteGeometry *lgeom;
-
+  
   *periodic = 0;
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
@@ -257,7 +261,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
       (geom->oclass != EDGE)   && (geom->oclass != FACE))
                                    return EGADS_NOTGEOM;
   if (geom->blind == NULL)         return EGADS_NODATA;
-
+  
   stat = EGADS_NOTFOUND;
   if (geom->oclass == PCURVE) {
     lgeom = (liteGeometry *) geom->blind;
@@ -268,35 +272,35 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CIRCLE:
         range[0]  = 0.0;
         range[1]  = 2.0*PI;
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case ELLIPSE:
         range[0]  = 0.0;
         range[1]  = 2.0*PI;
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case PARABOLA:
         range[0]  = -2.e100;
         range[1]  =  2.e100;
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case HYPERBOLA:
         range[0]  = -2.e100;
         range[1]  =  2.e100;
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case TRIMMED:
         stat = EG_getRange(lgeom->ref, range, periodic);
         if (stat == EGADS_SUCCESS) {
@@ -304,21 +308,21 @@ EG_getRange(const ego geom, double *range, int *periodic)
           range[1] = lgeom->data[1];
         }
         break;
-
+        
       case BEZIER:
         range[0]  = 0.0;
         range[1]  = 1.0;
         *periodic = (lgeom->header[0]&4)/4;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case BSPLINE:
         range[0]  =  lgeom->data[0];
         range[1]  =  lgeom->data[lgeom->header[3]-1];
         *periodic = (lgeom->header[0]&4)/4;
         stat      =  EGADS_SUCCESS;
         break;
-
+        
       case OFFSET:
         stat = EG_getRange(lgeom->ref, range, periodic);
         break;
@@ -327,6 +331,12 @@ EG_getRange(const ego geom, double *range, int *periodic)
     lgeom = (liteGeometry *) geom->blind;
     mtype = geom->mtype;
     if (geom->oclass == EDGE) {
+      if (geom->mtype == DEGENERATE) {
+        ledge    = (liteEdge *) geom->blind;
+        range[0] = ledge->trange[0];
+        range[1] = ledge->trange[1];
+        return EGADS_SUCCESS;
+      }
       ledge = (liteEdge *) geom->blind;
       ref   = ledge->curve;
       if (ref == NULL)        return EGADS_NULLOBJ;
@@ -341,35 +351,35 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CIRCLE:
         range[0]  = 0.0;
         range[1]  = 2.0*PI;
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case ELLIPSE:
         range[0]  = 0.0;
         range[1]  = 2.0*PI;
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case PARABOLA:
         range[0]  = -2.e100;
         range[1]  =  2.e100;
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case HYPERBOLA:
         range[0]  = -2.e100;
         range[1]  =  2.e100;
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case TRIMMED:
         stat = EG_getRange(lgeom->ref, range, periodic);
         if (stat == EGADS_SUCCESS) {
@@ -377,21 +387,21 @@ EG_getRange(const ego geom, double *range, int *periodic)
           range[1] = lgeom->data[1];
         }
         break;
-
+        
       case BEZIER:
         range[0]  = 0.0;
         range[1]  = 1.0;
         *periodic = (lgeom->header[0]&4)/4;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case BSPLINE:
         range[0]  =  lgeom->data[0];
         range[1]  =  lgeom->data[lgeom->header[3]-1];
         *periodic = (lgeom->header[0]&4)/4;
         stat      =  EGADS_SUCCESS;
         break;
-
+        
       case OFFSET:
         stat = EG_getRange(lgeom->ref, range, periodic);
         break;
@@ -421,7 +431,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic =  0;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case SPHERICAL:
         range[0]  =  0.0;
         range[1]  =  2.0*PI;
@@ -430,7 +440,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CONICAL:
         range[0]  =  0.0;
         range[1]  =  2.0*PI;
@@ -439,7 +449,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case CYLINDRICAL:
         range[0]  =  0.0;
         range[1]  =  2.0*PI;
@@ -448,7 +458,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic = 1;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case TOROIDAL:
         range[0]  = 0.0;
         range[1]  = 2.0*PI;
@@ -457,7 +467,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic = 3;
         stat      = EGADS_SUCCESS;
         break;
-
+        
       case REVOLUTION:
         stat = EG_getRange(lgeom->ref, &range[2], &mtype);
         if (stat == EGADS_SUCCESS) {
@@ -466,7 +476,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
           *periodic = 1 + 2*mtype;
         }
         break;
-
+        
       case EXTRUSION:
         stat = EG_getRange(lgeom->ref, range, periodic);
         if (stat == EGADS_SUCCESS) {
@@ -474,7 +484,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
           range[3] =  2.e100;
         }
         break;
-
+        
       case TRIMMED:
         stat = EG_getRange(lgeom->ref, range, periodic);
         if (stat == EGADS_SUCCESS) {
@@ -484,7 +494,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
           range[3] = lgeom->data[3];
         }
         break;
-
+        
       case BEZIER:
         range[0]  = 0.0;
         range[1]  = 1.0;
@@ -494,7 +504,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         stat      = EGADS_SUCCESS;
 
         break;
-
+        
       case BSPLINE:
         range[0]  =  lgeom->data[0];
         range[1]  =  lgeom->data[lgeom->header[3]-1];
@@ -503,7 +513,7 @@ EG_getRange(const ego geom, double *range, int *periodic)
         *periodic = (lgeom->header[0]&12)/4;
         stat      =  EGADS_SUCCESS;
         break;
-
+        
       case OFFSET:
         stat = EG_getRange(lgeom->ref, range, periodic);
         break;
@@ -522,23 +532,36 @@ EG_getRange(const ego geom, double *range, int *periodic)
 
 
 int
-EG_evaluate(const ego geom, const double *param, double *result)
+EG_evaluate(const egObject *geom, /*@null@*/ const double *param, double *result)
 {
-  ego             ref;
+  const egObject *ref;
+  liteNode       *lnode;
   liteEdge       *ledge;
   liteFace       *lface;
 
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if ((geom->oclass != PCURVE) &&
-      (geom->oclass != CURVE)  && (geom->oclass != SURFACE) &&
-      (geom->oclass != EDGE)   && (geom->oclass != FACE))
+  if ((geom->oclass != NODE)  && (geom->oclass != PCURVE)  &&
+      (geom->oclass != CURVE) && (geom->oclass != SURFACE) &&
+      (geom->oclass != EDGE)  && (geom->oclass != FACE))
                                    return EGADS_NOTGEOM;
-  if (geom->blind == NULL)         return EGADS_NODATA;
-
+  if  (geom->blind == NULL)        return EGADS_NODATA;
+  
+  /* special Node section */
+  if (geom->oclass == NODE) {
+    lnode     = (liteNode *) geom->blind;
+    result[0] = lnode->xyz[0];
+    result[1] = lnode->xyz[1];
+    result[2] = lnode->xyz[2];
+    return EGADS_SUCCESS;
+  }
+  if (param == NULL)               return EGADS_NODATA;
+  
+  /* geometry */
   if ((geom->oclass == PCURVE) || (geom->oclass == CURVE) ||
       (geom->oclass == SURFACE)) return EG_evaluateGeom(geom, param, result);
 
+  /* topology */
   if (geom->oclass == EDGE) {
     ledge = (liteEdge *) geom->blind;
     ref   = ledge->curve;
@@ -546,7 +569,7 @@ EG_evaluate(const ego geom, const double *param, double *result)
     lface = (liteFace *) geom->blind;
     ref   = lface->surface;
   }
-
+  
   if (ref == NULL)        return EGADS_NULLOBJ;
   if (ref->blind == NULL) return EGADS_NODATA;
   return EG_evaluateGeom(ref, param, result);
@@ -554,7 +577,7 @@ EG_evaluate(const ego geom, const double *param, double *result)
 
 
 int
-EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
+EG_invEvaLimits(const egObject *geom, /*@null@*/ const double *limits,
                 const double *xyz, double *param, double *result)
 {
   int            stat, per;
@@ -562,7 +585,7 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
   liteEdge       *pedge;
   liteFace       *pface;
   liteGeometry   *lgeom;
-  ego             ref;
+  const egObject *ref;
 
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
@@ -571,14 +594,14 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
       (geom->oclass != EDGE)   && (geom->oclass != FACE))
                                    return EGADS_NOTGEOM;
   if (geom->blind == NULL)         return EGADS_NODATA;
-
+  
   if ((geom->oclass == PCURVE) || (geom->oclass == CURVE) ||
       (geom->oclass == SURFACE))
     return EG_invEvaGeomLimits(geom, limits, xyz, param, 0.0, result);
-
+  
   stat = EG_getRange(geom, range, &per);
   if (stat != EGADS_SUCCESS) return stat;
-
+  
   /* do we re-limit? */
   if (limits != NULL) {
     range[0] = limits[0];
@@ -588,7 +611,7 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
       range[3] = limits[3];
     }
   }
-
+  
   if (geom->oclass == EDGE) {
     pedge = (liteEdge *) geom->blind;
     ref   = pedge->curve;
@@ -611,7 +634,7 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
   }
   stat = EG_invEvaGeomLimits(ref, range, xyz, param, pface->tol, result);
   if (stat != EGADS_SUCCESS) return stat;
-
+  
   stat = EG_getRange(ref, srange, &per);
   if (stat != EGADS_SUCCESS) return stat;
 
@@ -626,23 +649,21 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
     result[2] = pt[2];
     if ((per&1) != 0) {
       period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1])) {
+      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
         if (param[0]+PARAMACC < srange[0]) {
           if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
         } else {
           if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
         }
-      }
     }
     if ((per&2) != 0) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3])) {
+      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
         if (param[1]+PARAMACC < srange[2]) {
           if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
         } else {
           if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
         }
-      }
     }
   }
 
@@ -651,7 +672,7 @@ EG_invEvaLimits(const ego geom, /*@null@*/ const double *limits,
 
 
 int
-EG_invEvaluate(const ego geom, const double *xyz, double *param,
+EG_invEvaluate(const egObject *geom, const double *xyz, double *param,
                double *result)
 {
   return EG_invEvaLimits(geom, NULL, xyz, param, result);
@@ -659,7 +680,7 @@ EG_invEvaluate(const ego geom, const double *xyz, double *param,
 
 
 int
-EG_invEvaluateGuess(const ego geom, double *xyz,
+EG_invEvaluateGuess(const egObject *geom, double *xyz,
                     double *param, double *result)
 {
   int            stat, per;
@@ -667,7 +688,7 @@ EG_invEvaluateGuess(const ego geom, double *xyz,
   const egObject *ref;
   liteEdge       *ledge;
   liteFace       *lface;
-
+  
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if ((geom->oclass != PCURVE) &&
@@ -675,13 +696,13 @@ EG_invEvaluateGuess(const ego geom, double *xyz,
       (geom->oclass != EDGE)   && (geom->oclass != FACE))
                                    return EGADS_NOTGEOM;
   if (geom->blind == NULL)         return EGADS_NODATA;
-
+  
   if ((geom->oclass == PCURVE) || (geom->oclass == CURVE) ||
       (geom->oclass == SURFACE))
     return EG_invEvaluateGeomGuess(geom, NULL, xyz, param, result);
-
+  
   if (geom->oclass == EDGE) {
-
+    
     stat = EG_getRange(geom, range, &per);
     if (stat != EGADS_SUCCESS) return stat;
     ledge = (liteEdge *) geom->blind;
@@ -689,15 +710,15 @@ EG_invEvaluateGuess(const ego geom, double *xyz,
     if (ref == NULL)        return EGADS_NULLOBJ;
     if (ref->blind == NULL) return EGADS_NODATA;
     stat = EG_invEvaluateGeomGuess(ref, range, xyz, param, result);
-
+    
   } else {
-
+    
     lface = (liteFace *) geom->blind;
     ref   = lface->surface;
     if (ref == NULL)        return EGADS_NULLOBJ;
     if (ref->blind == NULL) return EGADS_NODATA;
     stat = EG_invEvaluateGeomGuess(ref, NULL, xyz, param, result);
-
+    
   }
 
   return stat;
@@ -705,12 +726,12 @@ EG_invEvaluateGuess(const ego geom, double *xyz,
 
 
 int
-EG_arcLength(const ego geom, double t1, double t2, double *alen)
+EG_arcLength(const egObject *geom, double t1, double t2, double *alen)
 {
   int            i, stat;
   double         t, d, ur, mid, result[9];
   liteEdge       *ledge;
-  ego             ref;
+  const egObject *ref;
 /*
   static int     ngauss   = 5;
   static double  wg[2*5]  = { 0.5688888888888889,  0.0000000000000000,
@@ -735,7 +756,7 @@ EG_arcLength(const ego geom, double t1, double t2, double *alen)
                               0.0703660474881081,  0.9372733924007060,
                               0.0307532419961173, -0.9879925180204854,
                               0.0307532419961173,  0.9879925180204854 };
-
+  
   *alen = 0.0;
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
@@ -744,7 +765,7 @@ EG_arcLength(const ego geom, double t1, double t2, double *alen)
   if (geom->blind == NULL)         return EGADS_NODATA;
 
   if (geom->oclass == PCURVE) {
-
+    
     ur  =      t2 - t1;
     mid = 0.5*(t2 + t1);
     for (i = 0; i < ngauss; i++) {
@@ -755,9 +776,9 @@ EG_arcLength(const ego geom, double t1, double t2, double *alen)
       *alen += d*wg[2*i];
     }
     *alen *= 0.5*ur;
-
+    
   } else {
-
+    
     ref = geom;
     if (geom->oclass == EDGE) {
       ledge = (liteEdge *) geom->blind;
@@ -782,7 +803,7 @@ EG_arcLength(const ego geom, double t1, double t2, double *alen)
 
 
 int
-EG_curvature(const ego geom, const double *param, double *result)
+EG_curvature(const egObject *geom, const double *param, double *result)
 {
   int    i, stat;
   double data[18], dir[3], d, s, *d1, *d2;
@@ -794,23 +815,23 @@ EG_curvature(const ego geom, const double *param, double *result)
       (geom->oclass != EDGE)   && (geom->oclass != FACE))
                                    return EGADS_NOTGEOM;
   if  (geom->blind == NULL)        return EGADS_NODATA;
-
+  
   stat = EG_evaluate(geom, param, data);
   if (stat != EGADS_SUCCESS) return stat;
-
+  
   if (geom->oclass == PCURVE) {
-
+    
     for (i = 0; i < 3; i++) result[i] = 0.0;
-
+    
     s         = sqrt(data[2]*data[2] + data[3]*data[3]);
     if (s == 0.0) return EGADS_DEGEN;
     d         = ABS(data[2]*data[5] - data[3]*data[4]);
     result[0] = d/(s*s*s);
     result[1] = data[2]/s;
     result[2] = data[3]/s;
-
+  
   } else if ((geom->oclass == CURVE) || (geom->oclass == EDGE)) {
-
+    
     for (i = 0; i < 4; i++) result[i] = 0.0;
 
     s         = sqrt(data[3]*data[3] + data[4]*data[4] + data[5]*data[5]);
@@ -823,12 +844,12 @@ EG_curvature(const ego geom, const double *param, double *result)
     result[1] = data[3]/s;
     result[2] = data[4]/s;
     result[3] = data[5]/s;
-
+    
   } else {
-
+    
     double norm[3], *der1[2], *der2[3];
     double a, b, c, d11, d12, d21, d22, g11, g12, g21, g22, ud, vd, len;
-
+    
     for (i = 0; i < 8; i++) result[i] = 0.0;
     der1[0]  = &data[ 3];
     der1[1]  = &data[ 6];
@@ -848,7 +869,7 @@ EG_curvature(const ego geom, const double *param, double *result)
       norm[1] = -norm[1];
       norm[2] = -norm[2];
     }
-
+    
     g11 = g12 = g21 = g22 = 0.0;
     d11 = d12 = d21 = d22 = 0.0;
     for (i = 0; i < 3; i++) {
@@ -856,7 +877,7 @@ EG_curvature(const ego geom, const double *param, double *result)
       g12 += der1[0][i]*der1[1][i];
       g21 += der1[1][i]*der1[0][i];
       g22 += der1[1][i]*der1[1][i];
-
+      
       d11 += norm[i]*der2[0][i];
       d12 += norm[i]*der2[2][i];
       d21 += norm[i]*der2[2][i];
@@ -867,12 +888,12 @@ EG_curvature(const ego geom, const double *param, double *result)
     c   =   d11*d22 - d21*d12;
     len = b*b - 4.0*a*c;
     if (len < 0.0) len = 0.0;
-
+    
     result[0] = (-b + sqrt(len))/(2.0*a);
     result[4] = (-b - sqrt(len))/(2.0*a);
-
+    
     if (ABS(result[0]-result[4]) > 1.e-12) {
-
+      
       /* find principal direction 1 */
       ud =  (d12 - result[0]*g12);
       vd = -(d11 - result[0]*g11);
@@ -886,7 +907,7 @@ EG_curvature(const ego geom, const double *param, double *result)
         len = sqrt(1.0/len);
         for (i = 1; i < 4; i++) result[i] *= len;
       }
-
+ 
     } else {
 
       /*  Align principal direction 1 with isocurves */
@@ -904,16 +925,16 @@ EG_curvature(const ego geom, const double *param, double *result)
       if (len == 0.0) return EGADS_DEGEN;
       len = 1.0/sqrt(len);
       for (i = 1; i < 4; i++) result[i] *= len;
-
+      
     }
-
+    
     /* find principal direction 2 -- make orthogonal */
     d1 = &result[1];
     d2 = &result[5];
     CROSS(d2, d1, norm);
-
+  
   }
-
+  
   return EGADS_SUCCESS;
 }
 
@@ -926,7 +947,7 @@ EG_relPosTs(egObject *geom, int n, /*@null@*/ const double *rel,
   double   alen, len, t, tbeg, tend, frac, result[9];
   egObject *ref;
   liteEdge *ledge;
-
+  
   if  (geom == NULL)               return EGADS_NULLOBJ;
   if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if ((geom->oclass != CURVE)  &&
@@ -959,7 +980,7 @@ EG_relPosTs(egObject *geom, int n, /*@null@*/ const double *rel,
     }
     return EGADS_SUCCESS;
   }
-
+  
   /* not sure if t is arc-length based */
   stat = EG_arcLength(geom, ts[0], ts[n-1], &alen);
   if (stat != EGADS_SUCCESS) return stat;
@@ -995,6 +1016,6 @@ EG_relPosTs(egObject *geom, int n, /*@null@*/ const double *rel,
     xyzs[3*i+1] = result[1];
     xyzs[3*i+2] = result[2];
   }
-
+  
   return EGADS_SUCCESS;
 }

@@ -21,3 +21,9 @@ included along with the EGADS library and also a test executable. The tester
 loads an EGADS model from a file, determines the number of vertices desired per
 entity, then invokes limitTessBody and finally reports the results.
 
+egadsHOtess.c and the test program vHOtess takes an egads Tessellation object
+and makes a new tessellation object by inserting the "high order" vertices --
+the test program displays the results.
+
+extractTess shows how to generate a multi-body tessellation that has Face and
+Edge coherence.

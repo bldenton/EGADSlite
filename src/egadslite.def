@@ -41,6 +41,8 @@ EG_getWindingAngle
 EG_makeTessGeom
 EG_getTessGeom
 EG_makeTessBody
+EG_remakeTess
+EG_finishTess
 EG_getTessEdge
 EG_getTessFace
 EG_getTessLoops
@@ -48,6 +50,8 @@ EG_getTessQuads
 EG_makeQuads
 EG_getQuads
 EG_getPatch
+EG_getInterior
+EG_getSidepoint
 EG_quadTess
 EG_insertEdgeVerts
 EG_deleteEdgeVert

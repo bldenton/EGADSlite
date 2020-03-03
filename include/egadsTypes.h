@@ -5,7 +5,7 @@
  *
  *             General Object Header
  *
- *      Copyright 2011-2018, Massachusetts Institute of Technology
+ *      Copyright 2011-2020, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -15,8 +15,8 @@
 
 
 #define EGADSMAJOR     1
-#define EGADSMINOR    14
-#define EGADSPROP     EGADSprop: Revision 1.14
+#define EGADSMINOR    17
+#define EGADSPROP     EGADSprop: Revision 1.17
 
 #define MAGIC      98789
 #define MTESSPARAM     2
@@ -58,7 +58,7 @@
 #define PLANE          1
 #define SPHERICAL      2
 #define CYLINDRICAL    3
-#define REVOLUTION     4
+#define REVOLUTION     4 
 #define TOROIDAL       5
 #define CONICAL       10
 #define EXTRUSION     11
@@ -156,8 +156,10 @@ typedef struct {
   int      outLevel;		/* output level for messages
                                    0 none, 1 minimal, 2 verbose, 3 debug */
   double   tess[MTESSPARAM];    /* global tessellation parameters */
-  const char **signature;
+  char     **signature;
   void     *usrPtr;
+  long     threadID;            /* the OS' thread identifier */
+  void     *mutex;              /* this thread's mutex */
   egObject *pool;               /* available object structures for use */
   egObject *last;               /* the last object in the list */
 } egCntxt;

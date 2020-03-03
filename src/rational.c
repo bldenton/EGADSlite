@@ -1,12 +1,21 @@
 #include <stdlib.h>
 #include <string.h>
 
+
+#ifdef LITE
 #ifdef WIN32
 #define false 0
 #define true  (!false)
 typedef int bool;
 #else
 #include <stdbool.h>
+#endif
+#define TEMPLATE
+#define DOUBLE double
+#else
+#include "Surreal/SurrealS.h"
+#define TEMPLATE template<class TT>
+#define DOUBLE TT
 #endif
 
 
@@ -137,7 +146,8 @@ Parameters:
     w = v[dim].
 */
 
-void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, double *v)
+TEMPLATE
+void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, DOUBLE *v)
 {
   /*
     The quotient rule says the n-th derivative is
@@ -151,7 +161,7 @@ void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, double *v)
       (The missing summands look like  BinomialCoefficient(i,j)*w   * f   )
   */
 
-  double wt, w2, *f, *x, *w;
+  DOUBLE wt, w2, *f, *x, *w;
   int    i, j, n, df;
 
 #ifndef __clang_analyzer__
@@ -232,9 +242,10 @@ Parameters:
     w = v[dim].
 */
 
-void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, double *v)
+TEMPLATE
+void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, DOUBLE *v)
 {
-  double F, Fs, Ft, ws, wt, wss, wtt, wst, *f, *x;
+  DOUBLE F, Fs, Ft, ws, wt, wss, wtt, wst, *f, *x;
   int    i, j, n, q, ii, jj, Fn;
 
   // comment notation:
@@ -266,7 +277,7 @@ void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, double *v)
   }
 
   if (der_count) {
-		              // first derivatives
+                              // first derivatives
     f  = v;                   // f = F
     x  = v + v_stride;        // x = Xs/w, x[v_stride] = Xt/w
     ws = -x[dim];             // ws = -Ws/w
@@ -299,7 +310,7 @@ void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, double *v)
       }
 
       if (der_count > 2) {
-				// general loop for higher derivatives 
+        // general loop for higher derivatives
         v -= dim;               // restore v pointer to input value
         f  = v + 6*v_stride;    // f = Xsss
         for (n = 3; n <= der_count; n++) {
@@ -328,19 +339,24 @@ void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, double *v)
 }
 
 
+TEMPLATE
 static void
-EG_IncreaseBezierDegree(int dim, int order, int cv_stride, double* cv)
+EG_IncreaseBezierDegree(int dim, int order, int cv_stride, DOUBLE* cv)
 
 {
   double a0, a1, d, c0, c1;
   int    j;
-  double *newcv   = cv;
+  DOUBLE *newcv   = cv;
   const int cvdim = dim+1;
   const int dcv   = cv_stride - cvdim;
   
   j = cv_stride*order;
   newcv += j;
+#ifdef LITE
   memcpy(newcv, newcv-cv_stride, cvdim*sizeof(*newcv));
+#else
+  for (int ii = 0; ii < cvdim; ii++) newcv[ii] = (newcv-cv_stride)[ii];
+#endif
   newcv -= (dcv+1);
   cv = newcv - cv_stride;
   a0 = order;
@@ -363,8 +379,9 @@ EG_IncreaseBezierDegree(int dim, int order, int cv_stride, double* cv)
 }
 
 
+TEMPLATE
 static bool
-EG_RemoveBezierSingAt0(int dim, int order, int cv_stride, double* cv)
+EG_RemoveBezierSingAt0(int dim, int order, int cv_stride, DOUBLE* cv)
 {
   const int cvdim = dim+1;
   int j,k,ord0;
@@ -426,23 +443,24 @@ COMMENTS:
   (like x^2/x) are efficiently and correctly handled.
 *****************************************************************************/
 
+TEMPLATE
 bool EG_Bezier1DRat(int dim,              // dimension
                     int order,            // order
                     int cv_stride,        // cv_stride >= dim+1
-                    const double *cv,     // cv[order*cv_stride] array
+                    const DOUBLE *cv,     // cv[order*cv_stride] array
                     double t0, double t1, // domain
                     int der_count,        // number of derivatives to compute
-                    double t,             // evaluation parameter
+                    DOUBLE t,             // evaluation parameter
                     int v_stride,         // v_stride (>=dimension)
-                    double *v           ) // v[(der_count+1)*v_stride] array
+                    DOUBLE *v           ) // v[(der_count+1)*v_stride] array
 {
   unsigned char stack_buffer[4*64*sizeof(double)];
-  double delta_t;
-  register double alpha0;
-  register double alpha1;
-  register double *cv0, *cv1;
-  register int i, j, k;
-  double *CV, *tmp;
+  DOUBLE delta_t;
+  DOUBLE alpha0;
+  DOUBLE alpha1;
+  DOUBLE *cv0, *cv1;
+  int i, j, k;
+  DOUBLE *CV, *tmp;
   void* free_me = 0;
   const int degree = order-1;
   const int cvdim  = dim+1;
@@ -450,19 +468,31 @@ bool EG_Bezier1DRat(int dim,              // dimension
   
   if (cv_stride < cvdim) cv_stride = cvdim;
   
+#ifdef LITE
   memset(v, 0, v_stride*(der_count+1)*sizeof(*v));
+#else
+  for (i = 0; i < v_stride*(der_count+1); i++) v[i] = 0.;
+#endif
   
   i = order*cvdim;
   j = 0;
   if (der_count > degree) j = (der_count-degree)*cvdim;
   
   sizeofCV = (i+j)*sizeof(*CV);
-  CV = (double *)( (sizeofCV <= sizeof(stack_buffer)) ? stack_buffer : (free_me=malloc(sizeofCV)) );
+  CV = (DOUBLE *)( (sizeofCV <= sizeof(stack_buffer)) ? stack_buffer : (free_me=malloc(sizeofCV)) );
+#ifdef LITE
   if (j) memset(CV+i, 0, j*sizeof(*CV));
+#else
+  if (j) for (int ii = 0; ii < j; ii++) CV[ii+i] = 0.;
+#endif
   cv0 = CV;
   if (t0 == t || (t <= 0.5*(t0+t1) && t != t1)) {
     for (i = 0; i < order; i++) {
+#ifdef LITE
       memcpy(cv0, cv, cvdim*sizeof(*cv0));
+#else
+      for (int ii = 0; ii < cvdim; ii++) cv0[ii] = cv[ii];
+#endif
       cv0 += cvdim;
       cv  += cv_stride;
     }
@@ -476,7 +506,11 @@ bool EG_Bezier1DRat(int dim,              // dimension
     k   = order;
     while( k--) {
       cv  -= cv_stride;
+#ifdef LITE
       memcpy( cv0, cv, cvdim*sizeof(*cv0) );
+#else
+      for (int ii = 0; ii < cvdim; ii++) cv0[ii] = cv[ii];
+#endif
       cv0 += cvdim;
     }
     delta_t = 1.0/(t0 - t);
@@ -507,12 +541,14 @@ bool EG_Bezier1DRat(int dim,              // dimension
   }
   
   /* check for removable singularity */
+#ifndef __clang_analyzer__
   if (CV[dim] == 0.0) {
     if ( !EG_RemoveBezierSingAt0(dim,order,cvdim,CV) ) {
       if (free_me) free(free_me);
       return false;
     }
   }
+#endif
   
   /* Lee (from the right) */
   if (der_count) {
@@ -547,7 +583,11 @@ bool EG_Bezier1DRat(int dim,              // dimension
   EG_EvaluateQuotientRule(dim, der_count, cvdim, CV);
   
   for (i = 0; i <= der_count; i++) {
+#ifdef LITE
     memcpy(v, CV, dim*sizeof(*v));
+#else
+    for (int ii = 0; ii < dim; ii++) v[ii] = CV[ii];
+#endif
     v  += v_stride;
     CV += cvdim;
   }
@@ -556,3 +596,25 @@ bool EG_Bezier1DRat(int dim,              // dimension
   
   return true;
 }
+
+#ifndef LITE
+template void EG_EvaluateQuotientRule( int dim, int der_count, int v_stride,
+                                       SurrealS<1> *v );
+template void EG_EvaluateQuotientRule( int dim, int der_count, int v_stride,
+                                       double *v );
+
+template void EG_EvaluateQuotientRule2( int dim, int der_count, int v_stride,
+                                        SurrealS<1> *v );
+template void EG_EvaluateQuotientRule2( int dim, int der_count, int v_stride,
+                                        double *v );
+
+template bool EG_Bezier1DRat( int dim, int order, int cv_stride,
+                              const SurrealS<1> *cv, double t0, double t1,
+                              int der_count, SurrealS<1> t, int v_stride,
+                              SurrealS<1> *v );
+template bool EG_Bezier1DRat( int dim, int order, int cv_stride,
+                              const double *cv, double t0, double t1,
+                              int der_count, double t, int v_stride,
+                              double *v );
+#endif
+

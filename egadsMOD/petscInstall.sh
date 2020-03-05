@@ -1,15 +1,18 @@
 #!/bin/bash
 
 # Unload petsc module if loaded
+echo "Unloading Petsc if Loaded"
 module unload petsc
 
 # Go to build directory
 cd $UBCESLAB_SWENV_PREFIX/builddir
 
 # Remove current unpacked folder
+echo "Removing Previous Install"
 rm -rf petsc-3.12.4
 
 # Unpack tarball
+echo "Unpacking Original Petsc Tarball"
 tar -xzf $UBCESLAB_SWENV_PREFIX/sourcesdir/petsc/petsc-lite-3.12.4.tar.gz
 
 # Petsc v3.12.4 doesn't need the patch. Only Petsc v 3.12.0 does
@@ -19,6 +22,8 @@ tar -xzf $UBCESLAB_SWENV_PREFIX/sourcesdir/petsc/petsc-lite-3.12.4.tar.gz
 ## Apply the patch
 #cd /kif1/data/shared/software/builddir/petsc-3.12.0
 #patch -p1 < hdf5.patch
+
+echo "Inserting Modified Code before Install"
 
 # Copy Modified plexrefine
 cp /mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMOD/plexrefine.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.12.4/src/dm/impls/plex/plexrefine.c
@@ -35,7 +40,8 @@ cp /mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMO
 # Copy plexegads.c to correct location
 cp /mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMOD/plexegads.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.12.4/src/dm/impls/plex/plexegads.c
 
-# Install the modified petsc code 
+# Install the modified petsc code
+echo "Start Petsc Build"
 cd ~/ubaceslab/build_scripts
 ./build_petsc_egads_version.sh
 

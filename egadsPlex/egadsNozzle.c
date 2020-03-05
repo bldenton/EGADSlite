@@ -24,7 +24,7 @@ static PetscErrorCode ProcessOptions(MPI_Comm comm, AppCtx *options)
 
 int main(int argc, char *argv[])
 {
-  DMLabel        bodyLabel, faceLabel, edgeLabel;
+  DMLabel        bodyLabel, faceLabel, edgeLabel, uLabel, vLabel, tLabel;
   PetscInt       cStart, cEnd, c;
   /* EGADSLite variables */
   ego            context, model, geom, *bodies, *objs, *nobjs, *mobjs, *lobjs, *fobjs, *eobjs, *shobjs;
@@ -121,6 +121,16 @@ int main(int argc, char *argv[])
     
               ierr = EG_getRange(objs[e], range, &peri);
               ierr = PetscPrintf(PETSC_COMM_SELF, "              Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
+              
+              /* Debug Trial */
+              double xyzCheck[18];
+              double tm[1];
+              tm[0] = range[0];
+              ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "              tmin = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[0], xyzCheck[0], xyzCheck[1], xyzCheck[2]); 
+              tm[0] = range[1];
+              ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "              tmax = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[1], xyzCheck[0], xyzCheck[1], xyzCheck[2]);
     
               /* Get NODE info which associated with the current EDGE */
               ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -265,7 +275,10 @@ int main(int argc, char *argv[])
     //ierr = MatView(edgeMidP, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
     //ierr = PetscPrintf(PETSC_COMM_SELF, "]\n");CHKERRQ(ierr);
     
+    
+    // -------------------------------------------------------------------------------
     // Start to setup DMPlex
+    // -------------------------------------------------------------------------------
     dim = 2;
     cdim = 3;
     numCorners = 3;        // Assumes Triangle cells
@@ -286,8 +299,10 @@ int main(int argc, char *argv[])
     }
     
     //ierr = PetscPrintf(PETSC_COMM_SELF, "numCells = %d \n", numCells);CHKERRQ(ierr);
-    
+    PetscReal *uParams = NULL, *vParams = NULL, *tParams = NULL;
     ierr = PetscMalloc2(numVertices*cdim, &coords, numCells*numCorners, &cells);CHKERRQ(ierr);
+    ierr = PetscMalloc2(numVertices, &uParams, numVertices, &vParams); CHKERRQ(ierr);
+    ierr = PetscMalloc1(numVertices, &tParams); CHKERRQ(ierr);
     
     /* Load coordinate array */
     // First vertics from CAD model
@@ -449,6 +464,12 @@ int main(int argc, char *argv[])
   ierr = DMGetLabel(dmNozzle, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
   ierr = DMCreateLabel(dmNozzle, "EGADS Edge ID");CHKERRQ(ierr);
   ierr = DMGetLabel(dmNozzle, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dmNozzle, "EGADS t param");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS t param", &tLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dmNozzle, "EGADS u param");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS u param", &uLabel);CHKERRQ(ierr);
+  ierr = DMCreateLabel(dmNozzle, "EGADS v param");CHKERRQ(ierr);
+  ierr = DMGetLabel(dmNozzle, "EGADS v param", &vLabel);CHKERRQ(ierr);
   
   /* Set Label Values - EGADS body*/
   for (int jj = 0; jj < 3; ++jj){

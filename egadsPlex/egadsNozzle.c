@@ -389,7 +389,10 @@ int main(int argc, char *argv[])
       }
     }
     
-    // Define Cells  -- This is most likely not optimized
+    // Define Cells  -- This is most likely not optimized   
+    ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
+    ierr = PetscPrintf(PETSC_COMM_SELF, "        DEFINING CELLS          \n");
+    ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
     int cellCntr = 0;
     for (b = 0; b < nbodies; ++b){
       ego body = bodies[b];
@@ -397,35 +400,50 @@ int main(int argc, char *argv[])
       
       for (int f = 0; f < Nf; ++f){
         ego face = fobjs[f];
-        //int Nl;
-        //ierr = EG_getBodyTopos(body, NULL, LOOP,  &Nl, &lobjs);CHKERRQ(ierr);
+        int Nl;
+        //ierr = EG_getBodyTopos(body, NULL, LOOP,  &Nl, &lobjs);CHKERRQ(ierr);      // Either this line or the next line. Using the next line works better (don't know why)
         ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
+        //ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Nl, &lobjs, &lsenses);CHKERRQ(ierr);
+        ego loop = lobjs[0];
         
         //for (int l = 0; l < Nl; ++l){
         //  ego loop = lobjs[l];
         //  ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
           
           int fid = EG_indexBodyTopo(body, face);CHKERRQ(ierr);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "    FACE ID = %d \n", fid);
           
-          int midFaceID = Nvtotal + Netotal + fid-1;    // fid-1 was f
+          int midFaceID = Nvtotal + Netotal + fid-1;    // fid-1 was fid
           //ierr = PetscPrintf(PETSC_COMM_SELF, "    midFaceID = %d \n", midFaceID);
           
+          // Added for Debuggin purposes
+          //int id   = EG_indexBodyTopo(body, loop);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "        LOOP ID: %d :: sense = %d\n", id, lsenses);CHKERRQ(ierr);
+          //   
+          ///* Get EDGE info which associated with the current LOOP */
+          //ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
+          //
+                    
           for (int e = 0; e < Ne; ++e){
             ego edge = eobjs[e];
             int id   = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);  // ID of current edge
+            ierr = PetscPrintf(PETSC_COMM_SELF, "          EDGE ID = %d \n", id);
+            
             int midPntID = Nvtotal + id - 1;
             //ierr = PetscPrintf(PETSC_COMM_SELF, "    midPntID = %d \n", midPntID);
             
-            ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &esenses);CHKERRQ(ierr);
+            ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
             
             int startID = 0, endID = 0;
-            //if (esenses > 0){
+            
+            //int sense = esense[e];
+            if (esenses[e] > 0){
               startID = EG_indexBodyTopo(body, nobjs[0]);CHKERRQ(ierr);  // ID of EDGE start NODE
               endID = EG_indexBodyTopo(body, nobjs[1]);CHKERRQ(ierr);  // ID of EDGE end NODE
-            //} else {
-            //  startID = EG_indexBodyTopo(body, nobjs[1]);CHKERRQ(ierr);  // ID of EDGE start NODE
-            //  endID = EG_indexBodyTopo(body, nobjs[0]);CHKERRQ(ierr);  // ID of EDGE end NODE
-            //}
+            } else {
+              startID = EG_indexBodyTopo(body, nobjs[1]);CHKERRQ(ierr);  // ID of EDGE start NODE
+              endID = EG_indexBodyTopo(body, nobjs[0]);CHKERRQ(ierr);  // ID of EDGE end NODE
+            }
             
             cells[cellCntr*numCorners + 0] = midFaceID;
             cells[cellCntr*numCorners + 1] = startID-1;
@@ -447,7 +465,7 @@ int main(int argc, char *argv[])
     ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dmNozzle);CHKERRQ(ierr); 
     ierr = PetscFree2(coords, cells);CHKERRQ(ierr);   
   
-  //ierr = DMPlexOrient(dmNozzle); CHKERRQ(ierr);
+  ierr = DMPlexOrient(dmNozzle); CHKERRQ(ierr);
   
   {
     PetscContainer modelObj;
@@ -576,24 +594,25 @@ int main(int argc, char *argv[])
         //for (int jj = 0; jj < 2*Ne; ++jj){
         for (int jj = 0; jj < 2; ++jj){
           PetscInt coneSize = 0, coneSizeN = 0;
-          PetscInt *cone = NULL, *coneN = NULL;
+          PetscInt *cone = NULL, *coneN = NULL, *coneOrient = NULL;
           
           ierr = PetscPrintf(PETSC_COMM_SELF, "   cell :: %d \n", cellCntr);CHKERRQ(ierr);
           ierr = DMLabelSetValue(faceLabel, cellCntr, fID);CHKERRQ(ierr);
           ierr = DMPlexGetConeSize(dmNozzle, cellCntr, &coneSize); CHKERRQ(ierr);
           ierr = DMPlexGetCone(dmNozzle, cellCntr, &cone); CHKERRQ(ierr);
+          ierr = DMPlexGetConeOrientation(dmNozzle, cellCntr, &coneOrient); CHKERRQ(ierr);
           
-          ierr = PetscPrintf(PETSC_COMM_SELF, "   coneSize = %d \n", coneSize);CHKERRQ(ierr);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "     coneSize = %d \n", coneSize);CHKERRQ(ierr);
           
           for (int kk = 0; kk < coneSize; ++kk){
             ierr = DMLabelSetValue(faceLabel, cone[kk], fID);CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "   cone[%d] = %d :: fID = %d \n", kk, cone[kk], fID);CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[%d] = %d :: fID = %d :: coneOrient = %d \n", kk, cone[kk], fID, coneOrient[kk]);CHKERRQ(ierr);
             
             /* Stupid Add */
             ierr = DMPlexGetConeSize(dmNozzle, cone[kk], &coneSizeN); CHKERRQ(ierr);
             ierr = DMPlexGetCone(dmNozzle, cone[kk], &coneN); CHKERRQ(ierr);
             for (int ll = 0; ll < coneSizeN; ++ll){
-              ierr = PetscPrintf(PETSC_COMM_SELF, "   coneN[%d] = %d \n", ll, coneN[ll]);CHKERRQ(ierr);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "         coneN[%d] = %d \n", ll, coneN[ll]);CHKERRQ(ierr);
             }
             /* Stupid Add End */
           }

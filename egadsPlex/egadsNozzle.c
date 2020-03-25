@@ -465,7 +465,61 @@ int main(int argc, char *argv[])
     ierr = DMPlexCreateFromCellList(PETSC_COMM_WORLD, dim, numCells, numVertices, numCorners, PETSC_TRUE, cells, cdim, coords, &dmNozzle);CHKERRQ(ierr); 
     ierr = PetscFree2(coords, cells);CHKERRQ(ierr);   
   
-  ierr = DMPlexOrient(dmNozzle); CHKERRQ(ierr);
+    //ierr = DMPlexOrient(dmNozzle); CHKERRQ(ierr);
+    
+    // -------------------------------------------------------------------------
+    // Attempt to get Coordinates back out
+    //   - Trial for plexegads.c -
+    // -------------------------------------------------------------------------
+    Vec coordsVec;
+    ierr = VecCreate(PETSC_COMM_WORLD, &coordsVec); CHKERRQ(ierr);
+    ierr = VecSetType(coordsVec, VECSTANDARD); CHKERRQ(ierr);
+    ierr = DMGetCoordinatesLocal(dmNozzle, &coordsVec); CHKERRQ(ierr);
+    PetscInt vecSize;
+    ierr = VecGetSize(coordsVec, &vecSize); CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, " vecSize = %d \n", vecSize); CHKERRQ(ierr);
+    
+    int vecCntr = 1;
+    for ( int ii = 0; ii < vecSize; ii+=3){
+      PetscInt ix[3], ni;
+      ni = 3;
+      PetscScalar xx[3]; //, yy, zz;
+      ix[0] = ii;
+      //ierr = VecGetValues(coordsVec, ni, ix, &xx);
+      ix[1] = ii+1;
+      //ierr = VecGetValues(coordsVec, ni, ix, &yy);
+      ix[2] = ii+2;
+      ierr = VecGetValues(coordsVec, ni, ix, &xx);    // was &zz
+      PetscPrintf(PETSC_COMM_SELF, " Node %d :: (x, y, z) = (%lf, %lf, %lf) \n", vecCntr, xx[0], xx[1], xx[2]); CHKERRQ(ierr);
+      vecCntr = vecCntr + 1;
+    }
+    
+    // Check out finding support information
+    PetscInt sStart, sEnd;
+    PetscInt sConeSize = 0, sConeSizeN = 0, cConeSize = 0;
+    PetscInt *sCone = NULL, *sConeN = NULL, *sConeOrient = NULL, *cCone = NULL, *cConeOrient = NULL;
+    
+    ierr = DMPlexGetHeightStratum(dmNozzle, 1, &sStart, &sEnd);CHKERRQ(ierr);
+    for (int ii = sStart; ii < sEnd; ++ii){
+      ierr = DMPlexGetSupportSize(dmNozzle, ii, &sConeSize); CHKERRQ(ierr);
+      ierr = DMPlexGetSupport(dmNozzle, ii, &sCone); CHKERRQ(ierr);
+      //ierr = DMPlexGetConeOrientation(dmNozzle, ii, &sConeOrient); CHKERRQ(ierr);
+      
+      ierr = PetscPrintf(PETSC_COMM_SELF, " Point ID = %d \n", ii);CHKERRQ(ierr);     
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   sSupportSize = %d \n", sConeSize);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   Cell IDs = %d and %d \n", sCone[0], sCone[1]);
+      
+      
+      ierr = DMPlexGetConeSize(dmNozzle, sCone[0], &cConeSize); CHKERRQ(ierr);
+      ierr = DMPlexGetCone(dmNozzle, sCone[0], &cCone); CHKERRQ(ierr);
+      ierr = DMPlexGetConeOrientation(dmNozzle, sCone[0], &cConeOrient); CHKERRQ(ierr);
+      
+      ierr = PetscPrintf(PETSC_COMM_SELF, " sCone[0]= %d \n", sCone[0]);CHKERRQ(ierr);     
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   cConeSize = %d \n", cConeSize);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE IDs = %d, %d and %d \n", cCone[0], cCone[1], cCone[3]); 
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE Orients = %d, %d and %d \n", cConeOrient[0], cConeOrient[1], cConeOrient[2]);
+    }
+    
   
   {
     PetscContainer modelObj;
@@ -620,7 +674,7 @@ int main(int argc, char *argv[])
           //ierr = DMLabelSetValue(edgeLabel, cone[0], -1);CHKERRQ(ierr);
           ierr = DMLabelSetValue(edgeLabel, cone[1], eID);CHKERRQ(ierr);
           //ierr = DMLabelSetValue(edgeLabel, cone[2], -1);CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "   cone[1] = %d :: eID = %d \n", cone[1], eID);CHKERRQ(ierr);
+          ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[1] = %d :: eID = %d \n", cone[1], eID);CHKERRQ(ierr);
           
           //ierr = DMLabelSetValue(faceLabel, cellCntr+1, fID);CHKERRQ(ierr);
           //ierr = DMPlexGetConeSize(dmNozzle, cellCntr+1, &coneSize); CHKERRQ(ierr);

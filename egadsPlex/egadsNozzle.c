@@ -101,7 +101,7 @@ int main(int argc, char *argv[])
           for (l = 0; l < Nl; ++l) {
             ego loop = objs[l];
             int lsense = lsenses[l];
-  \
+  
             id   = EG_indexBodyTopo(body, loop);
             ierr = PetscPrintf(PETSC_COMM_SELF, "          LOOP ID: %d :: sense = %d\n", id, lsense);CHKERRQ(ierr);
     
@@ -123,14 +123,14 @@ int main(int argc, char *argv[])
               ierr = PetscPrintf(PETSC_COMM_SELF, "              Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
               
               /* Debug Trial */
-              double xyzCheck[18];
-              double tm[1];
-              tm[0] = range[0];
-              ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_SELF, "              tmin = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[0], xyzCheck[0], xyzCheck[1], xyzCheck[2]); 
-              tm[0] = range[1];
-              ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
-              ierr = PetscPrintf(PETSC_COMM_SELF, "              tmax = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[1], xyzCheck[0], xyzCheck[1], xyzCheck[2]);
+              //double xyzCheck[18];
+              //double tm[1];
+              //tm[0] = range[0];
+              //ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
+              //ierr = PetscPrintf(PETSC_COMM_SELF, "              tmin = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[0], xyzCheck[0], xyzCheck[1], xyzCheck[2]); 
+              //tm[0] = range[1];
+              //ierr = EG_evaluate(objs[e], tm, &xyzCheck); CHKERRQ(ierr);
+              //ierr = PetscPrintf(PETSC_COMM_SELF, "              tmax = %lf :: (x, y, z) = (%lf, %lf, %lf) \n", range[1], xyzCheck[0], xyzCheck[1], xyzCheck[2]);
     
               /* Get NODE info which associated with the current EDGE */
               ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -305,7 +305,7 @@ int main(int argc, char *argv[])
     ierr = PetscMalloc1(numVertices, &tParams); CHKERRQ(ierr);
     
     /* Load coordinate array */
-    // First vertics from CAD model
+    // First vertices from CAD model
     for (b = 0; b < nbodies; ++b) {
       ego body = bodies[b];
       int id, Nv, v;
@@ -390,9 +390,9 @@ int main(int argc, char *argv[])
     }
     
     // Define Cells  -- This is most likely not optimized   
-    ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
-    ierr = PetscPrintf(PETSC_COMM_SELF, "        DEFINING CELLS          \n");
-    ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
+    //ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
+    //ierr = PetscPrintf(PETSC_COMM_SELF, "        DEFINING CELLS          \n");
+    //ierr = PetscPrintf(PETSC_COMM_SELF, " -------------------------------\n");
     int cellCntr = 0;
     for (b = 0; b < nbodies; ++b){
       ego body = bodies[b];
@@ -411,7 +411,7 @@ int main(int argc, char *argv[])
         //  ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &esenses);CHKERRQ(ierr);
           
           int fid = EG_indexBodyTopo(body, face);CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "    FACE ID = %d \n", fid);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "    FACE ID = %d \n", fid);
           
           int midFaceID = Nvtotal + Netotal + fid-1;    // fid-1 was fid
           //ierr = PetscPrintf(PETSC_COMM_SELF, "    midFaceID = %d \n", midFaceID);
@@ -427,7 +427,7 @@ int main(int argc, char *argv[])
           for (int e = 0; e < Ne; ++e){
             ego edge = eobjs[e];
             int id   = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);  // ID of current edge
-            ierr = PetscPrintf(PETSC_COMM_SELF, "          EDGE ID = %d \n", id);
+            //ierr = PetscPrintf(PETSC_COMM_SELF, "          EDGE ID = %d \n", id);
             
             int midPntID = Nvtotal + id - 1;
             //ierr = PetscPrintf(PETSC_COMM_SELF, "    midPntID = %d \n", midPntID);
@@ -477,7 +477,7 @@ int main(int argc, char *argv[])
     ierr = DMGetCoordinatesLocal(dmNozzle, &coordsVec); CHKERRQ(ierr);
     PetscInt vecSize;
     ierr = VecGetSize(coordsVec, &vecSize); CHKERRQ(ierr);
-    ierr = PetscPrintf(PETSC_COMM_SELF, " vecSize = %d \n", vecSize); CHKERRQ(ierr);
+    //ierr = PetscPrintf(PETSC_COMM_SELF, " vecSize = %d \n", vecSize); CHKERRQ(ierr);
     
     int vecCntr = 1;
     for ( int ii = 0; ii < vecSize; ii+=3){
@@ -490,7 +490,7 @@ int main(int argc, char *argv[])
       //ierr = VecGetValues(coordsVec, ni, ix, &yy);
       ix[2] = ii+2;
       ierr = VecGetValues(coordsVec, ni, ix, &xx);    // was &zz
-      PetscPrintf(PETSC_COMM_SELF, " Node %d :: (x, y, z) = (%lf, %lf, %lf) \n", vecCntr, xx[0], xx[1], xx[2]); CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, " Node %d :: (x, y, z) = (%lf, %lf, %lf) \n", vecCntr, xx[0], xx[1], xx[2]); CHKERRQ(ierr);
       vecCntr = vecCntr + 1;
     }
     
@@ -505,19 +505,19 @@ int main(int argc, char *argv[])
       ierr = DMPlexGetSupport(dmNozzle, ii, &sCone); CHKERRQ(ierr);
       //ierr = DMPlexGetConeOrientation(dmNozzle, ii, &sConeOrient); CHKERRQ(ierr);
       
-      ierr = PetscPrintf(PETSC_COMM_SELF, " Point ID = %d \n", ii);CHKERRQ(ierr);     
-      ierr = PetscPrintf(PETSC_COMM_SELF, "   sSupportSize = %d \n", sConeSize);CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_SELF, "   Cell IDs = %d and %d \n", sCone[0], sCone[1]);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, " Point ID = %d \n", ii);CHKERRQ(ierr);     
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "   sSupportSize = %d \n", sConeSize);CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "   Cell IDs = %d and %d \n", sCone[0], sCone[1]);
       
       
       ierr = DMPlexGetConeSize(dmNozzle, sCone[0], &cConeSize); CHKERRQ(ierr);
       ierr = DMPlexGetCone(dmNozzle, sCone[0], &cCone); CHKERRQ(ierr);
       ierr = DMPlexGetConeOrientation(dmNozzle, sCone[0], &cConeOrient); CHKERRQ(ierr);
       
-      ierr = PetscPrintf(PETSC_COMM_SELF, " sCone[0]= %d \n", sCone[0]);CHKERRQ(ierr);     
-      ierr = PetscPrintf(PETSC_COMM_SELF, "   cConeSize = %d \n", cConeSize);CHKERRQ(ierr);
-      ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE IDs = %d, %d and %d \n", cCone[0], cCone[1], cCone[3]); 
-      ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE Orients = %d, %d and %d \n", cConeOrient[0], cConeOrient[1], cConeOrient[2]);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, " sCone[0]= %d \n", sCone[0]);CHKERRQ(ierr);     
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "   cConeSize = %d \n", cConeSize);CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE IDs = %d, %d and %d \n", cCone[0], cCone[1], cCone[3]); 
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "   EDGE Orients = %d, %d and %d \n", cConeOrient[0], cConeOrient[1], cConeOrient[2]);
     }
     
   
@@ -547,9 +547,12 @@ int main(int argc, char *argv[])
   for (int jj = 0; jj < 3; ++jj){
     ierr = DMPlexGetHeightStratum(dmNozzle, jj, &cStart, &cEnd);CHKERRQ(ierr);
     for (int ii = cStart; ii < cEnd; ++ii){
-      ierr = DMLabelSetValue(bodyLabel, ii, 0);CHKERRQ(ierr);    // Need to change this to be more flexible for multi-body parts
-      ierr = DMLabelSetValue(edgeLabel, ii, -1);CHKERRQ(ierr);
-      ierr = DMLabelSetValue(faceLabel, ii, -1);CHKERRQ(ierr);
+      ierr = DMLabelSetValue(bodyLabel, ii, 0); CHKERRQ(ierr);    // Need to change this to be more flexible for multi-body parts
+      ierr = DMLabelSetValue(edgeLabel, ii, -1); CHKERRQ(ierr);
+      ierr = DMLabelSetValue(faceLabel, ii, -1); CHKERRQ(ierr);
+      //ierr = DMLabelSetValue(tLabel, ii, NAN); CHKERRQ(ierr);
+      //ierr = DMLabelSetValue(uLabel, ii, NAN); CHKERRQ(ierr);
+      //ierr = DMLabelSetValue(vLabel, ii, NAN); CHKERRQ(ierr);
     }
   }
   
@@ -558,27 +561,27 @@ int main(int argc, char *argv[])
   int fStart, fEnd, eStart, eEnd, nStart, nEnd;
   
   ierr = DMPlexGetHeightStratum(dmNozzle, 0, &fStart, &fEnd);CHKERRQ(ierr);
-  fDAGlevel = cEnd - cStart;
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    fStart = %d \n", fStart);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    fEnd = %d \n", fEnd);
+  fDAGlevel = fEnd - fStart;
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    fStart = %d \n", fStart);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    fEnd = %d \n", fEnd);
   
   ierr = DMPlexGetHeightStratum(dmNozzle, 1, &eStart, &eEnd);CHKERRQ(ierr);
-  eDAGlevel = cEnd - cStart;
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    eStart = %d \n", eStart);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    eEnd = %d \n", eEnd);
+  eDAGlevel = eEnd - eStart;
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    eStart = %d \n", eStart);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    eEnd = %d \n", eEnd);
   
   ierr = DMPlexGetHeightStratum(dmNozzle, 2, &nStart, &nEnd);CHKERRQ(ierr);
-  nDAGlevel = cEnd - cStart;
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    nStart = %d \n", nStart);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    nEnd = %d \n", nEnd);
+  nDAGlevel = nEnd - nStart;
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    nStart = %d \n", nStart);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    nEnd = %d \n", nEnd);
   
   //nStart = fDAGlevel + eDAGlevel;
   
   // Debug
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    fDAGlevel = %d \n", fDAGlevel);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    eDAGlevel = %d \n", eDAGlevel);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    nDAGlevel = %d \n", nDAGlevel);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "       nStart = %d \n", nStart);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    fDAGlevel = %d \n", fDAGlevel);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    eDAGlevel = %d \n", eDAGlevel);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "    nDAGlevel = %d \n", nDAGlevel);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "       nStart = %d \n", nStart);
   
   
   /* Set Label Values to EGADS faces & edges */
@@ -624,6 +627,14 @@ int main(int argc, char *argv[])
       // Face Center Node
       ierr = DMLabelSetValue(faceLabel, nStart + Nvtotal + Netotal + fID - 1, fID);CHKERRQ(ierr);
       //ierr = DMLabelSetValue(faceLabel, Nftotal + Netotal + Nvtotal + Netotal + fID - 1, fID);CHKERRQ(ierr);
+      //double range[4], avgUV[2];
+      //int    *periodic;
+      //ierr = EG_getRange(face, &range, &periodic); CHKERRQ(ierr);
+      // 
+      //avgUV[0] = (range[0] + range[1]) / 2.;
+      //avgUV[1] = (range[2] + range[3]) / 2.;
+      //ierr = DMLabelSetValue(uLabel, nStart + Nvtotal + Netotal + fID - 1, avgUV[0]);CHKERRQ(ierr);
+      //ierr = DMLabelSetValue(vLabel, nStart + Nvtotal + Netotal + fID - 1, avgUV[1]);CHKERRQ(ierr); 
     }  
   }
   
@@ -650,31 +661,31 @@ int main(int argc, char *argv[])
           PetscInt coneSize = 0, coneSizeN = 0;
           PetscInt *cone = NULL, *coneN = NULL, *coneOrient = NULL;
           
-          ierr = PetscPrintf(PETSC_COMM_SELF, "   cell :: %d \n", cellCntr);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "   cell :: %d \n", cellCntr);CHKERRQ(ierr);
           ierr = DMLabelSetValue(faceLabel, cellCntr, fID);CHKERRQ(ierr);
           ierr = DMPlexGetConeSize(dmNozzle, cellCntr, &coneSize); CHKERRQ(ierr);
           ierr = DMPlexGetCone(dmNozzle, cellCntr, &cone); CHKERRQ(ierr);
           ierr = DMPlexGetConeOrientation(dmNozzle, cellCntr, &coneOrient); CHKERRQ(ierr);
           
-          ierr = PetscPrintf(PETSC_COMM_SELF, "     coneSize = %d \n", coneSize);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "     coneSize = %d \n", coneSize);CHKERRQ(ierr);
           
           for (int kk = 0; kk < coneSize; ++kk){
             ierr = DMLabelSetValue(faceLabel, cone[kk], fID);CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[%d] = %d :: fID = %d :: coneOrient = %d \n", kk, cone[kk], fID, coneOrient[kk]);CHKERRQ(ierr);
+            //ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[%d] = %d :: fID = %d :: coneOrient = %d \n", kk, cone[kk], fID, coneOrient[kk]);CHKERRQ(ierr);
             
             /* Stupid Add */
-            ierr = DMPlexGetConeSize(dmNozzle, cone[kk], &coneSizeN); CHKERRQ(ierr);
-            ierr = DMPlexGetCone(dmNozzle, cone[kk], &coneN); CHKERRQ(ierr);
-            for (int ll = 0; ll < coneSizeN; ++ll){
-              ierr = PetscPrintf(PETSC_COMM_SELF, "         coneN[%d] = %d \n", ll, coneN[ll]);CHKERRQ(ierr);
-            }
+            //ierr = DMPlexGetConeSize(dmNozzle, cone[kk], &coneSizeN); CHKERRQ(ierr);
+            //ierr = DMPlexGetCone(dmNozzle, cone[kk], &coneN); CHKERRQ(ierr);
+            //for (int ll = 0; ll < coneSizeN; ++ll){
+            //  ierr = PetscPrintf(PETSC_COMM_SELF, "         coneN[%d] = %d \n", ll, coneN[ll]);CHKERRQ(ierr);
+            //}
             /* Stupid Add End */
           }
           
           //ierr = DMLabelSetValue(edgeLabel, cone[0], -1);CHKERRQ(ierr);
           ierr = DMLabelSetValue(edgeLabel, cone[1], eID);CHKERRQ(ierr);
           //ierr = DMLabelSetValue(edgeLabel, cone[2], -1);CHKERRQ(ierr);
-          ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[1] = %d :: eID = %d \n", cone[1], eID);CHKERRQ(ierr);
+          //ierr = PetscPrintf(PETSC_COMM_SELF, "       cone[1] = %d :: eID = %d \n", cone[1], eID);CHKERRQ(ierr);
           
           //ierr = DMLabelSetValue(faceLabel, cellCntr+1, fID);CHKERRQ(ierr);
           //ierr = DMPlexGetConeSize(dmNozzle, cellCntr+1, &coneSize); CHKERRQ(ierr);

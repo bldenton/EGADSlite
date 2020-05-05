@@ -11,15 +11,20 @@
 
 #include "egads.h"
 
+#ifdef WIN32
+#define LONG long long
+#else
+#define LONG long
+#endif
 
 static void
 attrOut(int level, ego object)
 {
-  int               i, j, k, stat, nattr, atype, alen;
-  const int         *ints;
-  const double      *reals;
-  const char        *name, *str;
-  long unsigned int pointer;
+  int          i, j, k, stat, nattr, atype, alen;
+  const int    *ints;
+  const double *reals;
+  const char   *name, *str;
+  LONG         pointer;
 
   stat = EG_attributeNum(object, &nattr);
   if (stat  != EGADS_SUCCESS) return;
@@ -35,8 +40,12 @@ attrOut(int level, ego object)
     } else if ((atype == ATTRREAL) || (atype == ATTRCSYS)) {
       for (j = 0; j < alen; j++) printf("%lf ", reals[j]);
     } else if (atype == ATTRPTR) {
-      pointer = (long unsigned int) str;
+      pointer = (LONG) str;
+#ifdef WIN32
+      printf("%llx", pointer);
+#else
       printf("%lx", pointer);
+#endif
     } else {
       printf("%s", str);
     }
@@ -51,7 +60,7 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
   int    i, stat, oclass, mtype, nobjs, periodic, index, *senses, *ivec;
   ego    geom, *objs;
   double limits[4], bbox[6], *rvec;
-  long unsigned int pointer;
+  LONG   pointer;
   static char *classType[27] = {"CONTEXT", "TRANSFORM", "TESSELLATION",
                                 "NIL", "EMPTY", "REFERENCE", "", "",
                                 "", "", "PCURVE", "CURVE", "SURFACE", "", 
@@ -65,7 +74,7 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
                                "Toroidal", "Trimmed" , "Bezier", "BSpline", 
                                "Offset", "Conical", "Extrusion"};
   
-  pointer = (long unsigned int) object;
+  pointer = (LONG) object;
   oclass  = object->oclass;
   mtype   = object->mtype;
   
@@ -82,8 +91,13 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
     if (oclass != SURFACE) {
 
       for (i = 0; i < 2*level; i++) printf(" ");
+#ifdef WIN32
+      printf("%s %llx  range = %le %le  per = %d\n",
+             classType[oclass], pointer, limits[0], limits[1], periodic);
+#else
       printf("%s %lx  range = %le %le  per = %d\n", 
              classType[oclass], pointer, limits[0], limits[1], periodic);
+#endif
 
       for (i = 0; i < 2*level+2; i++) printf(" ");
       if (oclass == PCURVE) {
@@ -174,9 +188,15 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
     } else {
     
       for (i = 0; i < 2*level; i++) printf(" ");
+#ifdef WIN32
+      printf("%s %llx  Urange = %le %le  Vrange = %le %le  per = %d\n",
+             classType[oclass], pointer, limits[0], limits[1],
+                                         limits[2], limits[3], periodic);
+#else
       printf("%s %lx  Urange = %le %le  Vrange = %le %le  per = %d\n", 
              classType[oclass], pointer, limits[0], limits[1], 
                                          limits[2], limits[3], periodic);
+#endif
 
       for (i = 0; i < 2*level+2; i++) printf(" ");
       switch (mtype) {
@@ -243,11 +263,19 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
   index = 0;
   if ((oclass >= NODE) && (oclass < BODY))
     if (body != NULL) index = EG_indexBodyTopo(body, object);
+#ifdef WIN32
+  if (sense == 0) {
+    printf("%s %llx %d\n", classType[oclass], pointer, index);
+  } else {
+    printf("%s %llx %d  sense = %d\n", classType[oclass], pointer, index, sense);
+  }
+#else
   if (sense == 0) {
     printf("%s %lx %d\n", classType[oclass], pointer, index);
   } else {
     printf("%s %lx %d  sense = %d\n", classType[oclass], pointer, index, sense);
   }
+#endif
 
   /* topology*/
   if ((oclass >= NODE) && (oclass <= MODEL)) {

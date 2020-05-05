@@ -15,8 +15,8 @@
 
 
 #define EGADSMAJOR     1
-#define EGADSMINOR    17
-#define EGADSPROP     EGADSprop: Revision 1.17
+#define EGADSMINOR    18
+#define EGADSPROP     EGADSprop: Revision 1.18
 
 #define MAGIC      98789
 #define MTESSPARAM     2
@@ -87,11 +87,12 @@
 #define ATTRPTR       13
 
 
-/* SOLID BOOLEAN OPERATIONS */
+/* SOLID/GENERAL BOOLEAN OPERATIONS */
 
 #define SUBTRACTION    1
 #define INTERSECTION   2
 #define FUSION         3
+#define SPLITTER       4
 
 
 /* SOLID BODY TYPES */
@@ -133,8 +134,17 @@ typedef struct {
 
 
 typedef struct {
-  int     nattrs;               /* number of attributes */
-  egAttr *attrs;                /* the attributes */
+  char *root;                   /* root name for the sequenced attribute */
+  int  nSeq;                    /* number in the sequence (2 and on) */
+  int  *attrSeq;                /* vector of ordered sequenced attributes */
+} egAttrSeq;
+
+
+typedef struct {
+  int       nattrs;             /* number of attributes */
+  egAttr    *attrs;             /* the attributes */
+  int       nseqs;              /* number of sequenced attributes */
+  egAttrSeq *seqs;              /* the sequenced attributes */
 } egAttrs;
 
 
@@ -155,6 +165,8 @@ typedef struct egObject* ego;
 typedef struct {
   int      outLevel;		/* output level for messages
                                    0 none, 1 minimal, 2 verbose, 3 debug */
+  int      fixedKnots;          /* always use evenly spaced knots */
+  int      fullAttrs;           /* persist Edge and Node Attributes */
   double   tess[MTESSPARAM];    /* global tessellation parameters */
   char     **signature;
   void     *usrPtr;

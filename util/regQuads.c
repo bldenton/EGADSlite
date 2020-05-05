@@ -10,6 +10,16 @@
  #define DEBUG2
 #endif
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
 
 #ifdef _MSC_VER
 #if _MSC_VER <= 1700
@@ -44,14 +54,14 @@ double erf(double x)
 #endif
 
 
-extern void
+__HOST_AND_DEVICE__ extern void
 EG_getSidepoint(const ego face, double fac, const double *uvm,
                 const double *uvp, /*@null@*/ const double *uvl,
                 /*@null@*/ const double *uvr, double *uv);
 
 
 /* BASE-LEVEL FUNCTION */
-static int inList(int n, int *list, int p)
+__HOST_AND_DEVICE__ static int inList(int n, int *list, int p)
 {
   int i;
 
@@ -63,7 +73,7 @@ static int inList(int n, int *list, int p)
 
 
 /* IO FUNCTIONS */
-static void meshCount(meshMap *qm, int *nI, int *nV, int *nQ)
+__HOST_AND_DEVICE__ static void meshCount(meshMap *qm, int *nI, int *nV, int *nQ)
 {
   int i, qSum, vSum = 0, vSum2 = 0;
 
@@ -103,7 +113,7 @@ static void meshStats(meshMap *qm, int sweep)
     if (qm->vType[i] == -2) continue;
     mv = MAX(mv, qm->valence[i][1]);
   }
-  valptr = EG_alloc(2 * (mv + 1) * sizeof(int));
+  valptr = (int*)EG_alloc(2 * (mv + 1) * sizeof(int));
   if (valptr == NULL) {
     fclose(fout);
     printf(" meshStats VALENCE POINTER IS NULL!!\n");
@@ -285,7 +295,7 @@ static void wvsData(meshMap *qm, /*@null@*/ char *buffer)
 /* DEBUG FUNCTIONS */
 #ifdef DEBUG
 
-static void printQuad (meshMap *qm, int id)
+__HOST_AND_DEVICE__ static void printQuad (meshMap *qm, int id)
 {
   int    i, v = 0 , val = 0;
   double uv[3], uva[2], xyz[18];
@@ -326,7 +336,7 @@ static void printQuad (meshMap *qm, int id)
 }
 
 
-static void printQuadGroup(meshMap *qm, quadGroup qg)
+__HOST_AND_DEVICE__ static void printQuadGroup(meshMap *qm, quadGroup qg)
 {
   int i;
 
@@ -349,7 +359,7 @@ static void printQuadGroup(meshMap *qm, quadGroup qg)
 }
 
 
-static int checkMesh(meshMap *qm)
+__HOST_AND_DEVICE__ static int checkMesh(meshMap *qm)
 {
   int i, j, k, quad, val, v1, v2;
 
@@ -399,7 +409,7 @@ static int checkMesh(meshMap *qm)
               }
           }
           if (val == -1) {
-              fprintf (stderr, " checkMesh quads %d and %d don't point at each other\n",
+              printf (" checkMesh quads %d and %d don't point at each other\n",
                        i +1, v1 + 1);
               printQuad(qm, i + 1);
               printQuad(qm,v1 + 1);
@@ -412,7 +422,7 @@ static int checkMesh(meshMap *qm)
 #endif
 
 
-static void updateVertex(meshMap *qm, int vID, double *uv)
+__HOST_AND_DEVICE__ static void updateVertex(meshMap *qm, int vID, double *uv)
 {
   double eval[18];
 
@@ -425,7 +435,9 @@ static void updateVertex(meshMap *qm, int vID, double *uv)
   qm->xyzs[3 * (vID - 1) + 2] = eval[2];
 }
 
-static int EG_regBoundQuad(meshMap *qm, int qID) {
+
+__HOST_AND_DEVICE__ static int EG_regBoundQuad(meshMap *qm, int qID)
+{
   int iA, iB, iC, iD, vA, vB, vC, vD;
 
   if (qm->regBd == 0) return -1;
@@ -450,7 +462,8 @@ static int EG_regBoundQuad(meshMap *qm, int qID) {
 }
 
 
-static int EG_adjQtoPair(meshMap *qm, int qID, int v1, int v2, int *adj)
+__HOST_AND_DEVICE__ static int
+EG_adjQtoPair(meshMap *qm, int qID, int v1, int v2, int *adj)
 {
   int i, aux = -1;
 
@@ -468,7 +481,7 @@ static int EG_adjQtoPair(meshMap *qm, int qID, int v1, int v2, int *adj)
 }
 
 
-static int EG_quadVertIdx(meshMap *qm, int q, int v)
+__HOST_AND_DEVICE__ static int EG_quadVertIdx(meshMap *qm, int q, int v)
 {
   int i = 0;
 
@@ -478,7 +491,7 @@ static int EG_quadVertIdx(meshMap *qm, int q, int v)
 }
 
 
-static void EG_freeStar(vStar **star)
+__HOST_AND_DEVICE__ static void EG_freeStar(vStar **star)
 {
   if ((*star) == NULL) return;
   EG_free((*star)->verts);
@@ -493,7 +506,7 @@ static void EG_freeStar(vStar **star)
 }
 
 
-static int EG_buildStar(meshMap *qm, vStar **star, int vID)
+__HOST_AND_DEVICE__ static int EG_buildStar(meshMap *qm, vStar **star, int vID)
 {
   int i = 0, id0 = -1, q = 0, auxV, auxQ, v = 0, quadID, prevQuad,
       it = 0, it2 = 0, adj[2], *vertex = NULL, *quads = NULL;
@@ -618,7 +631,7 @@ static int EG_buildStar(meshMap *qm, vStar **star, int vID)
 }
 
 
-static int EG_setValence(meshMap *qm, int vID)
+__HOST_AND_DEVICE__ static int EG_setValence(meshMap *qm, int vID)
 {
   int   i, i4, ip, in, *iv = NULL, j, si, n;
 
@@ -673,7 +686,8 @@ static int EG_setValence(meshMap *qm, int vID)
 }
 
 
-static int EG_backupQuads(meshMap *qm, int *nq, int *qlist, Quad **quad)
+__HOST_AND_DEVICE__ static int
+EG_backupQuads(meshMap *qm, int *nq, int *qlist, Quad **quad)
 {
   int   i, j, q, v, qcount, *qaux = NULL, k, add = 0;
 
@@ -718,7 +732,7 @@ static int EG_backupQuads(meshMap *qm, int *nq, int *qlist, Quad **quad)
 }
 
 
-static int EG_restoreQuads(meshMap *qm, Quad *quad, int nq)
+__HOST_AND_DEVICE__ static int EG_restoreQuads(meshMap *qm, Quad *quad, int nq)
 {
   int i, j, *vid = NULL, k, stat;
 
@@ -750,7 +764,8 @@ static int EG_restoreQuads(meshMap *qm, Quad *quad, int nq)
 }
 
 
-static void EG_centroid(meshMap *qm, int n, int *list, double *uvOUT, int usequv)
+__HOST_AND_DEVICE__ static void
+EG_centroid(meshMap *qm, int n, int *list, double *uvOUT, int usequv)
 {
   int i, sumuv = 0,  sumxyz = 0;
   double  xyz0[18], xyz1[18], uv[2];
@@ -817,8 +832,8 @@ static void EG_centroid(meshMap *qm, int n, int *list, double *uvOUT, int usequv
 }
 
 
-static int EG_angAtNPlane(meshMap *qm, int vC, int v1, int v2,
-                          double *normal, double *angle)
+__HOST_AND_DEVICE__ static int
+EG_angAtNPlane(meshMap *qm, int vC, int v1, int v2, double *normal, double *angle)
 {
   int    stat, sing = 0, t1, t2, tc;
   double cross[3], pro1[3], pro2[3], r[2], xyz[18], v01[3],
@@ -939,7 +954,8 @@ static int EG_angAtNPlane(meshMap *qm, int vC, int v1, int v2,
 }
 
 
-static int EG_angAtBdVert(meshMap *qm, int v, int *links, double *size)
+__HOST_AND_DEVICE__ static int
+EG_angAtBdVert(meshMap *qm, int v, int *links, double *size)
 {
   int i, j, k;
   double dist = 0.0, normal[6];
@@ -983,7 +999,7 @@ static int EG_angAtBdVert(meshMap *qm, int v, int *links, double *size)
 }
 
 
-static int EG_nValenceCount(meshMap *qm, int q, int n)
+__HOST_AND_DEVICE__ static int EG_nValenceCount(meshMap *qm, int q, int n)
 {
   int i, count, val;
 
@@ -1001,7 +1017,8 @@ static int EG_nValenceCount(meshMap *qm, int q, int n)
 }
 
 
-static double EG_quadSize(meshMap *qm, int qID, /*@null@*/ double *tris)
+__HOST_AND_DEVICE__ static double
+EG_quadSize(meshMap *qm, int qID, /*@null@*/ double *tris)
 {
   int iA, iB, iC, iD;
   double cross[3], vAB[3], vAC[3], vAD[3], qs[4];
@@ -1048,6 +1065,7 @@ static double EG_quadSize(meshMap *qm, int qID, /*@null@*/ double *tris)
   return MIN(fabs(qs[0] + qs[1]), fabs(qs[2] + qs[3]));
 }
 
+
 /*
  * Returns <0 EGADS_ERROR
  * = 0         (QA0) area is good
@@ -1058,7 +1076,7 @@ static double EG_quadSize(meshMap *qm, int qID, /*@null@*/ double *tris)
  * ratio = ABC / ACD (ideal =1 so triangle split is equal forming parallelogram)
  */
 
- static int EG_vertexArea(meshMap *qm, int vID)
+__HOST_AND_DEVICE__ static int EG_vertexArea(meshMap *qm, int vID)
   {
    int s, i, k, k1, vA, vB, vC, vD, count, doublet, qV[4], ori[4], bv[4], lr[2];
    int selfint = 1, cw, s1, s2, totArea = 0, ta, tb, td, iv = -1, bvp;
@@ -1301,7 +1319,9 @@ static double EG_quadSize(meshMap *qm, int qID, /*@null@*/ double *tris)
  }
 
 
-static int EG_placeVertex(meshMap *qm, int vID, int pass, int full) {
+__HOST_AND_DEVICE__ static int
+EG_placeVertex(meshMap *qm, int vID, int pass, int full)
+{
   int q, v, j, i, k, *vl = NULL, ta[2], v1, v2, v3, corner, vla = 0,
       la = -1, lb, nt, block = 0, round, doublet = 0, bt = -1, i0;
   double uv[4], res[6], angopt =0.0, angpen, errbd, ptol = 0.25, auxd, normal[6];
@@ -1719,7 +1739,8 @@ printf(" DOMINANT ANGLE %lf MAX ANGLE %lf\n", errbd, auxd);
   return ta[0];
 }
 
-int EG_createMeshMap(bodyQuad *bodydata)
+
+__HOST_AND_DEVICE__ int EG_createMeshMap(bodyQuad *bodydata)
 {
   int          f, stat = 0, j, q, k, kk, kOK, len, iA, iB, iC;
   int          ntri, nquad, e4[4] ;
@@ -2008,7 +2029,8 @@ int EG_createMeshMap(bodyQuad *bodydata)
 }
 
 
-static int EG_makeValidMesh(meshMap *qm, int nP, /*@null@*/ int *pList, int fullReg)
+__HOST_AND_DEVICE__ static int
+EG_makeValidMesh(meshMap *qm, int nP, /*@null@*/ int *pList, int fullReg)
 {
   int    si, v, q, i, ii, j, k, kv, it = 0, itMax, sum = 0, *qlist = NULL, kq = 0;
   int    stat = EGADS_SUCCESS, *mv = NULL, *area = NULL, fr, pass;
@@ -2248,7 +2270,11 @@ static int EG_makeValidMesh(meshMap *qm, int nP, /*@null@*/ int *pList, int full
 #ifdef DEBUG2
   printf(" EG_makeValidMesh stat %d\n", stat);
   gnuData(qm, NULL);
+#ifndef __CUDA_ARCH__
   if (qm->plotcount > 50000) fprintf(stderr," SOMHI !\n");
+#else
+  if (qm->plotcount > 50000) printf(" SOMHI !\n");
+#endif
 #endif
 #ifdef REPORT
   if ( fullReg > 0 )
@@ -2263,7 +2289,8 @@ static int EG_makeValidMesh(meshMap *qm, int nP, /*@null@*/ int *pList, int full
 }
 
 
-static int EG_createQuadGroup(meshMap *qm, quadGroup *qg, int q0, int q1)
+__HOST_AND_DEVICE__ static int
+EG_createQuadGroup(meshMap *qm, quadGroup *qg, int q0, int q1)
 {
   int i, j, k, ids[8], piv = 0, aux, vaux[6], vc[4], c1 = 0, c2 = 0;
 
@@ -2356,7 +2383,7 @@ static int EG_createQuadGroup(meshMap *qm, quadGroup *qg, int q0, int q1)
 
 
 /* Assuming qID is collapsing through v */
-static int EG_validCollapse(meshMap *qm, int qID, int v)
+__HOST_AND_DEVICE__ static int EG_validCollapse(meshMap *qm, int qID, int v)
 {
   int j, k, kk, id, link[2], aux, aux2, type, val;
   if (v <= 0 || v > qm->totV) return EGADS_INDEXERR;
@@ -2424,7 +2451,7 @@ static int EG_validCollapse(meshMap *qm, int qID, int v)
 
 
 /* Assuming we will break link v1-v2 */
-static int EG_validSwap(meshMap *qm, int v1, int v2)
+__HOST_AND_DEVICE__ static int EG_validSwap(meshMap *qm, int v1, int v2)
 {
   int i, vs[2], type, val;
 
@@ -2438,8 +2465,8 @@ static int EG_validSwap(meshMap *qm, int v1, int v2)
 }
 
 
-static int EG_swappingOperation(meshMap *qm, quadGroup qg, int swap,
-                                int *activity)
+__HOST_AND_DEVICE__ static int
+EG_swappingOperation(meshMap *qm, quadGroup qg, int swap, int *activity)
 {
   int   nq, stat, i0, i1, i, j, k, adj;
   int   *list, qID[2], adjQmap[6];
@@ -2512,8 +2539,13 @@ static int EG_swappingOperation(meshMap *qm, quadGroup qg, int swap,
   for (i = 0; i < i0; i++) {
       stat = EG_setValence(qm, list[i]);
       if (stat != EGADS_SUCCESS) {
+#ifndef __CUDA_ARCH__
           fprintf(stderr," EG_swappingOperation :: ERROR SETTING VALENCE %d \n ",
                   list[i]);
+#else
+          printf(" EG_swappingOperation :: ERROR SETTING VALENCE %d \n ",
+                 list[i]);
+#endif
           EG_free(list);
           return stat;
       }
@@ -2580,8 +2612,8 @@ static int EG_swappingOperation(meshMap *qm, quadGroup qg, int swap,
 }
 
 
-static int EG_splittingOperation(meshMap *qm, int vC, int vL, int vR,
-                                 int *activity)
+__HOST_AND_DEVICE__ static int
+EG_splittingOperation(meshMap *qm, int vC, int vL, int vR, int *activity)
 {
   int   qIdx[4], modQ[4], verts[4], adj[2], poly[4], q, newQ, i, j, stat;
   int   id0 = -1, id1 = -1, dist, links[4], vals[4], addedV = 0, nq, si, *list = NULL, n;
@@ -2712,8 +2744,13 @@ static int EG_splittingOperation(meshMap *qm, int vC, int vL, int vR,
   for (i = 0 ; i < n; i++) {
       stat = EG_setValence(qm, list[i]);
       if (stat != EGADS_SUCCESS) {
+#ifndef __CUDA_ARCH__
           fprintf(stderr," EG_splittingOperation :: ERROR SETTING VALENCE %d \n ",
                   poly[i]);
+#else
+          printf(" EG_splittingOperation :: ERROR SETTING VALENCE %d \n ",
+                 poly[i]);
+#endif
           EG_free(quad);
           EG_free(list);
           return stat;
@@ -2722,8 +2759,13 @@ static int EG_splittingOperation(meshMap *qm, int vC, int vL, int vR,
   EG_free(list);
   si = poly[3] - 1;
   if (qm->star[si] == NULL) {
+#ifndef __CUDA_ARCH__
       fprintf(stderr," EG_splittingOperation star for new vertex %d is NULL\n",
               poly[3]);
+#else
+      printf(" EG_splittingOperation star for new vertex %d is NULL\n",
+             poly[3]);
+#endif
       return EGADS_MALLOC;
   }
   EG_centroid(qm, qm->star[si]->nQ, &qm->valence[si][3], uv, 0);
@@ -2800,7 +2842,8 @@ static int EG_splittingOperation(meshMap *qm, int vC, int vL, int vR,
 }
 
 
-static int EG_mergeVertices(meshMap *qm, int qC, int centre, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_mergeVertices(meshMap *qm, int qC, int centre, int *activity)
 {
   int    stat, i, j, q, adjq, adjPair[2], auxQ, oldQ[8], nq, doublet = 0;
   int    piv[4] = {1, 0, 3, 2}, n, *list = NULL;
@@ -3004,7 +3047,7 @@ static int EG_mergeVertices(meshMap *qm, int qC, int centre, int *activity)
 }
 
 
-static int EG_swap(meshMap *qm, int qIn, int *activity)
+__HOST_AND_DEVICE__ static int EG_swap(meshMap *qm, int qIn, int *activity)
 {
   int       stat, q, swap = 0, bq1 = 0, bq2 = 0, corner = 0;
   quadGroup qg;
@@ -3102,7 +3145,8 @@ static int EG_swap(meshMap *qm, int qIn, int *activity)
 }
 
 
-static int EG_doubleSwap(meshMap *qm, quadGroup qg, int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_doubleSwap(meshMap *qm, quadGroup qg, int forcing, int *activity)
 {
   int piv5 = -1, piv3 = -1, q5, i, adjPiv5, stat, adj[2], swap = 0, vopp3;
 
@@ -3187,7 +3231,8 @@ static int EG_doubleSwap(meshMap *qm, quadGroup qg, int forcing, int *activity)
 }
 
 
-static int EG_collapse(meshMap *qm, int qID, int *activity, int forcing, int cID)
+__HOST_AND_DEVICE__ static int
+EG_collapse(meshMap *qm, int qID, int *activity, int forcing, int cID)
 {
   int i, vC, vO, v5[5], v3[5], qb[4], stat = EGADS_SUCCESS, i3 = 0,
       val[2], links[3], act = 0;
@@ -3293,7 +3338,8 @@ static int EG_collapse(meshMap *qm, int qID, int *activity, int forcing, int cID
 }
 
 
-static int EG_swapCollapse(meshMap *qm, quadGroup qg, int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_swapCollapse(meshMap *qm, quadGroup qg, int forcing, int *activity)
 {
   int  stat, i, i3 = -1, q5, qC, v03, vL5adj, vOpp3, swap = 0, adj[2], v0;
 
@@ -3433,7 +3479,8 @@ static int EG_swapCollapse(meshMap *qm, quadGroup qg, int forcing, int *activity
 }
 
 
-static int EG_doubleCollapse(meshMap *qm, quadGroup qg, int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_doubleCollapse(meshMap *qm, quadGroup qg, int forcing, int *activity)
 {
   int i, stat, i3, i5, q3;
 
@@ -3501,7 +3548,8 @@ static int EG_doubleCollapse(meshMap *qm, quadGroup qg, int forcing, int *activi
 }
 
 
-static int EG_swapDoubleCollapse(meshMap *qm, quadGroup qg, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_swapDoubleCollapse(meshMap *qm, quadGroup qg, int *activity)
 {
   int k, swap = 1, id, j, stat, v0;
 
@@ -3587,7 +3635,7 @@ static int EG_swapDoubleCollapse(meshMap *qm, quadGroup qg, int *activity)
 }
 
 
-static int EG_split(meshMap *qm, int qID, int *activity)
+__HOST_AND_DEVICE__ static int EG_split(meshMap *qm, int qID, int *activity)
 {
   int si, v, q, id0 = 0, i, stat, dist = 0, validSplit = 0;
   int poly[3], val[3], id6[2], links[4];
@@ -3700,7 +3748,8 @@ static int EG_split(meshMap *qm, int qID, int *activity)
 }
 
 
-static int EG_doubleSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_doubleSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
 {
   int i, j, stat, piv[2] = {1, 5};
   *activity = 0;
@@ -3747,7 +3796,8 @@ static int EG_doubleSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
 }
 
 
-static int EG_swapDoubleSplit(meshMap *qm, quadGroup qg, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_swapDoubleSplit(meshMap *qm, quadGroup qg, int *activity)
 {
   int       i5, q, i55, i3, val3, i0, v30[2], i,  stat, adj[2], q0[2], v0;
   quadGroup sqg;
@@ -3839,7 +3889,8 @@ static int EG_swapDoubleSplit(meshMap *qm, quadGroup qg, int *activity)
 }
 
 
-static int EG_swapSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_swapSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
 {
   int   stat = EGADS_SUCCESS, i, j, i3 = -1, i5 = -1, v3opp = -1,
       q5, vL5, vL5adj, swap = 0, adj[2], v0, si;
@@ -3959,7 +4010,8 @@ static int EG_swapSplit(meshMap *qm, quadGroup qg, int forcing, int *activity)
 }
 
 
-static int EG_basicOperation (meshMap *qm, int qID, int type, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_basicOperation(meshMap *qm, int qID, int type, int *activity)
 {
   int stat = EGADS_SUCCESS;
   switch (type) {
@@ -3978,8 +4030,9 @@ static int EG_basicOperation (meshMap *qm, int qID, int type, int *activity)
 }
 
 
-static int EG_composeOperation(meshMap *qm, quadGroup qg, int type, int forcing,
-                               int *activity)
+__HOST_AND_DEVICE__ static int
+EG_composeOperation(meshMap *qm, quadGroup qg, int type, int forcing,
+                    int *activity)
 {
   int stat = EGADS_SUCCESS;
   switch (type) {
@@ -4009,8 +4062,9 @@ static int EG_composeOperation(meshMap *qm, quadGroup qg, int type, int forcing,
 }
 
 
-static int EG_cleanQuad(meshMap *qm, int qID, int useAdj, int transfer,
-                        int forcing, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_cleanQuad(meshMap *qm, int qID, int useAdj, int transfer, int forcing,
+             int *activity)
 {
   int stat, i, q, qadj, act = 0, aux;
   int opBasic[3] = {COLLAPSE, SWAP, SPLIT};
@@ -4107,8 +4161,9 @@ static int EG_cleanQuad(meshMap *qm, int qID, int useAdj, int transfer,
 }
 
 
-static int EG_transferValences(meshMap *qm, int *qID, int try5533,
-                               int *transfering, int *activity)
+__HOST_AND_DEVICE__ static int
+EG_transferValences(meshMap *qm, int *qID, int try5533, int *transfering,
+                    int *activity)
 {
   int       i, j, q, adj, swap = 0, stat, min, qAux[2], bdq, qv35;
   quadGroup qg;
@@ -4259,7 +4314,7 @@ static int EG_transferValences(meshMap *qm, int *qID, int try5533,
 }
 
 
-void EG_destroyMeshMap(bodyQuad *bodydata)
+__HOST_AND_DEVICE__ void EG_destroyMeshMap(bodyQuad *bodydata)
 {
   int i, j;
 
@@ -4292,7 +4347,7 @@ void EG_destroyMeshMap(bodyQuad *bodydata)
 }
 
 
-static int resizeQm(meshMap *qm)
+__HOST_AND_DEVICE__ static int resizeQm(meshMap *qm)
 {
   int    stat = EGADS_SUCCESS, nV, vRem, nQ, qRem, i, j, k;
   int    *vpiv = NULL, *qpiv = NULL;
@@ -4387,8 +4442,8 @@ static int resizeQm(meshMap *qm)
 }
 
 
-static int EG_cleanNeighborhood(meshMap *qm, int qID,  int transfer,
-                                int *activity)
+__HOST_AND_DEVICE__ static int
+EG_cleanNeighborhood(meshMap *qm, int qID,  int transfer, int *activity)
 {
   int si, i, act, stat = 0, count = 0, j, v[4];
 
@@ -4423,7 +4478,7 @@ static int EG_cleanNeighborhood(meshMap *qm, int qID,  int transfer,
 
 
 #ifdef REPORT
-static void meshProperties (meshMap *qm, int sweep )
+__HOST_AND_DEVICE__ static void meshProperties(meshMap *qm, int sweep)
 {
   int j, k, i, v[4], quarts[8], n, Nx = 6;
   double minT, maxT, minR, maxR, uv0[2], uv1[2], uv3[2], p[18];
@@ -4565,7 +4620,7 @@ static void meshProperties (meshMap *qm, int sweep )
 #endif
 
 
-int EG_meshRegularization(meshMap *qm)
+__HOST_AND_DEVICE__ int EG_meshRegularization(meshMap *qm)
 {
   int    i, j, k, s, q, stat = EGADS_SUCCESS,  ni = 0, n0 = 0;
   int    ITMAX, it = 0, activity = 0, totActivity = 0, loopact;
@@ -4736,14 +4791,22 @@ break;
       if (it < ITMAX / 2 && sq == qm->totQ) sq = 0 ;
   }
 #ifdef REPORT
+#ifndef __CUDA_ARCH__
   fprintf(stderr, "RATIO MIN MAX AREA %lf %lf  av %lf \n",
           minArea ,maxArea , avArea);
+#else
+  printf("RATIO MIN MAX AREA %lf %lf  av %lf \n", minArea ,maxArea , avArea);
+#endif
 #endif
   qm->minArea = minArea0;
   qm->maxArea = maxArea0;
   qm->avArea  =  avArea0;
 #ifdef REPORT
+#ifndef __CUDA_ARCH__
   fprintf(stderr, " MIN MAX AREA %lf %lf AVERAGE %lf RATIO MIN / AV %lf \n",
+#else
+  printf(" MIN MAX AREA %lf %lf AVERAGE %lf RATIO MIN / AV %lf \n",
+#endif
   qm ->minArea ,qm -> maxArea ,qm ->avArea, qm->minArea/qm->avArea);
 #endif
   if ( qm ->minArea / qm -> avArea > 0.5 ) {
@@ -4792,9 +4855,15 @@ break;
       qm->vInv = NULL;
   }
   if (k == 1) {
+#ifndef __CUDA_ARCH__
       fprintf(stderr,"After Preprocessing face %d there are still %d invalid quads from the original tessellation "
               "that couldn't be eliminated. Let's see what happens....!!!! \n ",
               qm->fID, k);
+#else
+      printf("After Preprocessing face %d there are still %d invalid quads from the original tessellation "
+             "that couldn't be eliminated. Let's see what happens....!!!! \n ",
+             qm->fID, k);
+#endif
   }
   stat = resizeQm(qm);
   if (stat != EGADS_SUCCESS) {
@@ -5055,7 +5124,7 @@ break;
 }
 
 
-int EG_makeQuadTess(bodyQuad bodydata, ego *quadTess)
+__HOST_AND_DEVICE__ int EG_makeQuadTess(bodyQuad bodydata, ego *quadTess)
 {
   int          i, j, npts, nt, stat, outLevel, nedges, mQ, *tris;
   const int    *ptype, *pindex, *trs, *trc;
@@ -5372,8 +5441,13 @@ int main (int argc, char *argv[])
             if (FACECHOICE >= 0) f = FACECHOICE - 1;
             stat      = EG_meshRegularization(bodydata[iBody].qm[f]);
             if (stat != EGADS_SUCCESS) {
+#ifndef __CUDA_ARCH__
                 fprintf(stderr, " EG_meshRegularization face %d / %d = %d DEACTIVATE !!!\n ",
                         f + 1, bodydata[iBody].nfaces,  stat);
+#else
+                printf(" EG_meshRegularization face %d / %d = %d DEACTIVATE !!!\n ",
+                        f + 1, bodydata[iBody].nfaces,  stat);
+#endif
                 bodydata[iBody].qm[f]->fID = 0;
             }
             if (FACECHOICE >= 0) break;
@@ -5382,12 +5456,20 @@ int main (int argc, char *argv[])
       if (FACECHOICE == -1) {
           stat = EG_makeQuadTess(bodydata[iBody], &newTess);
           if (stat != EGADS_SUCCESS) {
+#ifndef __CUDA_ARCH__
               fprintf(stderr, " EG_makeQuadTess = %d!\n ", stat);
+#else
+              printf(" EG_makeQuadTess = %d!\n ", stat);
+#endif
               goto cleanup;
           }
           stat = EG_deleteObject(newTess);
           if (stat != EGADS_SUCCESS) {
+#ifndef __CUDA_ARCH__
               fprintf(stderr, " EG_deleteObject = %d!\n ", stat);
+#else
+              printf(" EG_deleteObject = %d!\n ", stat);
+#endif
               goto cleanup;
           }
       }
@@ -5406,10 +5488,13 @@ int main (int argc, char *argv[])
   time    = (double) total_t / CLOCKS_PER_SEC;
   min     = floor(time) / 60;
   frac    = time -  min * 60;
+#ifndef __CUDA_ARCH__
   fprintf(stderr, "Total time taken by CPU: %d minutes and %f seconds\n",
           min, frac);
+#else
   printf("Total time taken by CPU: %d minutes and %f seconds\n",
          min, frac);
+#endif
 #endif
   EG_deleteObject(model);
   EG_close(context);

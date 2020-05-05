@@ -12,7 +12,7 @@ ODIR  = .
 !ENDIF
 
 OBJS  = liteBase.obj liteMemory.obj liteGeom.obj liteTopo.obj liteAttrs.obj \
-	liteImport.obj
+	liteImport.obj liteString.obj
 
 !IFDEF ESP_BLOC
 default:	start $(LDIR)\egadslite.dll $(LDIR)\egadslitestatic.lib end
@@ -51,7 +51,7 @@ $(LDIR)\egadslite.dll:	$(OBJS) liteTess.obj liteTris.obj liteQuads.obj \
 
 $(LDIR)/egadslitestatic.lib:	$(OBJS) liteTess.obj liteTris.obj \
 				liteQuads.obj liteTessInp.obj emp.obj \
-				evaLite.obj ratLite.obj liteRegQuads.obj
+				evaLite.obj ratLite.obj liteRegQuads.obj 
 	-del $(LDIR)\egadslitestatic.lib
 	lib /out:$(LDIR)\egadslitestatic.lib $(OBJS) liteTess.obj liteTris.obj \
 		liteQuads.obj liteTessInp.obj egadsRobust.obj emp.obj \
@@ -61,7 +61,7 @@ egadslite.res:	egadslite.rc
 	rc egadslite
 
 $(OBJS):	$(INCD)\egadsErrors.h $(EDIR)\egadsInternals.h \
-		$(INCD)\egadsTypes.h liteClasses.h $(OBJS:.obj=.c)
+		$(INCD)\egadsTypes.h liteClasses.h liteDevice.h $(OBJS:.obj=.c)
 	cl /c $(COPTS) $(DEFINE) $(XDEF) /I. /I$(INCD) /I$(EDIR) $*.c
 
 !IFDEF ESP_BLOC

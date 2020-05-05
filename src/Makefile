@@ -18,8 +18,8 @@ endif
 
 VPATH = $(ODIR)
 
-OBJS  = liteBase.o liteMemory.o liteGeom.o liteTopo.o liteAttrs.o liteImport.o
-
+OBJS  = liteBase.o liteMemory.o liteGeom.o liteTopo.o liteAttrs.o liteImport.o \
+	liteString.o
 
 ifeq ($(ESP_ARCH),DARWIN64)
 default:	$(LDIR)/libegadslite.dylib $(LDIR)/libegadslitestatic.a
@@ -45,8 +45,7 @@ $(LDIR)/libegadslite.dylib:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
 	(cd $(ODIR); $(CC) -dynamiclib -o $(LDIR)/libegadslite.dylib \
                 $(OBJS) liteTess.o liteTris.o liteQuads.o liteTessInp.o \
 		egadsRobust.o emp.o evaLite.o ratLite.o liteRegQuads.o \
-		-undefined error \
-                -install_name '@rpath/libegadslite.dylib' \
+		-undefined error -install_name '@rpath/libegadslite.dylib' \
                 -current_version $(EGREV) )
 
 $(LDIR)/libegadslitestatic.a:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
@@ -56,10 +55,10 @@ $(LDIR)/libegadslitestatic.a:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
 	rm $(LDIR)/libegadslitestatic.a
 	(cd $(ODIR); ar $(LOPTS) $(LDIR)/libegadslitestatic.a $(OBJS) \
                 liteTess.o liteTris.o liteQuads.o liteTessInp.o egadsRobust.o \
-		emp.o evaLite.o ratLite.o liteRegQuads.o; $(RANLB) )
+		emp.o evaLite.o ratLite.o liteRegQuads.o ; $(RANLB) )
 
 $(OBJS): %.o:	%.c ../include/egadsErrors.h ../src/egadsInternals.h \
-		../include/egadsTypes.h liteClasses.h
+		../include/egadsTypes.h liteClasses.h liteDevice.h
 	$(CC) -c $(COPTS) $(DEFANL) $(DEFINE) -I../include -I. -I../src $< \
 		-o $(ODIR)/$@
 

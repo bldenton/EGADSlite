@@ -17,17 +17,30 @@
 #include "egadsTypes.h"
 #include "egadsInternals.h"
 #include "liteClasses.h"
+#include "liteDevice.h"
 
 
-//#define DEBUG
+/* #define DEBUG    */
+/* #define FULLATTR */
 
 
   extern int EG_close(egObject *context);
+#ifdef __NVCC__
+  extern int EG_evaluateDev(const egObject *geom_d, const double *param,
+                            double *ev);
+  extern int EG_attributeRetDev(const egObject *obj_d, const char *name,
+                                int *atype, int *len, int **ints,
+                                double **reals, char **str);
+  extern int EG_addStrAttrDev(egObject *obj_d, const char *name,
+                              const char *str);
+#else
   extern int EG_evaluate(const egObject *geom, const double *param, double *ev);
   extern int EG_attributeRet(const egObject *obj, const char *name, int *atype,
                              int *len, /*@null@*/ const int **ints,
-                             /*@null@*/ const double **reals,
-                             /*@null@*/ const char **str);
+                                       /*@null@*/ const double **reals,
+                                       /*@null@*/ const char **str);
+#endif
+
 
 typedef struct {
   void    *data;
@@ -43,7 +56,7 @@ swap(void *buffer, size_t size)
 {
   char *buf, save;
   
-  buf = buffer;
+  buf = (char *) buffer;
   if (size == 2) {
     save   = buf[1];
     buf[1] = buf[0];
@@ -78,7 +91,7 @@ Fread(void *data, size_t size, int nitems, stream_T *stream)
   int  i;
   char *buf;
   
-  buf = data;
+  buf = (char *) data;
   memcpy(data, &(((char *) stream->data)[stream->ptr]), size*nitems);
   if ((size != sizeof(char)) && (stream->swap == 1))
     for (i = 0; i < nitems; i++) swap(&buf[i*size], size);
@@ -88,18 +101,178 @@ Fread(void *data, size_t size, int nitems, stream_T *stream)
 }
 
 
+#ifdef FULLATTR
+static void
+EG_attrBuildSeq(egAttrs *attrs)
+{
+  int       i, j, l, n, snum, *hit, nospace = 0, nseqs = 0;
+  char      *root, *newname;
+  egAttr    *attr;
+  egAttrSeq *seqs = NULL, *tmp;
+  egAttrs   attrs_, *attrs_h = &attrs_;
+
+  EG_GET_ATTRS(attrs_h, attrs);
+  
+  hit = (int *) EG_alloc(attrs_h->nattrs*sizeof(int));
+  if (hit == NULL) {
+    printf(" EGADS Internal: Malloc on %d attributes!\n", attrs_h->nattrs);
+    return;
+  }
+  for (i = 0; i < attrs_h->nattrs; i++) hit[i] = 0;
+  
+  /* build the sequence structure */
+  for (i = 0; i < attrs_h->nattrs; i++) {
+    if (hit[i] != 0) continue;
+    if (attrs->attrs[i].name == NULL) continue;
+    l = strlen(attrs->attrs[i].name);
+    for (n = j = 0; j < l; j++)
+      if (attrs->attrs[i].name[j] == 32) n++;
+    if (n == 0) {
+      /* only the first can have no space */
+      nospace = 1;
+    } else if (n >  1) {
+      printf(" EGADS Internal: More than a single space (%d) in an Attr name!\n",
+             n);
+      continue;
+    }
+    /* make the root name */
+    n    = l;
+    root = attrs->attrs[i].name;
+    if (nospace == 0) {
+      root = EG_strdup(attrs->attrs[i].name);
+      if (root == NULL) {
+        printf(" EGADS Internal: Null root on %s!\n", attrs->attrs[i].name);
+        EG_free(hit);
+        return;
+      }
+      for (n = 0; n < l; n++)
+        if (root[n] == 32) {
+          root[n] = 0;
+          break;
+        }
+    }
+    
+    /* count the members */
+    snum = hit[i] = 1;
+    for (j = i+1; j < attrs->nattrs; j++) {
+      if (hit[j] != 0) continue;
+      if (attrs->attrs[j].name == NULL) continue;
+      if (strlen(attrs->attrs[j].name) < n) continue;
+      if (attrs->attrs[j].name[n] == 32)
+        if (strncmp(attrs->attrs[i].name, attrs->attrs[j].name, n-1) == 0)
+          snum++;
+    }
+    
+    /* only a single member */
+    if (snum == 1) {
+      if (nospace == 1) continue;
+      /* remove existing seq number */
+      EG_free(attrs->attrs[i].name);
+      attrs->attrs[i].name = root;
+      continue;
+    }
+    
+    /* build the sequence */
+    if (nseqs == 0) {
+      seqs = (egAttrSeq *) EG_alloc(sizeof(egAttrSeq));
+      if (seqs == NULL) {
+        EG_free(root);
+        printf(" EGADS Internal: Malloc on Base Sequence!\n");
+        continue;
+      }
+    } else {
+      tmp = (egAttrSeq *) EG_reall(seqs, (nseqs+1)*sizeof(egAttrSeq));
+      if (tmp == NULL) {
+        EG_free(root);
+        printf(" EGADS Internal: Malloc on %d Sequence!\n", nseqs+1);
+        continue;
+      }
+      seqs = tmp;
+    }
+    seqs[nseqs].attrSeq = (int *) EG_alloc(snum*sizeof(int));
+    if (seqs[nseqs].attrSeq == NULL) {
+      EG_free(root);
+      printf(" EGADS Internal: Malloc on %d Attr Seq Pointers!\n", snum);
+      continue;
+    }
+    if (nospace == 1) root = EG_strdup(attrs->attrs[i].name);
+    seqs[nseqs].nSeq = snum;
+    seqs[nseqs].root = root;
+
+    /* load the sequence */
+    seqs[nseqs].attrSeq[0] = i;
+    snum = 1;
+    for (j = i+1; j < attrs->nattrs; j++) {
+      if (hit[j] != 0) continue;
+      if (attrs->attrs[j].name == NULL) continue;
+      if (strlen(attrs->attrs[j].name) < n) continue;
+      if (attrs->attrs[j].name[n] == 32)
+        if (strncmp(attrs->attrs[i].name, attrs->attrs[j].name, n-1) == 0) {
+          seqs[nseqs].attrSeq[snum] = j;
+          snum++;
+          hit[j] = 1;
+        }
+    }
+    
+    /* check/correct the sequence numbers */
+    for (j = 0; j < snum; j++) {
+      attr = &attrs->attrs[seqs[nseqs].attrSeq[j]];
+      if ((j != 0) || (nospace == 0)) {
+        l    = 0;
+        sscanf(&attr->name[n], "%d", &l);
+#ifdef DEBUG
+        if (l == j+1) printf(" seq = %d, oldname = %s\n", j+1, attr->name);
+#endif
+        if (l == j+1) continue;
+      }
+      newname = (char *) EG_alloc((n+8)*sizeof(char));
+      if (newname == NULL) {
+        printf(" EGADS Internal: Malloc on name %s!\n", root);
+        continue;
+      }
+      snprintf(newname, n+8, "%s %d", root, j+1);
+      EG_free(attr->name);
+      attr->name = newname;
+#ifdef DEBUG
+      printf(" seq = %d, newname = %s\n", j+1, newname);
+#endif
+    }
+#ifdef DEBUG
+    printf(" seq %d: root = %s,  snum = %d\n",
+           nseqs, seqs[nseqs].root, seqs[nseqs].nSeq);
+    for (j = 0; j < seqs[nseqs].nSeq; j++) {
+      attr = &attrs->attrs[seqs[nseqs].attrSeq[j]];
+      printf(" %d: %d  %s\n", j+1, seqs[nseqs].attrSeq[j], attr->name);
+    }
+#endif
+    nseqs++;
+  }
+  EG_free(hit);
+
+  attrs_h->nseqs = nseqs;
+  attrs_h->seqs  = seqs;
+  EG_SET_ATTRS(attrs, attrs_h);
+}
+#endif
+
+
 static int
 EG_addStrAttr(egObject *obj, const char *name, const char *str)
 {
   int     i, length, find = -1;
+  char    *temp;
   egAttr  *attr;
   egAttrs *attrs;
+  egObject obj_, *obj_h = &obj_;
+  egAttrs  attrs_, *attrs_h = &attrs_;
+  egAttr   attr_, *attr_h = &attr_;
   
   if (obj == NULL)               return EGADS_NULLOBJ;
-  if (obj->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (obj->oclass == EMPTY)      return EGADS_EMPTY;
-  if (obj->oclass == NIL)        return EGADS_EMPTY;
-  if (obj->oclass == REFERENCE)  return EGADS_REFERCE;
+  EG_GET_OBJECT(obj_h, obj);
+  if (obj_h->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (obj_h->oclass == EMPTY)      return EGADS_EMPTY;
+  if (obj_h->oclass == NIL)        return EGADS_EMPTY;
+  if (obj_h->oclass == REFERENCE)  return EGADS_REFERCE;
   
   if ((name == NULL) || (str == NULL)) {
       printf(" EGADS Internal: NULL Name/Value (EG_addStrAttr)!\n");
@@ -115,68 +288,91 @@ EG_addStrAttr(egObject *obj, const char *name, const char *str)
     printf(" EGADS Internal: BAD Name (EG_addStrAttr)!\n");
     return EGADS_INDEXERR;
   }
-  attrs = (egAttrs *) obj->attrs;
+  attrs = (egAttrs *) obj_h->attrs;
   
-  if (attrs != NULL)
-    for (i = 0; i < attrs->nattrs; i++)
-      if (strcmp(attrs->attrs[i].name,name) == 0) {
-        find = i;
-        break;
+  if (attrs != NULL) {
+    EG_NEW(&temp, char, length+2);
+    if (temp != NULL) {
+      EG_GET_ATTRS(attrs_h, attrs);
+      for (i = 0; i < attrs_h->nattrs; i++) {
+        EG_GET_STRN(temp, &(attrs_h->attrs[i].name), length+1);
+        if (strcmp(temp,name) == 0) {
+          find = i;
+          break;
+        }
       }
+      EG_FREE(temp);
+    }
+  }
   
   if ((find != -1) && (attrs != NULL)) {
     
     /* an existing attribute -- reset the values */
     
-    if (attrs->attrs[find].type == ATTRINT) {
-      if (attrs->attrs[find].length != 1)
-        EG_free(attrs->attrs[find].vals.integers);
-    } else if (attrs->attrs[find].type == ATTRREAL) {
-      if (attrs->attrs[find].length != 1)
-        EG_free(attrs->attrs[find].vals.reals);
-    } else if (attrs->attrs[find].type == ATTRCSYS) {
-      EG_free(attrs->attrs[find].vals.reals);
-    } else if (attrs->attrs[find].type == ATTRSTRING) {
-      EG_free(attrs->attrs[find].vals.string);
+    EG_GET_ATTR(attr_h, &(attrs_h->attrs[find]));
+    if (attr_h->type == ATTRINT) {
+      if (attr_h->length != 1)
+        EG_FREE(attr_h->vals.integers);
+    } else if (attr_h->type == ATTRREAL) {
+      if (attr_h->length != 1)
+        EG_FREE(attr_h->vals.reals);
+    } else if (attr_h->type == ATTRCSYS) {
+      EG_FREE(attr_h->vals.reals);
+    } else if (attr_h->type == ATTRSTRING) {
+      EG_FREE(attr_h->vals.string);
     }
     
   } else {
     
     if (attrs == NULL) {
-      attrs = (egAttrs *) EG_alloc(sizeof(egAttrs));
+      EG_NEW(&attrs, egAttrs, 1);
       if (attrs == NULL) {
         printf(" EGADS Internal: Attrs MALLOC for %s (EG_addStrAttr)!\n",
                name);
         return EGADS_MALLOC;
       }
-      attrs->nattrs = 0;
-      attrs->attrs  = NULL;
-      obj->attrs    = attrs;
+      attrs_h->nattrs = 0;
+      attrs_h->attrs  = NULL;
+      attrs_h->nseqs  = 0;
+      attrs_h->seqs   = NULL;
+/*@-nullret@*/
+      EG_SET_ATTRS(attrs, attrs_h);
+/*@+nullret@*/
+      EG_SET_OBJECT_PTR(&(obj->attrs), &attrs);
     }
-    if (attrs->attrs == NULL) {
-      attr = (egAttr *) EG_alloc((attrs->nattrs+1)*sizeof(egAttr));
+    EG_GET_ATTRS(attrs_h, attrs);
+    if (attrs_h->attrs == NULL) {
+      EG_NEW(&attr, egAttr, (attrs_h->nattrs+1));
     } else {
-      attr = (egAttr *) EG_reall(attrs->attrs,
-                                 (attrs->nattrs+1)*sizeof(egAttr));
+      EG_REALLOC(&attr, attrs_h->attrs, egAttr, attrs_h->nattrs,
+                 (attrs_h->nattrs+1));
     }
     if (attr == NULL) {
       printf(" EGADS Internal: Attr MALLOC for %s (EG_addStrAttr)!\n",
              name);
       return EGADS_MALLOC;
     }
-    attrs->attrs = attr;
-    find = attrs->nattrs;
-    attrs->attrs[find].vals.string = NULL;
-    attrs->attrs[find].name        = EG_strdup(name);
-    if (attrs->attrs[find].name == NULL) return EGADS_MALLOC;
-    attrs->nattrs += 1;
+    attrs_h->attrs = attr;
+    find = attrs_h->nattrs;
+    EG_GET_ATTR(attr_h, &(attrs_h->attrs[find]));
+    attr_h->vals.string = NULL;
+    EG_SET_STR(&(attr_h->name), name);
+    if (attr_h->name == NULL) return EGADS_MALLOC;
+    EG_SET_ATTR(&(attrs_h->attrs[find]), attr_h);
+    attrs_h->nattrs += 1;
   }
   
-  attrs->attrs[find].type        = ATTRSTRING;
-  attrs->attrs[find].length      = 0;
-  attrs->attrs[find].vals.string = EG_strdup(str);
-  if (attrs->attrs[find].vals.string != NULL)
-    attrs->attrs[find].length = strlen(attrs->attrs[find].vals.string);
+  EG_GET_ATTR(attr_h, &(attrs_h->attrs[find]));
+
+  attr_h->type        = ATTRSTRING;
+  attr_h->length      = 0;
+  EG_SET_STR(&(attr_h->vals.string), str);
+  if (attr_h->vals.string != NULL) {
+    attr_h->length = strlen(str);
+  }
+  EG_SET_ATTR(&(attrs_h->attrs[find]), attr_h);
+
+  EG_SET_ATTRS(attrs, attrs_h);
 
   return EGADS_SUCCESS;
 }
@@ -187,25 +383,30 @@ EG_freeAttrs(egAttrs **attrx)
 {
   int     i;
   egAttrs *attrs;
+  egAttrs attrs_, *attrs_h = &attrs_;
+  egAttr  attr_, *attr_h = &attr_;
+  egAttrs *nil = NULL;
   
   attrs = *attrx;
   if (attrs == NULL) return;
+  EG_GET_ATTRS(attrs_h, *attrx);
   
-  *attrx = NULL;
+  EG_SET_ATTRS_PTR(attrx, nil);
   /* remove any attributes */
-  for (i = 0; i < attrs->nattrs; i++) {
-    if (attrs->attrs[i].name != NULL) EG_free(attrs->attrs[i].name);
-    if (attrs->attrs[i].type == ATTRINT) {
-      if (attrs->attrs[i].length > 1) EG_free(attrs->attrs[i].vals.integers);
-    } else if ((attrs->attrs[i].type == ATTRREAL) ||
-               (attrs->attrs[i].type == ATTRCSYS)) {
-      if (attrs->attrs[i].length > 1) EG_free(attrs->attrs[i].vals.reals);
-    } else if (attrs->attrs[i].type == ATTRSTRING) {
-      EG_free(attrs->attrs[i].vals.string);
+  for (i = 0; i < attrs_h->nattrs; i++) {
+    EG_GET_ATTR(attr_h, &(attrs_h->attrs[i]));
+    if (attr_.name != NULL) EG_FREE(attr_.name);
+    if (attr_.type == ATTRINT) {
+      if (attr_.length > 1) EG_FREE(attr_.vals.integers);
+    } else if ((attr_.type == ATTRREAL) ||
+               (attr_.type == ATTRCSYS)) {
+      if (attr_.length > 1) EG_FREE(attr_.vals.reals);
+    } else if (attr_.type == ATTRSTRING) {
+      EG_FREE(attr_.vals.string);
     }
   }
-  EG_free(attrs->attrs);
-  EG_free(attrs);
+  EG_FREE(attrs_h->attrs);
+  EG_FREE(attrs);
 }
 
 
@@ -214,107 +415,157 @@ EG_readString(stream_T *fp, char **string)
 {
   int    len;
   size_t n;
+  char   *string_h;
+  int    status = EGADS_SUCCESS;
   
-  *string = NULL;
+  *string = string_h = NULL;
   n = Fread(&len, sizeof(int), 1, fp);
   if (n   != 1) return EGADS_READERR;
   if (len <  0) return EGADS_READERR;
   if (len == 0) return EGADS_SUCCESS;
   
-  *string = (char *) EG_alloc(len*sizeof(char));
-  if (*string == NULL) return EGADS_MALLOC;
+  string_h = (char *) EG_alloc(len*sizeof(char));
+  if (string_h == NULL) return EGADS_MALLOC;
   
-  n = Fread(*string, sizeof(char), len, fp);
+  n = Fread(string_h, sizeof(char), len, fp);
   if (n != len) {
-    EG_free(*string);
+    EG_free(string_h);
     *string = NULL;
     return EGADS_READERR;
   }
+  EG_SET_STR(&(string[0]), string_h);
+
+  EG_free(string_h);
   
-  return EGADS_SUCCESS;
+  return status;
 }
 
 
 static int
 EG_readAttrs(stream_T *fp, egAttrs **attrx)
 {
-  int     nattr, i, stat;
+  int     nattr, i, status;
+#ifdef FULLATTR
+  int     len, j, nspace = 0;
+#endif
   size_t  n;
   egAttr  *attr;
   egAttrs *attrs;
+  egAttrs attrs_, *attrs_h = &attrs_;
+  egAttr  attr_, *attr_h = &attr_;
+  void    *temp;
   
   *attrx = NULL;
   n = Fread(&nattr, sizeof(int), 1, fp);
   if (n     != 1) return EGADS_READERR;
   if (nattr == 0) return EGADS_SUCCESS;
   
-  attrs = (egAttrs *) EG_alloc(sizeof(egAttrs));
+  EG_NEW(&attrs, egAttrs, 1);
   if (attrs == NULL) return EGADS_MALLOC;
-  attr  = (egAttr *)  EG_alloc(nattr*sizeof(egAttr));
+  EG_NEW(&attr, egAttr, nattr);
   if (attr == NULL) {
-    EG_free(attrs);
+    EG_FREE(attrs);
     return EGADS_MALLOC;
   }
-  attrs->nattrs = nattr;
-  attrs->attrs  = attr;
+  attrs_h->nattrs = nattr;
+  attrs_h->attrs  = attr;
+  EG_SET_ATTRS(attrs, attrs_h);
   for (i = 0; i < nattr; i++) {
-    attr[i].name   = NULL;
-    attr[i].length = 1;
-    attr[i].type   = ATTRINT;
+    EG_GET_ATTR(attr_h, &(attrs_h->attrs[i]));
+    attr_.name   = NULL;
+    attr_.length = 1;
+    attr_.type   = ATTRINT;
+    EG_SET_ATTR(&(attrs_h->attrs[i]), attr_h);
   }
   
 /*@-mustfreefresh@*/
   for (i = 0; i < nattr; i++) {
-    n = Fread(&attr[i].type,   sizeof(int), 1, fp);
+    EG_GET_ATTR(attr_h, &(attrs_h->attrs[i]));
+
+    n = Fread(&attr_.type,   sizeof(int), 1, fp);
     if (n != 1) {
       EG_freeAttrs(&attrs);
       return EGADS_READERR;
     }
-    n = Fread(&attr[i].length, sizeof(int), 1, fp);
+    n = Fread(&attr_.length, sizeof(int), 1, fp);
     if (n != 1) {
       EG_freeAttrs(&attrs);
       return EGADS_READERR;
     }
-    stat = EG_readString(fp, &attr[i].name);
-    if (stat != EGADS_SUCCESS) {
+    status = EG_readString(fp, &attr_.name);
+    if (status != EGADS_SUCCESS) {
       EG_freeAttrs(&attrs);
       return EGADS_READERR;
     }
-    if (attr[i].type == ATTRINT) {
-      n = attr[i].length;
-      if (attr[i].length == 1) {
-        n = Fread(&attr[i].vals.integer, sizeof(int),              1, fp);
-      } else if (attr[i].length > 1) {
-        attr[i].vals.integers = (int *) EG_alloc(attr[i].length*sizeof(int));
-        if (attr[i].vals.integers == NULL) {
+#ifdef FULLATTR
+    if (attr_.name != NULL) {
+      len = strlen(attr_.name);
+      for (j = 0; j < len; j++)
+        if (attr_.name[j] == 32) nspace++;
+    }
+#endif
+    if (attr_.type == ATTRINT) {
+      n = attr_.length;
+      if (attr_.length == 1) {
+        n = Fread(&attr_.vals.integer, sizeof(int), 1, fp);
+      } else if (attr_.length > 1) {
+        EG_NEW(&attr_.vals.integers, int, attr_.length);
+        if (attr_.vals.integers == NULL) {
           EG_freeAttrs(&attrs);
           return EGADS_MALLOC;
         }
-        n = Fread(attr[i].vals.integers, sizeof(int), attr[i].length, fp);
+        temp = EG_alloc(attr_.length*sizeof(int));
+        if (temp == NULL) {
+          EG_FREE(attr_.vals.integers);
+          EG_freeAttrs(&attrs);
+          return EGADS_MALLOC;
+        }
+        n = Fread((int *) temp, sizeof(int), attr_.length, fp);
+        EG_COPY(attr_.vals.integers, temp, int, attr_.length);
+        EG_free(temp);
       }
-      if (n != attr[i].length) {
+      if (n != attr_.length) {
+        EG_FREE(attr_.vals.integers);
         EG_freeAttrs(&attrs);
         return EGADS_READERR;
       }
-    } else if ((attr[i].type == ATTRREAL) || (attr[i].type == ATTRCSYS)) {
-      n = attr[i].length;
-      if (attr[i].length == 1) {
-        n = Fread(&attr[i].vals.real, sizeof(double),              1, fp);
-      } else if (attr[i].length > 1) {
-        attr[i].vals.reals = (double *) EG_alloc(attr[i].length*sizeof(double));
-        if (attr[i].vals.reals == NULL) {
+    } else if ((attr_.type == ATTRREAL) || (attr_.type == ATTRCSYS)) {
+      n = attr_.length;
+      if (attr_.length == 1) {
+        n = Fread(&attr_.vals.real, sizeof(double), 1, fp);
+      } else if (attr_.length > 1) {
+        EG_NEW(&attr_.vals.reals, double, attr_.length);
+        if (attr_.vals.reals == NULL) {
           EG_freeAttrs(&attrs);
           return EGADS_MALLOC;
         }
-        n = Fread(attr[i].vals.reals, sizeof(double), attr[i].length, fp);
+        temp = EG_alloc(attr_.length*sizeof(double));
+        if (temp == NULL) {
+          EG_FREE(attr_.vals.reals);
+          EG_freeAttrs(&attrs);
+          return EGADS_MALLOC;
+        }
+        n = Fread((double *) temp, sizeof(double), attr_.length, fp);
+        EG_COPY(attr_.vals.reals, temp, double, attr_.length);
+        EG_free(temp);
       }
-      if (n != attr[i].length) return EGADS_READERR;
+      if (n != attr_.length) {
+        EG_FREE(attr_.vals.reals);
+        EG_freeAttrs(&attrs);
+        return EGADS_READERR;
+      }
     } else {
-      stat = EG_readString(fp, &attr[i].vals.string);
-      if (stat != EGADS_SUCCESS) return EGADS_READERR;
+      status = EG_readString(fp, &attr_.vals.string);
+      if (status != EGADS_SUCCESS) return EGADS_READERR;
     }
+    EG_SET_ATTR(&(attrs_h->attrs[i]), attr_h);
   }
 /*@+mustfreefresh@*/
+
+#ifdef FULLATTR
+  /* sequences exist! */
+  if (nspace != 0) EG_attrBuildSeq(attrs);
+#endif
   
   *attrx = attrs;
   return EGADS_SUCCESS;
@@ -324,12 +575,19 @@ EG_readAttrs(stream_T *fp, egAttrs **attrx)
 static int
 EG_readGeometry(liteGeometry *lgeom, int *iref, stream_T *fp)
 {
-  int n, nhead, ndata;
+  int          n, nhead, ndata;
+  liteGeometry lgeom_, *lgeom_h = &lgeom_;
+  void         *temp;
   
-  *iref         = 0;
-  lgeom->ref    = NULL;
-  lgeom->header = NULL;
-  lgeom->data   = NULL;
+  EG_GET_GEOM(lgeom_h, lgeom);
+
+  *iref           = 0;
+  lgeom_h->ref    = NULL;
+  lgeom_h->header = NULL;
+  lgeom_h->data   = NULL;
+/*@-nullret@*/
+  EG_SET_GEOM(lgeom, lgeom_h);
+/*@+nullret@*/
   n = Fread(iref,   sizeof(int), 1, fp);
   if (n != 1) return EGADS_READERR;
   n = Fread(&nhead, sizeof(int), 1, fp);
@@ -338,14 +596,24 @@ EG_readGeometry(liteGeometry *lgeom, int *iref, stream_T *fp)
   if (n != 1) return EGADS_READERR;
   
   if (nhead != 0) {
-    lgeom->header = (int *) EG_alloc(nhead*sizeof(int));
-    if (lgeom->header == NULL) return EGADS_MALLOC;
-    n = Fread(lgeom->header, sizeof(int), nhead, fp);
+    EG_NEW(&(lgeom_h->header), int, nhead);
+    EG_COPY(&(lgeom->header), &(lgeom_h->header), int *, 1);
+    if (lgeom_h->header == NULL) return EGADS_MALLOC;
+    temp = EG_alloc(nhead*sizeof(int));
+    if (temp == NULL) return EGADS_MALLOC;
+    n = Fread((int *) temp, sizeof(int), nhead, fp);
+    EG_COPY(lgeom_h->header, temp, int, nhead);
+    EG_free(temp);
     if (n != nhead) return EGADS_READERR;
   }
-  lgeom->data = (double *) EG_alloc(ndata*sizeof(double));
-  if (lgeom->data == NULL) return EGADS_MALLOC;
-  n = Fread(lgeom->data, sizeof(double), ndata, fp);
+  EG_NEW(&(lgeom_h->data), double, ndata);
+  EG_COPY(&(lgeom->data), &(lgeom_h->data), double *, 1);
+  if (lgeom_h->data == NULL) return EGADS_MALLOC;
+  temp = EG_alloc(ndata*sizeof(double));
+  if (temp == NULL) return EGADS_MALLOC;
+  n = Fread((double *) temp, sizeof(double), ndata, fp);
+  EG_COPY(lgeom_h->data, temp, double, ndata);
+  EG_free(temp);
   if (n != ndata) return EGADS_READERR;
   
   return EGADS_SUCCESS;
@@ -357,12 +625,10 @@ EG_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
 {
   int          i, j, m, n, stat, mtype, iref, ntypes[8];
   double       t, d, x0[2], x1[2], data[6];
-//#ifdef DEBUG
   int          atype, alen;
   const int    *ints;
   const double *reals;
   const char   *str;
-//#endif
   egObject     *obj, *bobj, *pcobj;
   liteGeometry *lgeom;
   liteNode     *lnode;
@@ -372,38 +638,49 @@ EG_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
   liteShell    *lshell;
   liteBody     *lbody;
   liteModel    *lmodel;
+  egObject     context_, *context_h = &context_;
+  egObject     mobject_, *mobject_h = &mobject_;
+  egObject     bobj_, *bobj_h = &bobj_;
+  liteModel    lmodel_, *lmodel_h = &lmodel_;
+  liteBody     lbody_, *lbody_h = &lbody_;
+  void         *nil = NULL;
 
-  if (context == NULL)               return EGADS_NULLOBJ;
-  if (context->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (context->oclass != CONTXT)     return EGADS_NOTCNTX;
-  if (mobject == NULL)               return EGADS_NULLOBJ;
-  if (mobject->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (mobject->oclass != MODEL)      return EGADS_NOTMODEL;
-  lmodel = (liteModel *) mobject->blind;
+  if (context == NULL)                 return EGADS_NULLOBJ;
+  EG_GET_OBJECT(context_h, context);
+  if (context_h->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (context_h->oclass != CONTXT)     return EGADS_NOTCNTX;
+  if (mobject == NULL)                 return EGADS_NULLOBJ;
+  EG_GET_OBJECT(mobject_h, mobject);
+  if (mobject_h->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (mobject_h->oclass != MODEL)      return EGADS_NOTMODEL;
+  lmodel = (liteModel *) mobject_h->blind;
+  EG_GET_MODEL(lmodel_h, lmodel);
 
   n = Fread(&mtype, sizeof(int), 1, fp);
   if (n != 1) return EGADS_READERR;
   n = Fread(ntypes, sizeof(int), 8, fp);
   if (n != 8) return EGADS_READERR;
-  lbody = (liteBody *) EG_alloc(sizeof(liteBody));
+  EG_NEW(&lbody, liteBody, 1);
   if (lbody == NULL) return EGADS_MALLOC;
-  lbody->pcurves.objs   = NULL;
-  lbody->curves.objs    = NULL;
-  lbody->surfaces.objs  = NULL;
-  lbody->nodes.objs     = NULL;
-  lbody->edges.objs     = NULL;
-  lbody->loops.objs     = NULL;
-  lbody->faces.objs     = NULL;
-  lbody->shells.objs    = NULL;
-  lbody->senses         = NULL;
-  lbody->pcurves.nobjs  = 0;
-  lbody->curves.nobjs   = 0;
-  lbody->surfaces.nobjs = 0;
-  lbody->nodes.nobjs    = 0;
-  lbody->edges.nobjs    = 0;
-  lbody->loops.nobjs    = 0;
-  lbody->faces.nobjs    = 0;
-  lbody->shells.nobjs   = 0;
+  EG_GET_BODY(lbody_h, lbody);
+  lbody_h->pcurves.objs   = NULL;
+  lbody_h->curves.objs    = NULL;
+  lbody_h->surfaces.objs  = NULL;
+  lbody_h->nodes.objs     = NULL;
+  lbody_h->edges.objs     = NULL;
+  lbody_h->loops.objs     = NULL;
+  lbody_h->faces.objs     = NULL;
+  lbody_h->shells.objs    = NULL;
+  lbody_h->senses         = NULL;
+  lbody_h->pcurves.nobjs  = 0;
+  lbody_h->curves.nobjs   = 0;
+  lbody_h->surfaces.nobjs = 0;
+  lbody_h->nodes.nobjs    = 0;
+  lbody_h->edges.nobjs    = 0;
+  lbody_h->loops.nobjs    = 0;
+  lbody_h->faces.nobjs    = 0;
+  lbody_h->shells.nobjs   = 0;
+
 #ifdef DEBUG
   printf(" Reading Body #%d: %d %d %d %d %d %d %d %d\n", bindex+1, ntypes[0],
          ntypes[1], ntypes[2], ntypes[3], ntypes[4], ntypes[5], ntypes[6],
@@ -412,132 +689,165 @@ EG_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
 
   stat = EG_makeObject(context, &bobj);
   if (stat != EGADS_SUCCESS) {
-    EG_free(lbody);
+    EG_FREE(lbody);
     return stat;
   }
-  bobj->oclass = BODY;
-  bobj->mtype  = mtype;
-  bobj->blind  = lbody;
-  lmodel->bodies[bindex] = bobj;
+  EG_GET_OBJECT(bobj_h, bobj);
+  bobj_h->oclass = BODY;
+  bobj_h->mtype  = mtype;
+  bobj_h->blind  = lbody;
+  EG_SET_OBJECT(&bobj, bobj_h);
+  EG_SET_OBJECT_PTR(&(lmodel_h->bodies[bindex]), &bobj);
   
   /* make all of the objects */
   if (ntypes[0] > 0) {
-    lbody->pcurves.objs = (egObject **) EG_alloc(ntypes[0]*sizeof(egObject *));
-    if (lbody->pcurves.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[0]; i++) lbody->pcurves.objs[i] = NULL;
-    lbody->pcurves.nobjs = ntypes[0];
+    EG_NEW(&(lbody_h->pcurves.objs), egObject *, ntypes[0]);
+    if (lbody_h->pcurves.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[0]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->pcurves.objs[i]), &nil);
+    lbody_h->pcurves.nobjs = ntypes[0];
     for (i = 0; i < ntypes[0]; i++) {
-      stat = EG_makeObject(context, &lbody->pcurves.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->pcurves.objs[i]), &obj);
     }
   }
   if (ntypes[1] > 0) {
-    lbody->curves.objs = (egObject **) EG_alloc(ntypes[1]*sizeof(egObject *));
-    if (lbody->curves.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[1]; i++) lbody->curves.objs[i] = NULL;
-    lbody->curves.nobjs = ntypes[1];
+    EG_NEW(&(lbody_h->curves.objs), egObject *, ntypes[1]);
+    if (lbody_h->curves.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[1]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->curves.objs[i]), &nil);
+    lbody_h->curves.nobjs = ntypes[1];
     for (i = 0; i < ntypes[1]; i++) {
-      stat = EG_makeObject(context, &lbody->curves.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->curves.objs[i]), &obj);
     }
   }
   if (ntypes[2] > 0) {
-    lbody->surfaces.objs = (egObject **) EG_alloc(ntypes[2]*sizeof(egObject *));
-    if (lbody->surfaces.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[2]; i++) lbody->surfaces.objs[i] = NULL;
-    lbody->surfaces.nobjs = ntypes[2];
+    EG_NEW(&(lbody_h->surfaces.objs), egObject *, ntypes[2]);
+    if (lbody_h->surfaces.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[2]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->surfaces.objs[i]), &nil);
+    lbody_h->surfaces.nobjs = ntypes[2];
     for (i = 0; i < ntypes[2]; i++) {
-      stat = EG_makeObject(context, &lbody->surfaces.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->surfaces.objs[i]), &obj);
     }
   }
   if (ntypes[3] > 0) {
-    lbody->nodes.objs = (egObject **) EG_alloc(ntypes[3]*sizeof(egObject *));
-    if (lbody->nodes.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[3]; i++) lbody->nodes.objs[i] = NULL;
-    lbody->nodes.nobjs = ntypes[3];
+    EG_NEW(&(lbody_h->nodes.objs), egObject *, ntypes[3]);
+    if (lbody_h->nodes.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[3]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->nodes.objs[i]), &nil);
+    lbody_h->nodes.nobjs = ntypes[3];
     for (i = 0; i < ntypes[3]; i++) {
-      stat = EG_makeObject(context, &lbody->nodes.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->nodes.objs[i]), &obj);
     }
   }
   if (ntypes[4] > 0) {
-    lbody->edges.objs = (egObject **) EG_alloc(ntypes[4]*sizeof(egObject *));
-    if (lbody->edges.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[4]; i++) lbody->edges.objs[i] = NULL;
-    lbody->edges.nobjs = ntypes[4];
+    EG_NEW(&(lbody_h->edges.objs), egObject *, ntypes[4]);
+    if (lbody_h->edges.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[4]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->edges.objs[i]), &nil);
+    lbody_h->edges.nobjs = ntypes[4];
     for (i = 0; i < ntypes[4]; i++) {
-      stat = EG_makeObject(context, &lbody->edges.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->edges.objs[i]), &obj);
     }
   }
   if (ntypes[5] > 0) {
-    lbody->loops.objs = (egObject **) EG_alloc(ntypes[5]*sizeof(egObject *));
-    if (lbody->loops.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[5]; i++) lbody->loops.objs[i] = NULL;
-    lbody->loops.nobjs = ntypes[5];
+    EG_NEW(&(lbody_h->loops.objs), egObject *, ntypes[5]);
+    if (lbody_h->loops.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[5]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->loops.objs[i]), &nil);
+    lbody_h->loops.nobjs = ntypes[5];
     for (i = 0; i < ntypes[5]; i++) {
-      stat = EG_makeObject(context, &lbody->loops.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->loops.objs[i]), &obj);
     }
   }
   if (ntypes[6] > 0) {
-    lbody->faces.objs = (egObject **) EG_alloc(ntypes[6]*sizeof(egObject *));
-    if (lbody->faces.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[6]; i++) lbody->faces.objs[i] = NULL;
-    lbody->faces.nobjs = ntypes[6];
+    EG_NEW(&(lbody_h->faces.objs), egObject *, ntypes[6]);
+    if (lbody_h->faces.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[6]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->faces.objs[i]), &nil);
+    lbody_h->faces.nobjs = ntypes[6];
     for (i = 0; i < ntypes[6]; i++) {
-      stat = EG_makeObject(context, &lbody->faces.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->faces.objs[i]), &obj);
     }
   }
   if (ntypes[7] > 0) {
-    lbody->shells.objs = (egObject **) EG_alloc(ntypes[7]*sizeof(egObject *));
-    if (lbody->shells.objs == NULL) return EGADS_SUCCESS;
-    for (i = 0; i < ntypes[7]; i++) lbody->shells.objs[i] = NULL;
-    lbody->shells.nobjs = ntypes[7];
+    EG_NEW(&(lbody_h->shells.objs), egObject *, ntypes[7]);
+    if (lbody_h->shells.objs == NULL) return EGADS_SUCCESS;
+    for (i = 0; i < ntypes[7]; i++)
+      EG_SET_OBJECT_PTR(&(lbody_h->shells.objs[i]), &nil);
+    lbody_h->shells.nobjs = ntypes[7];
     for (i = 0; i < ntypes[7]; i++) {
-      stat = EG_makeObject(context, &lbody->shells.objs[i]);
+      stat = EG_makeObject(context, &obj);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT_PTR(&(lbody_h->shells.objs[i]), &obj);
     }
   }
+/*@-nullret@*/
+  EG_SET_BODY(lbody, lbody_h);
+/*@+nullret@*/
 
 #ifdef DEBUG
   printf(" Reading %d PCurves...\n", ntypes[0]);
 #endif
   /* pcurves */
-  if (lbody->pcurves.objs != NULL)
-    for (i = 0; i < lbody->pcurves.nobjs; i++) {
+  if (lbody_h->pcurves.objs != NULL) {
+    liteGeometry lgeom_, *lgeom_h = &lgeom_;
+    egObject obj_, *obj_h = &obj_;
+    int header_h[4];
+    double data_h[6];
+    for (i = 0; i < lbody_h->pcurves.nobjs; i++) {
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lgeom = (liteGeometry *) EG_alloc(sizeof(liteGeometry));
+      EG_NEW(&lgeom, liteGeometry, 1);
       if (lgeom == NULL) return EGADS_MALLOC;
       stat = EG_readGeometry(lgeom, &iref, fp);
       if (stat != EGADS_SUCCESS) {
-        if (lgeom->header != NULL) EG_free(lgeom->header);
-        if (lgeom->data   != NULL) EG_free(lgeom->data);
-        EG_free(lgeom);
+        EG_GET_GEOM(lgeom_h, lgeom);
+        if (lgeom_h->header != NULL) EG_FREE(lgeom_h->header);
+        if (lgeom_h->data   != NULL) EG_FREE(lgeom_h->data);
+        EG_FREE(lgeom);
         return stat;
       }
-      if (iref != 0) lgeom->ref = lbody->pcurves.objs[iref-1];
-      obj = lbody->pcurves.objs[i];
-      obj->oclass = PCURVE;
-      obj->mtype  = mtype;
-      obj->blind  = lgeom;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_GET_GEOM(lgeom_h, lgeom);
+      if (iref != 0) {
+        EG_SET_OBJECT_PTR(&(lgeom->ref), &(lbody_h->pcurves.objs[iref-1]));
+      }
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->pcurves.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = PCURVE;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lgeom;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
       if (mtype != BSPLINE) continue;
-      for (n = 2; n < lgeom->header[2]; n++) {
-        m     = lgeom->header[3] + 2*n - 4;
-        x0[0] = lgeom->data[m+2] - lgeom->data[m  ];
-        x0[1] = lgeom->data[m+3] - lgeom->data[m+1];
+      EG_GET_HEADERS_AT(header_h, lgeom_h->header, 4);
+      for (n = 2; n < header_h[2]; n++) {
+        m     = header_h[3] + 2*n - 4;
+        EG_GET_DATA_AT(data_h, &(lgeom_h->data[m]), 6);
+        x0[0] = data_h[  2] - data_h[  0];
+        x0[1] = data_h[  3] - data_h[  1];
         d     = sqrt(x0[0]*x0[0] + x0[1]*x0[1]);
         if (d != 0.0) {
           x0[0] /= d;
           x0[1] /= d;
         }
-        x1[0] = lgeom->data[m+4] - lgeom->data[m+2];
-        x1[1] = lgeom->data[m+5] - lgeom->data[m+3];
+        x1[0] = data_h[  4] - data_h[  2];
+        x1[1] = data_h[  5] - data_h[  3];
         d     = sqrt(x1[0]*x1[0] + x1[1]*x1[1]);
         if (d != 0.0) {
           x1[0] /= d;
@@ -546,9 +856,11 @@ EG_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
         d = x0[0]*x1[0] + x0[1]*x1[1];
         if (d < -0.95) {
 #ifdef DEBUG
+          double last_data_h;
+          EG_GET_DATA_AT(&last_data_h, &(lgeom_h->data[header_h[3]-1]), 1);
           printf(" EGADS Info: PCurve %d dot flip at %d/%d (%lf) -- %lf %lf!\n",
-                 i, n-2, lgeom->header[2]-2, d,
-                 lgeom->data[0], lgeom->data[lgeom->header[3]-1]);
+                 i, n-2, header_h[2]-2, d,
+                 data_h[0], last_data_h);
 #endif
           stat = EG_addStrAttr(obj, ".Bad", "CPrev");
           if (stat != EGADS_SUCCESS)
@@ -556,417 +868,638 @@ EG_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
         }
       }
     }
-  
+  }
+
   /* curves */
 #ifdef DEBUG
   printf(" Reading %d Curves...\n", ntypes[1]);
 #endif
-  if (lbody->curves.objs != NULL)
-    for (i = 0; i < lbody->curves.nobjs; i++) {
+  if (lbody_h->curves.objs != NULL) {
+    liteGeometry lgeom_, *lgeom_h = &lgeom_;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->curves.nobjs; i++) {
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lgeom = (liteGeometry *) EG_alloc(sizeof(liteGeometry));
+      EG_NEW(&lgeom, liteGeometry, 1);
       if (lgeom == NULL) return EGADS_MALLOC;
       stat = EG_readGeometry(lgeom, &iref, fp);
       if (stat != EGADS_SUCCESS) {
-        if (lgeom->header != NULL) EG_free(lgeom->header);
-        if (lgeom->data   != NULL) EG_free(lgeom->data);
-        EG_free(lgeom);
+        EG_GET_GEOM(lgeom_h, lgeom);
+        if (lgeom_h->header != NULL) EG_FREE(lgeom_h->header);
+        if (lgeom_h->data   != NULL) EG_FREE(lgeom_h->data);
+        EG_FREE(lgeom);
         return stat;
       }
-      if (iref != 0) lgeom->ref = lbody->curves.objs[iref-1];
-      obj = lbody->curves.objs[i];
-      obj->oclass = CURVE;
-      obj->mtype  = mtype;
-      obj->blind  = lgeom;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      if (iref != 0) {
+        EG_SET_OBJECT_PTR(&(lgeom->ref), &(lbody_h->curves.objs[iref-1]));
+      }
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->curves.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = CURVE;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lgeom;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
   
   /* surfaces */
 #ifdef DEBUG
   printf(" Reading %d Surfaces...\n", ntypes[2]);
 #endif
-  if (lbody->surfaces.objs != NULL)
-    for (i = 0; i < lbody->surfaces.nobjs; i++) {
+  if (lbody_h->surfaces.objs != NULL) {
+    liteGeometry lgeom_, *lgeom_h = &lgeom_;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->surfaces.nobjs; i++) {
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lgeom = (liteGeometry *) EG_alloc(sizeof(liteGeometry));
+      EG_NEW(&lgeom, liteGeometry, 1);
       if (lgeom == NULL) return EGADS_MALLOC;
       stat = EG_readGeometry(lgeom, &iref, fp);
       if (stat != EGADS_SUCCESS) {
-        if (lgeom->header != NULL) EG_free(lgeom->header);
-        if (lgeom->data   != NULL) EG_free(lgeom->data);
-        EG_free(lgeom);
+        EG_GET_GEOM(lgeom_h, lgeom);
+        if (lgeom_h->header != NULL) EG_FREE(lgeom_h->header);
+        if (lgeom_h->data   != NULL) EG_FREE(lgeom_h->data);
+        EG_FREE(lgeom);
         return stat;
       }
 /*@-nullderef@*/
-      if (iref < 0) lgeom->ref = lbody->curves.objs[-iref-1];
+      if (iref < 0) {
+        EG_SET_OBJECT_PTR(&(lgeom->ref), &(lbody_h->curves.objs[-iref-1]));
+      }
 /*@+nullderef@*/
-      if (iref > 0) lgeom->ref = lbody->surfaces.objs[iref-1];
-      obj = lbody->surfaces.objs[i];
-      obj->oclass = SURFACE;
-      obj->mtype  = mtype;
-      obj->blind  = lgeom;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      if (iref > 0) {
+        EG_SET_OBJECT_PTR(&(lgeom->ref), &(lbody_h->surfaces.objs[iref-1]));
+      }
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->surfaces.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = SURFACE;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lgeom;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
   
   /* nodes */
 #ifdef DEBUG
   printf(" Reading %d Nodes...\n", ntypes[3]);
 #endif
-  if (lbody->nodes.objs != NULL)
-    for (i = 0; i < lbody->nodes.nobjs; i++) {
-      lnode = (liteNode *) EG_alloc(sizeof(liteNode));
+  if (lbody_h->nodes.objs != NULL) {
+    liteNode lnode_, *lnode_h = &lnode_;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->nodes.nobjs; i++) {
+      EG_NEW(&lnode, liteNode, 1);
       if (lnode == NULL) return EGADS_MALLOC;
-      n = Fread(lnode->xyz,  sizeof(double), 3, fp);
+      n = Fread(lnode_h->xyz,  sizeof(double), 3, fp);
       if (n != 3) {
-        EG_free(lnode);
+        EG_FREE(lnode);
         return EGADS_READERR;
       }
-      n = Fread(&lnode->tol, sizeof(double), 1, fp);
+      n = Fread(&lnode_h->tol, sizeof(double), 1, fp);
       if (n != 1) {
-        EG_free(lnode);
+        EG_FREE(lnode);
         return EGADS_READERR;
       }
-      obj = lbody->nodes.objs[i];
-      obj->oclass = NODE;
-      obj->mtype  = 0;
-      obj->blind  = lnode;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_SET_NODE(lnode, lnode_h);
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->nodes.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = NODE;
+      obj_h->mtype  = 0;
+      obj_h->blind  = lnode;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
   
   /* edges */
 #ifdef DEBUG
   printf(" Reading %d Edges...\n", ntypes[4]);
 #endif
-  if (lbody->edges.objs != NULL)
-    for (i = 0; i < lbody->edges.nobjs; i++) {
+  if (lbody_h->edges.objs != NULL) {
+    liteEdge ledge_, *ledge_h = &ledge_;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->edges.nobjs; i++) {
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      ledge = (liteEdge *) EG_alloc(sizeof(liteEdge));
+      EG_NEW(&ledge, liteEdge, 1);
       if (ledge == NULL) return EGADS_MALLOC;
-      ledge->curve    = NULL;
-      ledge->nodes[0] = NULL;
-      ledge->nodes[1] = NULL;
+      EG_GET_EDGE(ledge_h, ledge);
+      ledge_h->curve    = NULL;
+      ledge_h->nodes[0] = NULL;
+      ledge_h->nodes[1] = NULL;
   
-      n = Fread(&iref, sizeof(int), 1, fp);
+      n = Fread(&iref,  sizeof(int), 1, fp);
       if (n != 1) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
 /*@-nullderef@*/
-      if (iref != 0) ledge->curve = lbody->curves.objs[iref-1];
+      if (iref != 0) EG_GET_OBJECT_PTR(&(ledge_h->curve),
+                                       &(lbody_h->curves.objs[iref-1]));
 /*@+nullderef@*/
       n = Fread(&iref, sizeof(int), 1, fp);
       if (n != 1) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
 /*@-nullderef@*/
-      if (iref != 0) ledge->nodes[0] = lbody->nodes.objs[iref-1];
+      if (iref != 0) EG_GET_OBJECT_PTR(&(ledge_h->nodes[0]),
+                                       &(lbody_h->nodes.objs[iref-1]));
 /*@+nullderef@*/
       n = Fread(&iref, sizeof(int), 1, fp);
       if (n != 1) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
 /*@-nullderef@*/
-      if (iref != 0) ledge->nodes[1] = lbody->nodes.objs[iref-1];
+      if (iref != 0) EG_GET_OBJECT_PTR(&(ledge_h->nodes[1]),
+                                       &(lbody_h->nodes.objs[iref-1]));
 /*@+nullderef@*/
      
-      n = Fread(ledge->trange, sizeof(double), 2, fp);
+      n = Fread(ledge_h->trange, sizeof(double), 2, fp);
       if (n != 2) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
-      n = Fread(ledge->bbox,   sizeof(double), 6, fp);
+      n = Fread(ledge_h->bbox,   sizeof(double), 6, fp);
       if (n != 6) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
-      n = Fread(&ledge->tol,   sizeof(double), 1, fp);
+      n = Fread(&ledge_h->tol,   sizeof(double), 1, fp);
       if (n != 1) {
-        EG_free(ledge);
+        EG_FREE(ledge);
         return EGADS_READERR;
       }
+/*@-nullret@*/
+      EG_SET_EDGE(ledge, ledge_h);
+/*@+nullret@*/
 
-      obj = lbody->edges.objs[i];
-      obj->oclass = EDGE;
-      obj->mtype  = mtype;
-      obj->blind  = ledge;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->edges.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = EDGE;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = ledge;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
 
   /* loops */
 #ifdef DEBUG
   printf(" Reading %d Loops...\n", ntypes[5]);
 #endif
-  if (lbody->loops.objs != NULL)
-    for (i = 0; i < lbody->loops.nobjs; i++) {
+  if (lbody_h->loops.objs != NULL) {
+    liteLoop lloop_, *lloop_h = &lloop_;
+    int      *itemp;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->loops.nobjs; i++) {
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      n = Fread(&m, sizeof(int), 1, fp);
+      n = Fread(&m,     sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lloop = (liteLoop *) EG_alloc(sizeof(liteLoop));
+      EG_NEW(&lloop, liteLoop, 1);
       if (lloop == NULL) return EGADS_MALLOC;
-      lloop->nedges  = m;
-      lloop->surface = NULL;
-      n = Fread(&iref, sizeof(int), 1, fp);
+      lloop_h->nedges  = m;
+      lloop_h->surface = NULL;
+      n = Fread(&iref,  sizeof(int), 1, fp);
       if (n != 1) {
-        EG_free(lloop);
+        EG_FREE(lloop);
         return EGADS_READERR;
       }
       if (iref != 0) {
 /*@-nullderef@*/
-        lloop->surface = lbody->surfaces.objs[iref-1];
+        EG_GET_OBJECT_PTR(&(lloop_h->surface),
+                          &(lbody_h->surfaces.objs[iref-1]));
 /*@+nullderef@*/
         m *= 2;
       }
-      n = Fread(lloop->bbox,  sizeof(double), 6, fp);
+      n = Fread(lloop_h->bbox,  sizeof(double), 6, fp);
       if (n != 6) {
-        EG_free(lloop);
+        EG_FREE(lloop);
         return EGADS_READERR;
       }
-      lloop->senses = (int *) EG_alloc(lloop->nedges*sizeof(int));
-      if (lloop->senses == NULL) {
-        EG_free(lloop);
-        return EGADS_MALLOC;
-      }
-      n = Fread(lloop->senses,  sizeof(int), lloop->nedges, fp);
-      if (n != lloop->nedges) {
-        EG_free(lloop->senses);
-        EG_free(lloop);
-        return EGADS_READERR;
-      }
-      lloop->edges = (egObject **) EG_alloc(m*sizeof(egObject *));
-      if (lloop->edges == NULL) {
-        EG_free(lloop->senses);
-        EG_free(lloop);
-        return EGADS_MALLOC;
-      }
-      for (j = 0; j < m; j++) {
-        n = Fread(&iref, sizeof(int), 1, fp);
-        if (n != 1) {
-          EG_free(lloop->edges);
-          EG_free(lloop->senses);
-          EG_free(lloop);
+      if (lloop_h->nedges != 0) {
+        egObject **otemp;
+        EG_NEW(&(lloop_h->senses), int, lloop_h->nedges);
+        if (lloop_h->senses == NULL) {
+          EG_FREE(lloop);
+          return EGADS_MALLOC;
+        }
+
+        itemp = (int *) EG_alloc(lloop_h->nedges*sizeof(int));
+        if (itemp == NULL) {
+          EG_FREE(lloop_h->senses);
+          EG_FREE(lloop);
+          return EGADS_MALLOC;
+        }
+        n = Fread((int *) itemp,  sizeof(int), lloop_h->nedges, fp);
+        if (n != lloop_h->nedges) {
+          EG_free(itemp);
+          EG_FREE(lloop_h->senses);
+          EG_FREE(lloop);
           return EGADS_READERR;
         }
-        if (j < lloop->nedges) {
-/*@-nullderef@*/
-          lloop->edges[j] = lbody->edges.objs[iref-1];
-/*@+nullderef@*/
-        } else {
-/*@-nullderef@*/
-          lloop->edges[j] = lbody->pcurves.objs[iref-1];
-/*@+nullderef@*/
+        EG_COPY(lloop_h->senses, itemp, int, lloop_h->nedges);
+        EG_free(itemp);
+
+        EG_NEW(&(lloop_h->edges), egObject *, m);
+        if (lloop_h->edges == NULL) {
+          EG_FREE(lloop_h->senses);
+          EG_FREE(lloop);
+          return EGADS_MALLOC;
         }
-      }
-      if (lloop->surface != NULL) {
-        for (n = 0; n < lloop->nedges; n++) {
-          ledge = lloop->edges[n]->blind;
-          pcobj = lloop->edges[lloop->nedges+n];
-          stat  = EG_attributeRet(pcobj, ".Bad", &atype, &alen,
-                                  &ints, &reals, &str);
-          if (stat != EGADS_SUCCESS) continue;
-          EG_evaluate(pcobj, &ledge->trange[0], data);
-          d     = sqrt(data[2]*data[2] + data[3]*data[3]);
-          x0[0] = x0[1] = 0.0;
-          if (d != 0.0) {
-            x0[0] = data[2]/d;
-            x0[1] = data[3]/d;
+        otemp = (egObject **) EG_alloc(m*sizeof(egObject *));
+        if (otemp == NULL) {
+          EG_FREE(lloop_h->edges);
+          EG_FREE(lloop_h->senses);
+          EG_FREE(lloop);
+          return EGADS_MALLOC;
+        }
+        for (j = 0; j < m; j++) {
+          n = Fread(&iref, sizeof(int), 1, fp);
+          if (n != 1) {
+            EG_free(otemp);
+            EG_FREE(lloop_h->edges);
+            EG_FREE(lloop_h->senses);
+            EG_FREE(lloop);
+            return EGADS_READERR;
           }
-          for (j = 1; j < 1000; j++) {
-            t    = ledge->trange[0]+j*(ledge->trange[1]-ledge->trange[0])/999.;
-            EG_evaluate(pcobj, &t, data);
+          if (j < lloop_h->nedges) {
+/*@-nullderef@*/
+            EG_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->edges.objs[iref-1]));
+/*@+nullderef@*/
+          } else {
+/*@-nullderef@*/
+            EG_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->pcurves.objs[iref-1]));
+/*@+nullderef@*/
+          }
+        }
+        EG_COPY(lloop_h->edges, otemp, egObject *, m);
+        if (lloop_h->surface != NULL) {
+          liteEdge ledge_, *ledge_h = &ledge_;
+          for (n = 0; n < lloop_h->nedges; n++) {
+            EG_GET_OBJECT_PTR(&ledge, &(otemp[n]->blind));
+            EG_GET_EDGE(ledge_h, ledge);
+            pcobj = otemp[lloop_h->nedges+n];
+#ifdef __NVCC__
+            stat  = EG_attributeRetDev(pcobj, ".Bad", &atype, &alen,
+                                       NULL, NULL, NULL);
+            if (stat != EGADS_SUCCESS) continue;
+            EG_evaluateDev(pcobj, &ledge_h->trange[0], data);
+#else
+            stat  = EG_attributeRet(pcobj, ".Bad", &atype, &alen,
+                                    &ints, &reals, &str);
+            if (stat != EGADS_SUCCESS) continue;
+            EG_evaluate(pcobj, &ledge_h->trange[0], data);
+#endif
             d     = sqrt(data[2]*data[2] + data[3]*data[3]);
-            x1[0] = x1[1] = 0.0;
+            x0[0] = x0[1] = 0.0;
             if (d != 0.0) {
-              x1[0] = data[2]/d;
-              x1[1] = data[3]/d;
+              x0[0] = data[2]/d;
+              x0[1] = data[3]/d;
             }
-            if (x0[0]*x1[0] + x0[1]*x1[1] < -0.95) {
-              stat = EG_addStrAttr(pcobj, ".Bad", "fold");
-              if (stat != EGADS_SUCCESS)
-                printf(" EGADS Info: EG_addStrAttr fold= %d\n", stat);
+            for (j = 1; j < 1000; j++) {
+              t = ledge_h->trange[0]+j*(ledge_h->trange[1]-ledge_h->trange[0])/999.;
+#ifdef __NVCC__
+              EG_evaluateDev(pcobj, &t, data);
+#else
+              EG_evaluate(pcobj, &t, data);
+#endif
+              d = sqrt(data[2]*data[2] + data[3]*data[3]);
+              x1[0] = x1[1] = 0.0;
+              if (d != 0.0) {
+                x1[0] = data[2]/d;
+                x1[1] = data[3]/d;
+              }
+              if (x0[0]*x1[0] + x0[1]*x1[1] < -0.95) {
+#ifdef __NVCC__
+                stat = EG_addStrAttrDev(pcobj, ".Bad", "fold");
+#else
+                stat = EG_addStrAttr(pcobj, ".Bad", "fold");
+#endif
+                if (stat != EGADS_SUCCESS)
+                  printf(" EGADS Info: EG_addStrAttr fold= %d\n", stat);
+              }
+              x0[0] = x1[0];
+              x0[1] = x1[1];
             }
-            x0[0] = x1[0];
-            x0[1] = x1[1];
           }
         }
+        EG_free(otemp);
       }
+/*@-nullret@*/
+      EG_SET_LOOP(lloop, lloop_h);
+/*@+nullret@*/
       
-      obj = lbody->loops.objs[i];
-      obj->oclass = LOOP;
-      obj->mtype  = mtype;
-      obj->blind  = lloop;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->loops.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = LOOP;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lloop;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
   
   /* faces */
 #ifdef DEBUG
   printf(" Reading %d Faces...\n", ntypes[6]);
 #endif
-  if (lbody->faces.objs != NULL)
-    for (i = 0; i < lbody->faces.nobjs; i++) {
+  if (lbody_h->faces.objs != NULL) {
+    liteFace lface_, *lface_h = &lface_;
+#ifdef DEBUG
+    liteLoop lloop_, *lloop_h = &lloop_;
+    liteLoop *lloop_d;
+#endif
+    int      *itemp;
+    egObject obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->faces.nobjs; i++) {
+      egObject **otemp;
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      n = Fread(&m, sizeof(int), 1, fp);
+      n = Fread(&m,     sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lface = (liteFace *) EG_alloc(sizeof(liteFace));
+      EG_NEW(&lface, liteFace, 1);
       if (lface == NULL) return EGADS_MALLOC;
-      lface->nloops  = m;
-      lface->surface = NULL;
-      n = Fread(&iref, sizeof(int), 1, fp);
+      lface_h->nloops  = m;
+      lface_h->surface = NULL;
+      n = Fread(&iref,  sizeof(int), 1, fp);
       if (n != 1) {
-        EG_free(lface);
+        EG_FREE(lface);
         return EGADS_READERR;
       }
       if (iref != 0) {
 /*@-nullderef@*/
 #ifndef __clang_analyzer__
-        lface->surface = lbody->surfaces.objs[iref-1];
+        EG_GET_OBJECT_PTR(&(lface_h->surface),
+                          &(lbody_h->surfaces.objs[iref-1]));
 #endif
 /*@+nullderef@*/
       }
-      n = Fread(lface->urange, sizeof(double), 2, fp);
+      n = Fread(lface_h->urange, sizeof(double), 2, fp);
       if (n != 2) {
-        EG_free(lface);
+        EG_FREE(lface);
         return EGADS_READERR;
       }
-      n = Fread(lface->vrange, sizeof(double), 2, fp);
+      n = Fread(lface_h->vrange, sizeof(double), 2, fp);
       if (n != 2) {
-        EG_free(lface);
+        EG_FREE(lface);
         return EGADS_READERR;
       }
-      n = Fread(lface->bbox,   sizeof(double), 6, fp);
+      n = Fread(lface_h->bbox,   sizeof(double), 6, fp);
       if (n != 6) {
-        EG_free(lface);
+        EG_FREE(lface);
         return EGADS_READERR;
       }
-      n = Fread(&lface->tol,   sizeof(double), 1, fp);
+      n = Fread(&lface_h->tol,   sizeof(double), 1, fp);
       if (n != 1) {
-        EG_free(lface);
+        EG_FREE(lface);
         return EGADS_READERR;
       }
-      lface->senses = (int *) EG_alloc(lface->nloops*sizeof(int));
-      if (lface->senses == NULL) {
-        EG_free(lface);
+      EG_NEW(&(lface_h->senses), int, lface_h->nloops);
+      if (lface_h->senses == NULL) {
+        EG_FREE(lface);
         return EGADS_READERR;
       }
-      n = Fread(lface->senses,  sizeof(int), lface->nloops, fp);
-      if (n != lface->nloops) {
-        EG_free(lface->senses);
-        EG_free(lface);
-        return EGADS_READERR;
-      }
-      lface->loops = (egObject **) EG_alloc(lface->nloops*sizeof(egObject *));
-      if (lface->loops == NULL) {
-        EG_free(lface->senses);
-        EG_free(lface);
+      itemp = (int *) EG_alloc(lface_h->nloops*sizeof(int));
+      if (itemp == NULL) {
+        EG_FREE(lface_h->senses);
+        EG_FREE(lface);
         return EGADS_MALLOC;
       }
-      for (j = 0; j < lface->nloops; j++) {
+      n = Fread((int *) itemp,  sizeof(int), lface_h->nloops, fp);
+      if (n != lface_h->nloops) {
+        EG_free(itemp);
+        EG_FREE(lface_h->senses);
+        EG_FREE(lface);
+        return EGADS_READERR;
+      }
+      EG_COPY(lface_h->senses, itemp, int, lface_h->nloops);
+      EG_free(itemp);
+      EG_NEW(&(lface_h->loops), egObject *, lface_h->nloops);
+      if (lface_h->loops == NULL) {
+        EG_FREE(lface_h->senses);
+        EG_FREE(lface);
+        return EGADS_MALLOC;
+      }
+      otemp = (egObject **) EG_alloc(lface_h->nloops*sizeof(egObject *));
+      for (j = 0; j < lface_h->nloops; j++) {
         n = Fread(&iref, sizeof(int), 1, fp);
         if (n != 1) {
-          EG_free(lface->loops);
-          EG_free(lface->senses);
-          EG_free(lface);
+          EG_free(otemp);
+          EG_FREE(lface_h->loops);
+          EG_FREE(lface_h->senses);
+          EG_FREE(lface);
           return EGADS_READERR;
         }
 /*@-nullderef@*/
 #ifndef __clang_analyzer__
-        lface->loops[j] = lbody->loops.objs[iref-1];
+        EG_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->loops.objs[iref-1]));
 #endif
 /*@+nullderef@*/
       }
+/*@-nullpass@*/
+      EG_COPY(lface_h->loops, otemp, egObject *, lface_h->nloops);
+/*@+nullpass@*/
+      EG_free(otemp);
 
-      obj = lbody->faces.objs[i];
-      obj->oclass = FACE;
-      obj->mtype  = mtype;
-      obj->blind  = lface;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->faces.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = FACE;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lface;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
-//#ifdef DEBUG
-      for (j = 0; j < lface->nloops; j++) {
-        lloop = lface->loops[j]->blind;
-        if (lloop->surface == NULL) continue;
-        for (n = 0; n < lloop->nedges; n++) {
-          stat = EG_attributeRet(lloop->edges[lloop->nedges+n], ".Bad", &atype,
+      EG_SET_OBJECT(&obj, obj_h);
+#ifdef DEBUG
+      for (j = 0; j < lface_h->nloops; j++) {
+        EG_GET_OBJECT_PTR(&(obj), &(lface_h->loops[j]));
+        EG_GET_OBJECT_PTR(&(obj), &(obj->blind));
+        lloop_d = (liteLoop *) obj;
+        EG_GET_LOOP(lloop_h, lloop_d);
+        if (lloop_h->surface == NULL) continue;
+        for (n = 0; n < lloop_h->nedges; n++) {
+          EG_GET_OBJECT_PTR(&(obj), &(lloop_h->edges[lloop_h->nedges+n]));
+#ifdef __NVCC__
+          stat  = EG_attributeRetDev(obj, ".Bad", &atype, &alen,
+                                     NULL, NULL, &str);
+#else
+          stat = EG_attributeRet(obj, ".Bad", &atype,
                                  &alen, &ints, &reals, &str);
-          if ((stat == EGADS_SUCCESS) && (atype == ATTRSTRING))
+#endif
+          if ((stat == EGADS_SUCCESS) && (atype == ATTRSTRING)) {
             if (strcmp(str, "fold") == 0)
               printf(" EGADS Info: Body %d Face %d Loop#%d/Edge#%d Bad PCurve -- %s!\n",
                      bindex+1, i+1, j+1, n+1, str);
+#ifdef __NVCC__
+            EG_free(str);
+#endif
+          }
         }
       }
-//#endif
+#endif
+/*@-nullret@*/
+      EG_SET_FACE(lface, lface_h);
+/*@+nullret@*/
     }
+  }
 
   /* shells */
 #ifdef DEBUG
   printf(" Reading %d Shells...\n", ntypes[7]);
 #endif
-  if (lbody->shells.objs != NULL)
-    for (i = 0; i < lbody->shells.nobjs; i++) {
+  if (lbody_h->shells.objs != NULL) {
+    liteShell lshell_, *lshell_h = &lshell_;
+    egObject  obj_, *obj_h = &obj_;
+    for (i = 0; i < lbody_h->shells.nobjs; i++) {
+      egObject  **otemp;
       n = Fread(&mtype, sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      n = Fread(&m, sizeof(int), 1, fp);
+      n = Fread(&m,     sizeof(int), 1, fp);
       if (n != 1) return EGADS_READERR;
-      lshell = (liteShell *) EG_alloc(sizeof(liteShell));
+      EG_NEW(&lshell, liteShell, 1);
       if (lshell == NULL) return EGADS_MALLOC;
-      lshell->nfaces = m;
-      n = Fread(lshell->bbox, sizeof(double), 6, fp);
+      lshell_h->nfaces = m;
+      n = Fread(lshell_h->bbox, sizeof(double), 6, fp);
       if (n != 6) {
-        EG_free(lshell);
+        EG_FREE(lshell);
         return EGADS_READERR;
       }
-      lshell->faces = (egObject **) EG_alloc(m*sizeof(egObject *));
-      if (lshell->faces == NULL) {
-        EG_free(lshell);
+      EG_NEW(&(lshell_h->faces), egObject *, m);
+      if (lshell_h->faces == NULL) {
+        EG_FREE(lshell);
+        return EGADS_MALLOC;
+      }
+      otemp = (egObject **) EG_alloc(m*sizeof(egObject *));
+      if (otemp == NULL) {
+        EG_FREE(lshell_h->faces);
+        EG_FREE(lshell);
         return EGADS_MALLOC;
       }
       for (j = 0; j < m; j++) {
         n = Fread(&iref, sizeof(int), 1, fp);
         if (n != 1) {
-          EG_free(lshell->faces);
-          EG_free(lshell);
+          EG_free(otemp);
+          EG_FREE(lshell_h->faces);
+          EG_FREE(lshell);
           return EGADS_READERR;
         }
 /*@-nullderef@*/
 #ifndef __clang_analyzer__
-        lshell->faces[j] = lbody->faces.objs[iref-1];
+        EG_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->faces.objs[iref-1]));
 #endif
 /*@+nullderef@*/
       }
+      EG_COPY(lshell_h->faces, otemp, egObject *, m);
+      EG_free(otemp);
+      EG_SET_SHELL(lshell, lshell_h);
 
-      obj = lbody->shells.objs[i];
-      obj->oclass = SHELL;
-      obj->mtype  = mtype;
-      obj->blind  = lshell;
-      stat = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+      EG_GET_OBJECT_PTR(&obj, &(lbody_h->shells.objs[i]));
+      EG_GET_OBJECT(obj_h, obj);
+      obj_h->oclass = SHELL;
+      obj_h->mtype  = mtype;
+      obj_h->blind  = lshell;
+      stat = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
       if (stat != EGADS_SUCCESS) return stat;
+      EG_SET_OBJECT(&obj, obj_h);
     }
+  }
   
   /* finish off the body */
   
-  if (lbody->shells.nobjs != 0) {
-    lbody->senses = (int *) EG_alloc(lbody->shells.nobjs*sizeof(int));
-    if (lbody->senses == NULL) return EGADS_MALLOC;
-    n = Fread(lbody->senses, sizeof(int), lbody->shells.nobjs, fp);
-    if (n != lbody->shells.nobjs) return EGADS_READERR;
+  if (lbody_h->shells.nobjs != 0) {
+    int *itemp;
+    EG_NEW(&(lbody_h->senses), int, lbody_h->shells.nobjs);
+    if (lbody_h->senses == NULL) return EGADS_MALLOC;
+    itemp = (int *) EG_alloc(lbody_h->shells.nobjs*sizeof(int));
+    if (itemp == NULL) {
+      EG_FREE(lbody_h->senses);
+      return EGADS_MALLOC;
+    }
+    n = Fread(itemp, sizeof(int), lbody_h->shells.nobjs, fp);
+    if (n != lbody_h->shells.nobjs) {
+      EG_free(itemp);
+      EG_FREE(lbody_h->senses);
+      return EGADS_READERR;
+    }
+    EG_COPY(lbody_h->senses, itemp, int, lbody_h->shells.nobjs);
+    EG_free(itemp);
   }
-  n = Fread(lbody->bbox, sizeof(double), 6, fp);
+  n = Fread(lbody_h->bbox, sizeof(double), 6, fp);
   if (n != 6) return EGADS_READERR;
-  stat = EG_readAttrs(fp, (egAttrs **) &bobj->attrs);
+  EG_GET_OBJECT(bobj_h, bobj);
+  stat = EG_readAttrs(fp, (egAttrs **) &bobj_h->attrs);
   if (stat != EGADS_SUCCESS) return stat;
+  EG_SET_OBJECT(&bobj, bobj_h);
+/*@-nullret@*/
+  EG_SET_BODY(lbody, lbody_h);
+/*@+nullret@*/
 
   return EGADS_SUCCESS;
+}
+
+
+static int
+EG_freeLiteModel(/*@null@*/ liteModel *model)
+{
+  egObject *bodies_d = NULL;
+
+  if (NULL != model) {
+    EG_COPY(&(bodies_d), &(model->bodies), egObject *, 1);
+    if (NULL != bodies_d) EG_FREE(bodies_d);
+    EG_FREE(model);
+  }
+  return EGADS_SUCCESS;
+}
+
+
+static int
+EG_allocLiteModel(int nbody, double bbox[6], liteModel **model)
+{
+  int       i;
+  liteModel obj_, *obj_h = &obj_;
+  liteModel *obj = NULL;
+  void      *nil = NULL;
+
+  obj_h->nbody = nbody;
+  obj_h->bbox[0] = bbox[0]; obj_h->bbox[1] = bbox[1]; obj_h->bbox[2] = bbox[2];
+  obj_h->bbox[3] = bbox[3]; obj_h->bbox[4] = bbox[4]; obj_h->bbox[5] = bbox[5];
+  obj_h->bodies = NULL;
+  if (nbody > 0) {
+    EG_NEW((void **)&(obj_h->bodies), egObject *, obj_h->nbody);
+    if (obj_h->bodies == NULL) goto modelCleanup;
+  }
+
+  EG_NEW((void **)&(obj), liteModel, 1);
+  if (obj == NULL) goto modelCleanup;
+  EG_COPY(obj, obj_h, liteModel, 1);
+  if (obj == NULL) goto modelCleanup;
+
+  for (i = 0; i < obj_h->nbody; ++i) {
+    egObject *ptr;
+/*@-nullderef@*/
+    EG_COPY(&(obj_h->bodies[i]), &(nil), void *, 1);
+    EG_GET_OBJECT_PTR(&ptr, &(obj_h->bodies[i]));
+/*@+nullderef@*/
+    if (ptr != NULL) goto modelCleanup;
+  }
+
+  *model = obj;
+  return EGADS_SUCCESS;
+
+modelCleanup:
+/*@-dependenttrans@*/
+  EG_FREE(obj);
+/*@+dependenttrans@*/
+  EG_FREE(obj_h->bodies);
+  return EGADS_MALLOC;
 }
 
 
@@ -975,16 +1508,24 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
                egObject **model)
 {
   int       i, n, rev[2];
-  liteModel *lmodel;
+  liteModel *lmodel = NULL;
+  egObject  obj_, *obj_h = &obj_;
   egObject  *obj;
+  egObject  context_;
+  egObject  *context_h = &context_;
   stream_T  myStream;
   stream_T  *fp = &myStream;
+  int       nbody;
+  double    bbox[6];
   
   *model = NULL;
-  if (context == NULL)               return EGADS_NULLOBJ;
-  if (context->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (context->oclass != CONTXT)     return EGADS_NOTCNTX;
-  if (context->topObj != NULL)       return EGADS_EXISTS;
+
+  EG_GET_OBJECT(context_h, context);
+
+  if (context_h == NULL)               return EGADS_NULLOBJ;
+  if (context_h->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (context_h->oclass != CONTXT)     return EGADS_NOTCNTX;
+  if (context_h->topObj != NULL)       return EGADS_EXISTS;
 
   fp->size = nbytes;
   fp->ptr  = 0;
@@ -992,7 +1533,7 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
   fp->swap = 0;
 
   /* get header */
-  n = Fread(&i,             sizeof(int),    1, fp);
+  n = Fread(&i,     sizeof(int),    1, fp);
   if (n != 1) {
     return EGADS_READERR;
   }
@@ -1004,7 +1545,7 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
     }
     fp->swap = 1;
   }
-  n = Fread(rev,            sizeof(int),    2, fp);
+  n = Fread(rev,    sizeof(int),    2, fp);
   if (n != 2) {
     return EGADS_READERR;
   }
@@ -1012,50 +1553,38 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
     printf(" EGADS Error: EGADS Lite file revision = %d %d!\n", rev[0], rev[1]);
     return EGADS_READERR;
   }
-  
-  lmodel = (liteModel *) EG_alloc(sizeof(liteModel));
-  if (lmodel == NULL) {
-    printf(" EGADS Error: Malloc of Model!\n");
-    return EGADS_MALLOC;
-  }
-  n = Fread(lmodel->bbox,   sizeof(double), 6, fp);
+
+  n = Fread(bbox,   sizeof(double), 6, fp);
   if (n != 6) {
-    EG_free(lmodel);
     return EGADS_READERR;
   }
-  n = Fread(&lmodel->nbody, sizeof(int),    1, fp);
+  n = Fread(&nbody, sizeof(int),    1, fp);
   if (n != 1) {
-    EG_free(lmodel);
     return EGADS_READERR;
   }
-  lmodel->bodies = NULL;
-  if (lmodel->nbody > 0) {
-    lmodel->bodies = (egObject **) EG_alloc(lmodel->nbody*sizeof(egObject *));
-    if (lmodel->bodies == NULL) {
-      printf(" EGADS Error: Malloc of %d Bodies!\n", lmodel->nbody);
-      EG_free(lmodel);
-      return EGADS_MALLOC;
-    }
-    for (i = 0; i < lmodel->nbody; i++) lmodel->bodies[i] = NULL;
-  }
+  EG_allocLiteModel(nbody, bbox, &lmodel);
+
   i = EG_makeObject(context, &obj);
   if (i != EGADS_SUCCESS) {
-    EG_free(lmodel->bodies);
+    EG_freeLiteModel(lmodel);
     printf(" EGADS Error: makeObject on Model = %d!\n", i);
-    EG_free(lmodel);
     return i;
   }
-  obj->oclass = MODEL;
-  obj->mtype  = 0;
-  obj->blind  = lmodel;
-  i = EG_readAttrs(fp, (egAttrs **) &obj->attrs);
+  EG_GET_OBJECT(obj_h, obj);
+  obj_h->oclass = MODEL;
+  obj_h->mtype  = 0;
+  obj_h->blind  = lmodel;
+/*@-nullret@*/
+  EG_SET_OBJECT(&obj, obj_h);
+/*@+nullret@*/
+  i = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
   if (i != EGADS_SUCCESS) {
     EG_close(context);
     return i;
   }
 
   /* get all of the bodies */
-  for (n = 0; n < lmodel->nbody; n++) {
+  for (n = 0; n < nbody; n++) {
     i = EG_readBody(context, obj, n, fp);
     if (i == EGADS_SUCCESS) continue;
     /* errorred out -- cleanup */
@@ -1063,7 +1592,8 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
     return i;
   }
 
-  *model = context->topObj = obj;
+  EG_SET_OBJECT_PTR(&(context->topObj), &obj);
+  *model = obj;
 
   return EGADS_SUCCESS;
 }

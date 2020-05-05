@@ -2399,16 +2399,6 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
       result[0] = data[0];
       result[1] = data[1];
     }
-    /* this probably does nothing due to the range limiting */
-    if ((per&1) != 0) {
-      period = srange[1] - srange[0];
-      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1]))
-        if (*param+PARAMACC < srange[0]) {
-          if (*param+period-PARAMACC < srange[1]) *param += period;
-        } else {
-          if (*param-period+PARAMACC > srange[0]) *param -= period;
-        }
-    }
     
   } else if (geom->oclass == CURVE) {
 
@@ -2559,16 +2549,6 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
       result[0] = data[0];
       result[1] = data[1];
       result[2] = data[2];
-    }
-    /* this probably does nothing due to the range limiting */
-    if ((per&1) != 0) {
-      period = srange[1] - srange[0];
-      if ((*param+PARAMACC < srange[0]) || (*param-PARAMACC > srange[1]))
-        if (*param+PARAMACC < srange[0]) {
-          if (*param+period-PARAMACC < srange[1]) *param += period;
-        } else {
-          if (*param-period+PARAMACC > srange[0]) *param -= period;
-        }
     }
 
   } else {

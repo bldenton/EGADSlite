@@ -7,6 +7,17 @@
  *
  */
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
+
 #ifdef WIN32
 
 #include <windows.h>
@@ -16,6 +27,7 @@
 #include <process.h>
 
 
+#ifndef __CUDA_ARCH__
 static long
 EMP_getseconds()
 {
@@ -31,12 +43,15 @@ EMP_getseconds()
   int64          = large.QuadPart/10000000;
   return int64 & 0x7FFFFFFF;
 }
+#endif
 
 
 /* initialize the EMP block */
 
+__HOST_AND_DEVICE__
 int EMP_Init(long *start)
 {
+#ifndef __CUDA_ARCH__
   int         np;
   char        *env;
   SYSTEM_INFO siSysInfo;
@@ -51,38 +66,56 @@ int EMP_Init(long *start)
   }
   if (start != NULL) *start = EMP_getseconds();
   return np;
+#else
+  return 1;
+#endif
 }
 
 
 /* close the EMP block */
 
+__HOST_AND_DEVICE__
 long EMP_Done(long *start)
 {
+#ifndef __CUDA_ARCH__
   if (start == NULL) return 0L;
   return EMP_getseconds() - *start;
+#else
+  return 0L;
+#endif
 }
 
 
 /* Waste a little time */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadSpin()
 {
+#ifndef __CUDA_ARCH__
   Sleep(1);
+#endif
 }
 
 
 /* Get the current Thread ID */
 
+__HOST_AND_DEVICE__
 long EMP_ThreadID()
 {
+#ifndef __CUDA_ARCH__
   return GetCurrentThreadId();
+#else
+  return 0L;
+#endif
 }
 
 
 /* Spawn off another thread */
 
+__HOST_AND_DEVICE__
 HANDLE *EMP_ThreadCreate(void (*entry)(void *), void *arg)
 {
+#ifndef __CUDA_ARCH__
   HANDLE   *thread;
   unsigned  threadID;
 
@@ -93,39 +126,53 @@ HANDLE *EMP_ThreadCreate(void (*entry)(void *), void *arg)
 				    (unsigned int (__stdcall *)(void *)) entry,
                                     arg,  0, &threadID);
   return thread;
+#else
+  return NULL;
+#endif
 }
 
 
 /* Ends the thread execution with the return code */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadExit()
 {
+#ifndef __CUDA_ARCH__
   _endthreadex(0);
+#endif
 }
 
 
 /* Wait for the thread to finish */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadWait(HANDLE *thread)
 {
+#ifndef __CUDA_ARCH__
   if (WaitForSingleObject(*thread, INFINITE) == WAIT_FAILED)
     printf(" Warning: ThreadWait FAILED!\n");
+#endif
 }
 
 
 /* Destroy the thread memory */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadDestroy(HANDLE *thread)
 {
+#ifndef __CUDA_ARCH__
   CloseHandle(*thread);
   free(thread);
+#endif
 }
 
 
 /* Create a lock (unlocked) */
 
+__HOST_AND_DEVICE__
 HANDLE *EMP_LockCreate()
 {
+#ifndef __CUDA_ARCH__
   HANDLE *mutex;
 
   mutex  = (HANDLE *) malloc(sizeof(HANDLE));
@@ -137,31 +184,42 @@ HANDLE *EMP_LockCreate()
     return NULL;
   }
   return mutex;
+#else
+  return NULL;
+#endif
 }
 
 
 /* Destroy the lock memory */
 
+__HOST_AND_DEVICE__
 void EMP_LockDestroy(HANDLE *mutex)
 {
+#ifndef __CUDA_ARCH__
   ReleaseMutex(*mutex);
   free(mutex);
+#endif
 }
 
 
 /* Set a lock (wait if already set) */
 
+__HOST_AND_DEVICE__
 void EMP_LockSet(HANDLE *mutex)
 {
+#ifndef __CUDA_ARCH__
   if (WaitForSingleObject(*mutex, INFINITE) == WAIT_FAILED)
     printf(" Warning: LockSet Wait FAILED!\n");
+#endif
 }
 
 
 /* Gets the value of a lock (0-unset, 1-set) */
 
+__HOST_AND_DEVICE__
 int EMP_LockTest(HANDLE *mutex)
 {
+#ifndef __CUDA_ARCH__
   DWORD stat;
 
   stat = WaitForSingleObject(*mutex, 0L);
@@ -171,15 +229,21 @@ int EMP_LockTest(HANDLE *mutex)
     ReleaseMutex(*mutex);
     return 0;
   }
+#else
+  return 0;
+#endif
 }
 
 
 /* Release a lock */
 
+__HOST_AND_DEVICE__
 void EMP_LockRelease(HANDLE *mutex)
 {
+#ifndef __CUDA_ARCH__
   if (ReleaseMutex(*mutex) == 0)
     printf(" Warning: LockRelease Unlock FAILED!\n");
+#endif
 }
 
 
@@ -195,6 +259,7 @@ void EMP_LockRelease(HANDLE *mutex)
 #include <sys/time.h>
 
 
+#ifndef __CUDA_ARCH__
 static long
 EMP_getseconds()
 {
@@ -203,12 +268,15 @@ EMP_getseconds()
   gettimeofday(&tv, NULL);
   return tv.tv_sec;
 }
+#endif
 
 
 /* Initialize the EMP block */
 
+__HOST_AND_DEVICE__
 int EMP_Init(/*@null@*/ long *start)
 {
+#ifndef __CUDA_ARCH__
   char *env;
   long nprocs = 1;
 
@@ -227,38 +295,56 @@ int EMP_Init(/*@null@*/ long *start)
   }
   if (start != NULL) *start = EMP_getseconds();
   return nprocs;
+#else
+  return 1;
+#endif
 }
 
 
 /* Close the EMP block */
 
+__HOST_AND_DEVICE__
 long EMP_Done(long *start)
 {
+#ifndef __CUDA_ARCH__
   if (start == NULL) return 0L;
   return EMP_getseconds() - *start;
+#else
+  return 0L;
+#endif
 }
 
 
 /* Waste a little time -- yeild */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadSpin()
 {
+#ifndef __CUDA_ARCH__
   usleep(1000);
+#endif
 }
 
 
 /* Get the current Thread ID */
 
+__HOST_AND_DEVICE__
 long EMP_ThreadID()
 {
+#ifndef __CUDA_ARCH__
   return (long) pthread_self();
+#else
+  return 0L;
+#endif
 }
 
 
 /* Spawn off another thread */
 
+__HOST_AND_DEVICE__
 /*@null@*/ void *EMP_ThreadCreate(void (*entry)(void *), /*@null@*/ void *arg)
 {
+#ifndef __CUDA_ARCH__
   int            stat;
   pthread_t      *thread;
   pthread_attr_t attr;
@@ -274,21 +360,29 @@ long EMP_ThreadID()
   }
 
   return (void *) thread;
+#else
+  return NULL;
+#endif
 }
 
 
 /* Ends the thread execution */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadExit()
 {
+#ifndef __CUDA_ARCH__
   pthread_exit(NULL);
+#endif
 }
 
 
 /* Wait for the thread to finish */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadWait(void *vthread)
 {
+#ifndef __CUDA_ARCH__
   int       stat;
   pthread_t *thread;
 
@@ -296,13 +390,16 @@ void EMP_ThreadWait(void *vthread)
   stat   = pthread_join(*thread, NULL);
   if (stat != 0)
     printf(" Threading ERROR: %d (ThreadWait)\n", stat);
+#endif
 }
 
 
 /* Destroy the thread memory */
 
+__HOST_AND_DEVICE__
 void EMP_ThreadDestroy(/*@only@*/ void *vthread)
 {
+#ifndef __CUDA_ARCH__
 #if defined(DARWIN) || defined(DARWIN64)
   pthread_t *thread;
 
@@ -310,13 +407,16 @@ void EMP_ThreadDestroy(/*@only@*/ void *vthread)
   pthread_detach(*thread);
 #endif
   free(vthread);
+#endif
 }
 
 
 /* Create a lock (unlocked) */
 
+__HOST_AND_DEVICE__
 /*@null@*/ void *EMP_LockCreate()
 {
+#ifndef __CUDA_ARCH__
   int             stat;
   pthread_mutex_t *mutex;
 
@@ -330,38 +430,49 @@ void EMP_ThreadDestroy(/*@only@*/ void *vthread)
     }
   }
   return (void *) mutex;
+#else
+  return (void *) NULL;
+#endif
 }
 
 
 /* Destroy the lock memory */
 
+__HOST_AND_DEVICE__
 void EMP_LockDestroy(/*@only@*/ void *vlock)
 {
+#ifndef __CUDA_ARCH__
   pthread_mutex_t *lock;
 
   lock = (pthread_mutex_t *) vlock;
   pthread_mutex_destroy(lock);
   free(lock);
+#endif
 }
 
 
 /* Set a lock (wait if already set) */
 
+__HOST_AND_DEVICE__
 void EMP_LockSet(void *vlock)
 {
+#ifndef __CUDA_ARCH__
   int             stat;
   pthread_mutex_t *lock;
 
   lock = (pthread_mutex_t *) vlock;
   stat = pthread_mutex_lock(lock);
   if (stat != 0) printf(" Threading Warning: %d (LockSet)\n", stat);
+#endif
 }
 
 
 /* Gets the value of a lock (0-unset, 1-set) */
 
+__HOST_AND_DEVICE__
 int EMP_LockTest(void *vlock)
 {
+#ifndef __CUDA_ARCH__
   int             stat;
   pthread_mutex_t *lock;
 
@@ -371,22 +482,26 @@ int EMP_LockTest(void *vlock)
     return 1;
   } else if (stat == 0) {
     pthread_mutex_unlock(lock);
-    return 0;
   } else {
     printf(" Fatal Threading ERROR: %d (LockTest)\n", stat);
     exit(EXIT_FAILURE);
   }
+#endif
+  return 0;
 }
 
 
 /* Release a lock */
 
+__HOST_AND_DEVICE__
 void EMP_LockRelease(void *vlock)
 {
+#ifndef __CUDA_ARCH__
   pthread_mutex_t *lock;
 
   lock = (pthread_mutex_t *) vlock;
   pthread_mutex_unlock(lock);
+#endif
 }
 #endif
 

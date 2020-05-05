@@ -34,6 +34,9 @@
 #include <stdlib.h>
 #include <math.h>
 
+#ifdef __CUDA_ARCH__
+#include "liteDevice.h"
+#endif
 /* On some machines, the exact arithmetic routines might be defeated by the  */
 /*   use of internal extended precision floating-point registers.  Sometimes */
 /*   this problem can be fixed by defining certain values to be volatile,    */
@@ -158,6 +161,18 @@
   Fast_Two_Sum(_j, _k, x3, x2)
 
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
+
+#ifndef __CUDA_ARCH__
   static REAL splitter;		/* 2^ceiling(p / 2) + 1.
 				   Used to split floats in half. */
   static REAL epsilon;		/* = 2^(-p).
@@ -166,6 +181,16 @@
   static REAL resulterrbound;
   static REAL ccwerrboundA, ccwerrboundB, ccwerrboundC;
   static REAL o3derrboundA, o3derrboundB, o3derrboundC;
+#else
+  __device__ static REAL splitter;       /* 2^ceiling(p / 2) + 1.
+                                            Used to split floats in half. */
+  __device__ static REAL epsilon;        /* = 2^(-p).
+                                            Used to estimate roundoff errors. */
+  /* A set of coefficients used to calculate maximum roundoff errors. */
+  __device__ static REAL resulterrbound;
+  __device__ static REAL ccwerrboundA, ccwerrboundB, ccwerrboundC;
+  __device__ static REAL o3derrboundA, o3derrboundB, o3derrboundC;
+#endif
 
 
 /*****************************************************************************/
@@ -187,7 +212,7 @@
 /*                                                                           */
 /*****************************************************************************/
 
-void EG_exactInit()
+__HOST_AND_DEVICE__ void EG_exactInit()
 {
   REAL half;
   REAL check, lastcheck;
@@ -236,7 +261,7 @@ void EG_exactInit()
 /*                                                                           */
 /*****************************************************************************/
 
-static int
+__HOST_AND_DEVICE__ static int
 fast_expansion_sum_zeroelim(int elen, REAL *e, int flen, REAL *f, REAL *h)
 	                                              /* h cannot be e or f. */
 {
@@ -335,7 +360,8 @@ fast_expansion_sum_zeroelim(int elen, REAL *e, int flen, REAL *f, REAL *h)
 /*                                                                           */
 /*****************************************************************************/
 
-static int scale_expansion_zeroelim(int elen, REAL *e, REAL b, REAL *h)
+__HOST_AND_DEVICE__ static int
+scale_expansion_zeroelim(int elen, REAL *e, REAL b, REAL *h)
                                               /* e and h cannot be the same. */
 {
   INEXACT REAL Q, sum;
@@ -384,7 +410,7 @@ static int scale_expansion_zeroelim(int elen, REAL *e, REAL b, REAL *h)
 /*                                                                           */
 /*****************************************************************************/
 
-static REAL estimate(int elen, REAL *e)
+__HOST_AND_DEVICE__ static REAL estimate(int elen, REAL *e)
 {
   REAL Q;
   int eindex;
@@ -397,7 +423,8 @@ static REAL estimate(int elen, REAL *e)
 }
 
 
-static REAL orient2dadapt(REAL *pa, REAL *pb, REAL *pc, REAL detsum)
+__HOST_AND_DEVICE__ static REAL
+orient2dadapt(REAL *pa, REAL *pb, REAL *pc, REAL detsum)
 {
   INEXACT REAL acx, acy, bcx, bcy;
   REAL acxtail, acytail, bcxtail, bcytail;
@@ -480,7 +507,7 @@ static REAL orient2dadapt(REAL *pa, REAL *pb, REAL *pc, REAL detsum)
 }
 
 
-REAL EG_orienTri(REAL *pa, REAL *pb, REAL *pc)
+__HOST_AND_DEVICE__ REAL EG_orienTri(REAL *pa, REAL *pb, REAL *pc)
 {
   REAL detleft, detright, det;
   REAL detsum, errbound;
@@ -514,7 +541,7 @@ REAL EG_orienTri(REAL *pa, REAL *pb, REAL *pc)
 }
 
 
-static REAL
+__HOST_AND_DEVICE__ static REAL
 orient3dadapt(REAL *pa, REAL *pb, REAL *pc, REAL *pd, REAL permanent)
 {
   INEXACT REAL adx, bdx, cdx, ady, bdy, cdy, adz, bdz, cdz;
@@ -919,7 +946,7 @@ orient3dadapt(REAL *pa, REAL *pb, REAL *pc, REAL *pd, REAL permanent)
 }
 
 
-REAL EG_orienTet(REAL *pa, REAL *pb, REAL *pc, REAL *pd)
+__HOST_AND_DEVICE__ REAL EG_orienTet(REAL *pa, REAL *pb, REAL *pc, REAL *pd)
 {
   REAL adx, bdx, cdx, ady, bdy, cdy, adz, bdz, cdz;
   REAL bdxcdy, cdxbdy, cdxady, adxcdy, adxbdy, bdxady;

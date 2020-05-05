@@ -15,15 +15,26 @@
 #define KNDIFF   1.0e-5         // knot difference
 
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
 #ifdef __ProtoExt__
 #undef __ProtoExt__
 #endif
 #ifdef __cplusplus
 extern "C" {
-#define __ProtoExt__
+#define __ProtoExt__ __HOST_AND_DEVICE__
 #else
-#define __ProtoExt__ extern
+#define __ProtoExt__ __HOST_AND_DEVICE__ extern
 #endif
+
 
 __ProtoExt__ /*@null@*/ /*@out@*/ /*@only@*/ 
              void *EG_alloc( size_t nbytes );
@@ -62,5 +73,7 @@ __ProtoExt__ int  EG_attributePrint( const egObject *src );
 #ifdef __cplusplus
 }
 #endif
+
+#undef __HOST_AND_DEVICE__
 
 #endif

@@ -27,6 +27,16 @@
 #define MAX(a,b)	(((a) > (b)) ? (a) : (b))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
 
 typedef struct {
   int nodes[4];         /* quad indices into Node list */
@@ -59,13 +69,18 @@ typedef struct {
 } qFill;
 
 
-  extern int EG_evaluate( const egObject *geom, const double *param,
-                          double *results );
+#ifdef __CUDACC__
+__HOST_AND_DEVICE__ int EG_evaluate( const egObject *geom, const double *param,
+                                     double *results );
+#else
+extern int EG_evaluate( const egObject *geom, const double *param,
+                        double *results );
+#endif
 
 
 /* Compute arclength basis functions for TFI use */
 
-static void 
+__HOST_AND_DEVICE__ static void
 EG_arcBasis(qFill *q, int nx, int ny, int *sideptr[], double *abasis[2])
 {
   int    i, j, k, i0, im, j0, jm, nny = ny+1;
@@ -143,7 +158,7 @@ EG_arcBasis(qFill *q, int nx, int ny, int *sideptr[], double *abasis[2])
 
 /* remap into the actual UV space */
 
-static void
+__HOST_AND_DEVICE__ static void
 EG_getside(int iuv, double t, int len, int *side, double *uvx,
            double *uv, double *uvi)
 {
@@ -164,7 +179,7 @@ EG_getside(int iuv, double t, int len, int *side, double *uvx,
 }
 
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_dQuadTFI(int *elen, double *uv, int npts, double *uvx)
 {
   int    i, j, k, len, ll, lr, ur, ul;
@@ -262,7 +277,7 @@ EG_dQuadTFI(int *elen, double *uv, int npts, double *uvx)
 
 /* get the vertex count for the suite of blocks */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_getVertCnt(qFill *q, int len, int blocks[][6])
 {
   int k, cnt;
@@ -280,7 +295,7 @@ EG_getVertCnt(qFill *q, int len, int blocks[][6])
 
 /* sets the individual quads by looping through the blocks */
 
-static void 
+__HOST_AND_DEVICE__ static void
 EG_setQuads(qFill *q, int len, int blocks[][6], int *sideptr[])
 {
   int    i, j, k, i0, i1, i2, i3, ilast, nx, ny;
@@ -380,7 +395,7 @@ EG_setQuads(qFill *q, int len, int blocks[][6], int *sideptr[])
 
 /* perform the laplacian smoothing on the grid vertices */
 
-static void
+__HOST_AND_DEVICE__ static void
 EG_smoothQuads(const egObject *face, qFill *q, int len, int npass)
 {
   int           i, j, i0, i1, i2, i3, status, pass;
@@ -596,7 +611,7 @@ EG_smoothQuads(const egObject *face, qFill *q, int len, int npass)
 
 /* triangle templating case */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
                int *indices, int *elens, double *uv, int *npts, double **uvs)
 {
@@ -838,7 +853,7 @@ EG_triTemplate(/*@unused@*/ long tID, const egObject *face, qFill *q, int nsp,
 
 /* general blocking case */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              double *uv, int *npts, double **uvs)
 {
@@ -1220,7 +1235,7 @@ EG_quadFillG(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
 
 /* No P case */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              double *uv, int *npts, double **uvs)
 {
@@ -1583,7 +1598,7 @@ EG_quadFillQ(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
 
 /* No Q case */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
              double *uv, int *npts, double **uvs)
 {
@@ -1947,7 +1962,7 @@ EG_quadFillP(const egObject *face, qFill *q, int nsp, int *indices, int *elens,
 
 /* TFI case */
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
 {
   int    i, j, k, m, nx, ny, len, ilast, extra = -1, eside = -1;
@@ -2306,7 +2321,7 @@ EG_quadFillT(qFill *q, int *elens, double *uv, int *npts, double **uvs)
  *               -7 - mismatched sides
  */
 
-int
+__HOST_AND_DEVICE__ int
 EG_quadFill(const egObject *face, double *parms, int *elens, double *uv, 
             int *npts, double **uvs, int *npat, int *pats, int **vpats)
 {
@@ -2721,7 +2736,7 @@ EG_quadFill(const egObject *face, double *parms, int *elens, double *uv,
  *               -7 - mismatched sides
  */
 
-int
+__HOST_AND_DEVICE__ int
 EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
              double *uv, int *npts, double **uvs, int *ntris, int **tris,
              int *tfi)
@@ -3097,7 +3112,7 @@ EG_quad2tris(long tID, const egObject *face, double *parms, int *elens,
 }
 
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
             double *uv, int *npts, double **uvs, int *ntris, int **tris)
 {
@@ -3370,7 +3385,7 @@ EG_quadfil3(long tID, const egObject *face, double *parms, int *elens,
 }
 
 
-static int
+__HOST_AND_DEVICE__ static int
 EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
                double *uv, int *npts, double **uvs, int *ntris, int **tris)
 {
@@ -3489,7 +3504,7 @@ EG_quadfil3as4(long tID, const egObject *face, double *parms, int *elens,
  *               -6 - neg area tris
  */
 
-int
+__HOST_AND_DEVICE__ int
 EG_quad2tris3(long tID, const egObject *face, double *parms, int *elens,
               double *uv, int *npts, double **uvs, int *ntris, int **tris,
               int *flag)

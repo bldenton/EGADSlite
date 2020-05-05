@@ -12,7 +12,7 @@
 #define CHUNK    256                   /* allocation chunk */
 
 #define MAXELEN 2048                   /* max Edge length */
-#define DEGENUV 1.e-14
+#define DEGENUV 1.e-13
 
 
   typedef struct {
@@ -40,6 +40,7 @@
     int    type;			/* Topology type */
     int    edge;			/* Edge tessellation index */
     int    index;			/* index for Node or Edge */
+    int    loop;                        /* the Loop index */
     double xyz[3];
     double uv[2];
   } triVert;
@@ -152,6 +153,7 @@
     int      end;               /* end of loop */
     int      index;             /* current loop index */
     int      ignore;            /* 1 is ignore spacing attributes */
+    int      silent;            /* silent running */
     /*@dependent@*/
     int      *mark;             /* do the index or NULL (for all) */
     egObject *tess;             /* Tessellation Object */

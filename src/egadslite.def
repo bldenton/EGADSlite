@@ -15,8 +15,10 @@ EG_loadModel
 EG_deleteObject
 EG_close
 EG_attributeNum
+EG_attributeNumSeq
 EG_attributeGet
 EG_attributeRet
+EG_attributeRetSeq
 EG_getGeometry
 EG_getRange
 EG_tolerance

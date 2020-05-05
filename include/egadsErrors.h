@@ -11,6 +11,7 @@
  *
  */
 
+#define EGADS_SEQUERR  -34
 #define EGADS_CNTXTHRD -33
 #define EGADS_READERR  -32
 #define EGADS_TESSTATE -31

@@ -18,6 +18,16 @@ typedef int bool;
 #define DOUBLE TT
 #endif
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#endif
+
 
 /* 
  * These routines were taken from the OpenNURBS package with the date of
@@ -25,7 +35,7 @@ typedef int bool;
  */
 
 
-static double
+__HOST_AND_DEVICE__ static double
 BinomialCoefficient(int i, int j)
 {
 #define MAX_HALF_N 26
@@ -146,7 +156,7 @@ Parameters:
     w = v[dim].
 */
 
-TEMPLATE
+__HOST_AND_DEVICE__ TEMPLATE
 void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, DOUBLE *v)
 {
   /*
@@ -242,7 +252,7 @@ Parameters:
     w = v[dim].
 */
 
-TEMPLATE
+__HOST_AND_DEVICE__ TEMPLATE
 void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, DOUBLE *v)
 {
   DOUBLE F, Fs, Ft, ws, wt, wss, wtt, wst, *f, *x;
@@ -339,7 +349,7 @@ void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, DOUBLE *v)
 }
 
 
-TEMPLATE
+__HOST_AND_DEVICE__ TEMPLATE
 static void
 EG_IncreaseBezierDegree(int dim, int order, int cv_stride, DOUBLE* cv)
 
@@ -379,7 +389,7 @@ EG_IncreaseBezierDegree(int dim, int order, int cv_stride, DOUBLE* cv)
 }
 
 
-TEMPLATE
+__HOST_AND_DEVICE__ TEMPLATE
 static bool
 EG_RemoveBezierSingAt0(int dim, int order, int cv_stride, DOUBLE* cv)
 {
@@ -443,7 +453,7 @@ COMMENTS:
   (like x^2/x) are efficiently and correctly handled.
 *****************************************************************************/
 
-TEMPLATE
+__HOST_AND_DEVICE__ TEMPLATE
 bool EG_Bezier1DRat(int dim,              // dimension
                     int order,            // order
                     int cv_stride,        // cv_stride >= dim+1

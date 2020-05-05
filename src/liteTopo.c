@@ -23,19 +23,38 @@
                            a[1] = (b[2]*c[0]) - (b[0]*c[2]);\
                            a[2] = (b[0]*c[1]) - (b[1]*c[0])
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+#ifdef __PROTO_H_AND_D__
+#undef __PROTO_H_AND_D__
+#endif
 
-  extern int EG_evaluate( const egObject *geom, const double *param,
-                          double *result );
-  extern int EG_invEvaluate( const egObject *geom, const double *xyz,
-                             double *param, double *result );
-  extern int EG_invEvaLimits( const egObject *geom, /*@null@*/ const double *lim,
-                             const double *xyz, double *param, double *result );
-  extern int EG_getRange( const egObject *geom, double *range, int *periodic );
-  extern int EG_inFaceX( const egObject *face, const double *uva,
-                         /*@null@*/ double *pt, /*@null@*/ double *uvx );
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#define __PROTO_H_AND_D__   extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#define __PROTO_H_AND_D__ extern
+#endif
 
 
-int
+__PROTO_H_AND_D__ int EG_evaluate( const egObject *geom, const double *param,
+                                   double *result );
+__PROTO_H_AND_D__ int EG_invEvaluate( const egObject *geom, const double *xyz,
+                                      double *param, double *result );
+__PROTO_H_AND_D__ int EG_invEvaLimits( const egObject *geom,
+                                       /*@null@*/ const double *lim,
+                                       const double *xyz, double *param,
+                                       double *result );
+__PROTO_H_AND_D__ int EG_getRange( const egObject *geom, double *range,
+                                   int *periodic );
+__PROTO_H_AND_D__ int EG_inFaceX( const egObject *face, const double *uva,
+                                  /*@null@*/ double *pt,
+                                  /*@null@*/ double *uvx );
+
+
+__HOST_AND_DEVICE__ int
 EG_getTopology(const egObject *topo, egObject **geom, int *oclass,
                int *type, /*@null@*/ double *limits, int *nChildren,
                egObject ***children, int **senses)
@@ -131,6 +150,97 @@ EG_getTopology(const egObject *topo, egObject **geom, int *oclass,
 }
 
 
+#ifdef __NVCC__
+
+__HOST_AND_DEVICE__ static int EG_containedEdge(egObject *obj, egObject *src)
+{
+  int      i;
+  liteEdge *pedge;
+
+  pedge = (liteEdge *) src->blind;
+  for (i = 0; i < 2; i++)
+    if (pedge->nodes[i] == obj) return EGADS_SUCCESS;
+  return EGADS_OUTSIDE;
+}
+
+
+__HOST_AND_DEVICE__ static int EG_containedLoop(egObject *obj, egObject *src)
+{
+  int      i, stat;
+  liteLoop *ploop;
+
+  ploop = (liteLoop *) src->blind;
+  if (obj->oclass == EDGE) {
+    for (i = 0; i < ploop->nedges; i++)
+      if (ploop->edges[i] == obj) return EGADS_SUCCESS;
+  } else {
+    for (i = 0; i < ploop->nedges; i++) {
+      stat = EG_containedEdge(obj, ploop->edges[i]);
+      if (stat == EGADS_SUCCESS) return stat;
+    }
+  }
+
+  return EGADS_OUTSIDE;
+}
+
+
+__HOST_AND_DEVICE__ static int EG_containedFace(egObject *obj, egObject *src)
+{
+  int      i, stat;
+  liteFace *pface;
+
+  pface = (liteFace *) src->blind;
+  if (obj->oclass == LOOP) {
+    for (i = 0; i < pface->nloops; i++)
+      if (pface->loops[i] == obj) return EGADS_SUCCESS;
+  } else {
+    for (i = 0; i < pface->nloops; i++) {
+      stat = EG_containedLoop(obj, pface->loops[i]);
+      if (stat == EGADS_SUCCESS) return stat;
+    }
+  }
+
+  return EGADS_OUTSIDE;
+}
+
+
+__HOST_AND_DEVICE__ static int EG_containedShel(egObject *obj, egObject *src)
+{
+  int       i, stat;
+  liteShell *pshell;
+
+  pshell = (liteShell *) src->blind;
+  if (obj->oclass == FACE) {
+    for (i = 0; i < pshell->nfaces; i++)
+      if (pshell->faces[i] == obj) return EGADS_SUCCESS;
+  } else {
+    for (i = 0; i < pshell->nfaces; i++) {
+      stat = EG_containedFace(obj, pshell->faces[i]);
+      if (stat == EGADS_SUCCESS) return stat;
+    }
+  }
+
+  return EGADS_OUTSIDE;
+}
+
+
+__HOST_AND_DEVICE__ static int EG_contained(egObject *obj, egObject *src)
+{
+  if (src->oclass == EDGE) {
+    return EG_containedEdge(obj, src);
+  } else if (src->oclass == LOOP) {
+    return EG_containedLoop(obj, src);
+  } else if (src->oclass == FACE) {
+    return EG_containedFace(obj, src);
+  } else if (src->oclass == SHELL) {
+    return EG_containedShel(obj, src);
+  }
+
+  return EGADS_OUTSIDE;
+}
+
+#else
+
 static int
 EG_contained(egObject *obj, egObject *src)
 {
@@ -182,8 +292,10 @@ EG_contained(egObject *obj, egObject *src)
   return EGADS_OUTSIDE;
 }
 
+#endif
 
-int
+
+__HOST_AND_DEVICE__ int
 EG_getTolerance(const egObject *topo, double *toler)
 {
   if  (topo == NULL)               return EGADS_NULLOBJ;
@@ -210,7 +322,7 @@ EG_getTolerance(const egObject *topo, double *toler)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_tolerance(const egObject *topo, double *toler)
 {
   int    i, stat;
@@ -275,7 +387,7 @@ EG_tolerance(const egObject *topo, double *toler)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getBodyTopos(const egObject *body, /*@null@*/ egObject *src,
                 int oclass, int *ntopo, /*@null@*/ egObject ***topos)
 {
@@ -368,7 +480,7 @@ EG_getBodyTopos(const egObject *body, /*@null@*/ egObject *src,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_indexBodyTopo(const egObject *body, const egObject *src)
 {
   int      i;
@@ -405,7 +517,7 @@ EG_indexBodyTopo(const egObject *body, const egObject *src)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_objectBodyTopo(const egObject *body, int oclass, int index, egObject **obj)
 {
   liteBody *pbody;
@@ -437,7 +549,7 @@ EG_objectBodyTopo(const egObject *body, int oclass, int index, egObject **obj)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getBoundingBox(const egObject *topo, double *bbox)
 {
   int i;
@@ -492,7 +604,7 @@ EG_getBoundingBox(const egObject *topo, double *bbox)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getEdgeUV(const egObject *face, const egObject *edge, int sense, double t,
              double *result)
 {
@@ -564,7 +676,7 @@ EG_getEdgeUV(const egObject *face, const egObject *edge, int sense, double t,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getEdgeUVs(const egObject *face, const egObject *edge, int sense, int nt,
               const double *t, double *uvs)
 {
@@ -625,7 +737,7 @@ EG_getEdgeUVs(const egObject *face, const egObject *edge, int sense, int nt,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getEdgeUVeval(const egObject *face, const egObject *edge, int sense,
                  double t, double *result)
 {
@@ -685,7 +797,7 @@ EG_getEdgeUVeval(const egObject *face, const egObject *edge, int sense,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_getBody(const egObject *obj, egObject **body)
 {
   int       i;
@@ -721,14 +833,14 @@ EG_getBody(const egObject *obj, egObject **body)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_inFace(const egObject *face, const double *uv)
 {
   return EG_inFaceX(face, uv, NULL, NULL);
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_inTopology(const egObject *topo, const double *xyz)
 {
   int       i, j, stat;

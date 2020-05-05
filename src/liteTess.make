@@ -22,7 +22,7 @@ $(ODIR)/liteVTess.o:	$(SFIL) $(IDIR)/egads.h $(IDIR)/egadsTypes.h \
 		-o $(ODIR)/liteVTess.o
 
 clean:
-	-rm $(ODIR)/liteTess.o
+	-rm $(ODIR)/liteVTess.o
 
 cleanall:	clean
-	-rm $(TDIR)/liteTess
+	-rm $(TDIR)/liteVTess

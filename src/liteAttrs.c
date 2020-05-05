@@ -11,12 +11,66 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#ifdef __CUDACC__
+#include "egadsString.h"
+#else
 #include <string.h>
-
+#endif
 #include "egadsTypes.h"
+#include "egadsInternals.h"
+
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+#ifdef __DEVICE__
+#undef __DEVICE__
+#endif
+
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#define __DEVICE__ extern "C" __device__
+#else
+#define __HOST_AND_DEVICE__
+#define __DEVICE__
+#endif
 
 
-int
+
+__HOST_AND_DEVICE__ int
+EG_attributeNumSeq(const egObject *obj, const char *name, int *num)
+{
+  int     i, length, find = -1;
+  egAttrs *attrs;
+
+  *num = 0;
+  if (obj == NULL)               return EGADS_NULLOBJ;
+  if (obj->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (obj->oclass == EMPTY)      return EGADS_EMPTY;
+  if (obj->oclass == NIL)        return EGADS_EMPTY;
+  if (obj->oclass == REFERENCE)  return EGADS_REFERCE;
+  if (name == NULL)              return EGADS_NONAME;
+
+  attrs = (egAttrs *) obj->attrs;
+  if (attrs == NULL) return EGADS_SUCCESS;
+  
+  length = strlen(name);
+  for (i = 0; i < length; i++)
+    if (name[i] == ' ') return EGADS_SEQUERR;
+  
+  for (i = 0; i < attrs->nseqs; i++)
+    if (strcmp(attrs->seqs[i].root,name) == 0) {
+      find = i;
+      break;
+    }
+  if (find == -1) return EGADS_SUCCESS;
+
+  *num = attrs->seqs[find].nSeq;
+  return EGADS_SUCCESS;
+}
+
+
+__HOST_AND_DEVICE__ int
 EG_attributeNum(const egObject *obj, int *num)
 {
   egAttrs *attrs;
@@ -36,7 +90,7 @@ EG_attributeNum(const egObject *obj, int *num)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_attributeGet(const egObject *obj, int index, const char **name, 
                 int *atype, int *len, /*@null@*/ const int **ints, 
                 /*@null@*/ const double **reals, /*@null@*/ const char **str)
@@ -94,7 +148,7 @@ EG_attributeGet(const egObject *obj, int index, const char **name,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_attributeRet(const egObject *obj, const char *name, int *atype, 
                 int *len, /*@null@*/ const int **ints, 
                           /*@null@*/ const double **reals, 
@@ -120,7 +174,11 @@ EG_attributeRet(const egObject *obj, const char *name, int *atype,
 
   index = -1;
   for (i = 0; i < attrs->nattrs; i++)
+#ifdef __CUDACC__
+    if (EG_strncmp(attrs->attrs[i].name, name, 256) == 0) {
+#else
     if (strcmp(attrs->attrs[i].name, name) == 0) {
+#endif
       index = i;
       break;
     }
@@ -151,4 +209,54 @@ EG_attributeRet(const egObject *obj, const char *name, int *atype,
   }
   
   return EGADS_SUCCESS;
+}
+
+
+__HOST_AND_DEVICE__ int
+EG_attributeRetSeq(const egObject *obj, const char *name, int index, int *atype,
+                   int *len, /*@null@*/ const int **ints,
+                             /*@null@*/ const double **reals,
+                             /*@null@*/ const char **str)
+{
+  int     i, length, stat, find = -1;
+  char    *fullname;
+  egAttrs *attrs;
+
+  if (obj == NULL)               return EGADS_NULLOBJ;
+  if (obj->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (obj->oclass == EMPTY)      return EGADS_EMPTY;
+  if (obj->oclass == NIL)        return EGADS_EMPTY;
+  if (obj->oclass == REFERENCE)  return EGADS_REFERCE;
+  if (name == NULL)              return EGADS_NONAME;
+  if (index <= 0)                return EGADS_INDEXERR;
+
+  attrs = (egAttrs *) obj->attrs;
+  if (attrs == NULL) return EGADS_NOTFOUND;
+  
+  length = strlen(name);
+  for (i = 0; i < length; i++)
+    if (name[i] == ' ') return EGADS_SEQUERR;
+  
+  for (i = 0; i < attrs->nseqs; i++)
+    if (strcmp(attrs->seqs[i].root,name) == 0) {
+      find = i;
+      break;
+    }
+  if (find == -1) {
+    if (index != 1) return EGADS_INDEXERR;
+    return EG_attributeRet(obj, name, atype, len, ints, reals, str);
+  }
+  if (index > attrs->seqs[find].nSeq) {
+    printf(" EGADS Error: Index %d [1-%d] (EG_attributeRetSeq)!\n",
+           index, attrs->seqs[find].nSeq);
+    return EGADS_INDEXERR;
+  }
+  
+  fullname = (char *) EG_alloc((length+8)*sizeof(char));
+  if (fullname == NULL) return EGADS_MALLOC;
+  snprintf(fullname, length+8, "%s %d", name, index);
+  stat = EG_attributeRet(obj, fullname, atype, len, ints, reals, str);
+  EG_free(fullname);
+  
+  return stat;
 }

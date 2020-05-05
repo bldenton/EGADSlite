@@ -19,7 +19,6 @@
 #include "liteClasses.h"
 
 
-
 #define PARAMACC         1.0e-4         /* parameter accuracy */
 #define PI               3.1415926535897931159979635
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -28,26 +27,41 @@
                            a[1] = (b[2]*c[0]) - (b[0]*c[2]);\
                            a[2] = (b[0]*c[1]) - (b[1]*c[0])
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+#ifdef __PROTO_H_AND_D__
+#undef __PROTO_H_AND_D__
+#endif
 
-  extern int  EG_evaluateGeom( const egObject *geom, const double *param,
-                               double *result );
-  extern int  EG_invEvaGeomLimits( const egObject *geom,
-                                   /*@null@*/ const double *limits,
-                                   const double *xyz, double *param,
-                                   double toler, double *result );
-  extern int  EG_invEvaluateGeomGuess( const egObject *geom,
-                                       /*@null@*/ const double *limits,
-                                       double *xyz, double *param,
-                                       double *result );
-
-  extern int  EG_inFaceX( const egObject *face, const double *uv,
-                          /*@null@*/ double *pt, /*@null@*/ double *uvx );
-  extern int  EG_getEdgeUV ( const egObject *face, const egObject *edge,
-                             int sense, double t, double *result );
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#define __PROTO_H_AND_D__   extern "C" __host__ __device__
+#else
+#define __HOST_AND_DEVICE__
+#define __PROTO_H_AND_D__ extern
+#endif
 
 
+__PROTO_H_AND_D__ int  EG_evaluateGeom( const egObject *geom,
+                                        const double *param, double *result );
+__PROTO_H_AND_D__ int  EG_invEvaGeomLimits( const egObject *geom,
+                                            /*@null@*/ const double *limits,
+                                            const double *xyz, double *param,
+                                            double toler, double *result );
+__PROTO_H_AND_D__ int  EG_invEvaluateGeomGuess( const egObject *geom,
+                                                /*@null@*/ const double *lmts,
+                                                double *xyz, double *param,
+                                                double *result );
 
-int
+__PROTO_H_AND_D__ int  EG_inFaceX( const egObject *face, const double *uv,
+                                   /*@null@*/ double *pt,
+                                   /*@null@*/ double *uvx );
+__PROTO_H_AND_D__ int  EG_getEdgeUV( const egObject *face, const egObject *edge,
+                                     int sense, double t, double *result );
+
+
+__HOST_AND_DEVICE__ int
 EG_getGeometry(const egObject     *geom, int *oclass, int *type,
                      egObject **refGeom, /*@null@*/ int    **ivec,
                                          /*@null@*/ double **rvec)
@@ -243,6 +257,316 @@ EG_getGeometry(const egObject     *geom, int *oclass, int *type,
   return EGADS_SUCCESS;
 }
 
+
+#ifdef __NVCC__
+__HOST_AND_DEVICE__ static int
+EG_getRangeCurve(const egObject *geomx, double *range, int *periodic)
+{
+  int            stat, mtype;
+  egObject       *ref;
+  liteEdge       *ledge;
+  liteGeometry   *lgeom;
+  const egObject *geom;
+  
+  geom = geomx;
+
+curRecurse:
+  stat = EGADS_NOTFOUND;
+  if (geom->oclass == PCURVE) {
+    lgeom = (liteGeometry *) geom->blind;
+    switch (geom->mtype) {
+      case LINE:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case CIRCLE:
+        range[0]  = 0.0;
+        range[1]  = 2.0*PI;
+        *periodic = 1;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case ELLIPSE:
+        range[0]  = 0.0;
+        range[1]  = 2.0*PI;
+        *periodic = 1;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case PARABOLA:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case HYPERBOLA:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case TRIMMED:
+        geom = lgeom->ref;
+        goto curRecurse;
+        
+      case BEZIER:
+        range[0]  = 0.0;
+        range[1]  = 1.0;
+        *periodic = (lgeom->header[0]&4)/4;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case BSPLINE:
+        range[0]  =  lgeom->data[0];
+        range[1]  =  lgeom->data[lgeom->header[3]-1];
+        *periodic = (lgeom->header[0]&4)/4;
+        stat      =  EGADS_SUCCESS;
+        break;
+        
+      case OFFSET:
+        geom = lgeom->ref;
+        goto curRecurse;
+    }
+
+  } else if ((geom->oclass == CURVE) || (geom->oclass == EDGE)) {
+
+    lgeom = (liteGeometry *) geom->blind;
+    mtype = geom->mtype;
+    if (geom->oclass == EDGE) {
+      if (geom->mtype == DEGENERATE) {
+        ledge    = (liteEdge *) geom->blind;
+        range[0] = ledge->trange[0];
+        range[1] = ledge->trange[1];
+        return EGADS_SUCCESS;
+      }
+      ledge = (liteEdge *) geom->blind;
+      ref   = ledge->curve;
+      if (ref == NULL)        return EGADS_NULLOBJ;
+      if (ref->blind == NULL) return EGADS_NODATA;
+      lgeom = (liteGeometry *) ref->blind;
+      mtype = ref->mtype;
+    }
+    switch (mtype) {
+      case LINE:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case CIRCLE:
+        range[0]  = 0.0;
+        range[1]  = 2.0*PI;
+        *periodic = 1;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case ELLIPSE:
+        range[0]  = 0.0;
+        range[1]  = 2.0*PI;
+        *periodic = 1;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case PARABOLA:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case HYPERBOLA:
+        range[0]  = -2.e100;
+        range[1]  =  2.e100;
+        *periodic =  0;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case TRIMMED:
+        geom = lgeom->ref;
+        goto curRecurse;
+        
+      case BEZIER:
+        range[0]  = 0.0;
+        range[1]  = 1.0;
+        *periodic = (lgeom->header[0]&4)/4;
+        stat      = EGADS_SUCCESS;
+        break;
+        
+      case BSPLINE:
+        range[0]  =  lgeom->data[0];
+        range[1]  =  lgeom->data[lgeom->header[3]-1];
+        *periodic = (lgeom->header[0]&4)/4;
+        stat      =  EGADS_SUCCESS;
+        break;
+        
+      case OFFSET:
+        geom = lgeom->ref;
+        goto curRecurse;
+
+    }
+    if (geom->oclass == EDGE) {
+      ledge    = (liteEdge *) geom->blind;
+      range[0] = ledge->trange[0];
+      range[1] = ledge->trange[1];
+    }
+  }
+
+  return stat;
+}
+
+
+__HOST_AND_DEVICE__ static int
+EG_getRangeSurface(const egObject *geomx, double *range, int *periodic)
+{
+  int            stat, mtype;
+  egObject       *ref;
+  liteFace       *lface;
+  liteGeometry   *lgeom;
+  const egObject *geom;
+  
+  geom = geomx;
+  
+surRecurse:
+  stat  = EGADS_NOTFOUND;
+  lgeom = (liteGeometry *) geom->blind;
+  mtype = geom->mtype;
+  if (geom->oclass == FACE) {
+    lface = (liteFace *) geom->blind;
+    ref   = lface->surface;
+    if (ref == NULL)        return EGADS_NULLOBJ;
+    if (ref->blind == NULL) return EGADS_NODATA;
+    lgeom = (liteGeometry *) ref->blind;
+    mtype = ref->mtype;
+  }
+  switch (mtype) {
+    case PLANE:
+      range[0]  = -2.e100;
+      range[1]  =  2.e100;
+      range[2]  = -2.e100;
+      range[3]  =  2.e100;
+      *periodic =  0;
+      stat      = EGADS_SUCCESS;
+      break;
+      
+    case SPHERICAL:
+      range[0]  =  0.0;
+      range[1]  =  2.0*PI;
+      range[2]  = -0.5*PI;
+      range[3]  =  0.5*PI;
+      *periodic = 1;
+      stat      = EGADS_SUCCESS;
+      break;
+      
+    case CONICAL:
+      range[0]  =  0.0;
+      range[1]  =  2.0*PI;
+      range[2]  = -2.e100;
+      range[3]  =  2.e100;
+      *periodic = 1;
+      stat      = EGADS_SUCCESS;
+      break;
+      
+    case CYLINDRICAL:
+      range[0]  =  0.0;
+      range[1]  =  2.0*PI;
+      range[2]  = -2.e100;
+      range[3]  =  2.e100;
+      *periodic = 1;
+      stat      = EGADS_SUCCESS;
+      break;
+      
+    case TOROIDAL:
+      range[0]  = 0.0;
+      range[1]  = 2.0*PI;
+      range[2]  = 0.0;
+      range[3]  = 2.0*PI;
+      *periodic = 3;
+      stat      = EGADS_SUCCESS;
+      break;
+      
+    case REVOLUTION:
+      stat = EG_getRangeCurve(lgeom->ref, &range[2], &mtype);
+      if (stat == EGADS_SUCCESS) {
+        range[0]  = 0.0;
+        range[1]  = 2.0*PI;
+        *periodic = 1 + 2*mtype;
+      }
+      break;
+      
+    case EXTRUSION:
+      stat = EG_getRangeCurve(lgeom->ref, range, periodic);
+      if (stat == EGADS_SUCCESS) {
+        range[2] = -2.e100;
+        range[3] =  2.e100;
+      }
+      break;
+      
+    case TRIMMED:
+      geom = lgeom->ref;
+      goto surRecurse;
+      
+    case BEZIER:
+      range[0]  = 0.0;
+      range[1]  = 1.0;
+      range[2]  = 0.0;
+      range[3]  = 1.0;
+      *periodic = (lgeom->header[0]&12)/4;
+      stat      = EGADS_SUCCESS;
+
+      break;
+      
+    case BSPLINE:
+      range[0]  =  lgeom->data[0];
+      range[1]  =  lgeom->data[lgeom->header[3]-1];
+      range[2]  =  lgeom->data[lgeom->header[3]];
+      range[3]  =  lgeom->data[lgeom->header[3]+lgeom->header[6]-1];
+      *periodic = (lgeom->header[0]&12)/4;
+      stat      =  EGADS_SUCCESS;
+      break;
+      
+    case OFFSET:
+      geom = lgeom->ref;
+      goto surRecurse;
+
+  }
+  if (geom->oclass == FACE) {
+    lface = (liteFace *) geom->blind;
+    range[0] = lface->urange[0];
+    range[1] = lface->urange[1];
+    range[2] = lface->vrange[0];
+    range[3] = lface->vrange[1];
+  }
+  
+  return stat;
+}
+
+
+__HOST_AND_DEVICE__ int
+EG_getRange(const egObject *geom, double *range, int *periodic)
+{
+  *periodic = 0;
+  if  (geom == NULL)               return EGADS_NULLOBJ;
+  if  (geom->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if ((geom->oclass != PCURVE) &&
+      (geom->oclass != CURVE)  && (geom->oclass != SURFACE) &&
+      (geom->oclass != EDGE)   && (geom->oclass != FACE))
+                                   return EGADS_NOTGEOM;
+  if (geom->blind == NULL)         return EGADS_NODATA;
+  
+  if ((geom->oclass == SURFACE) || (geom->oclass == FACE)) {
+    return EG_getRangeSurface(geom, range, periodic);
+  } else {
+    return EG_getRangeCurve(geom, range, periodic);
+  }
+}
+
+#else
 
 int
 EG_getRange(const egObject *geom, double *range, int *periodic)
@@ -530,8 +854,10 @@ EG_getRange(const egObject *geom, double *range, int *periodic)
   return stat;
 }
 
+#endif
 
-int
+
+__HOST_AND_DEVICE__ int
 EG_evaluate(const egObject *geom, /*@null@*/ const double *param, double *result)
 {
   const egObject *ref;
@@ -576,7 +902,7 @@ EG_evaluate(const egObject *geom, /*@null@*/ const double *param, double *result
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_invEvaLimits(const egObject *geom, /*@null@*/ const double *limits,
                 const double *xyz, double *param, double *result)
 {
@@ -671,7 +997,7 @@ EG_invEvaLimits(const egObject *geom, /*@null@*/ const double *limits,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_invEvaluate(const egObject *geom, const double *xyz, double *param,
                double *result)
 {
@@ -679,7 +1005,7 @@ EG_invEvaluate(const egObject *geom, const double *xyz, double *param,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_invEvaluateGuess(const egObject *geom, double *xyz,
                     double *param, double *result)
 {
@@ -725,7 +1051,7 @@ EG_invEvaluateGuess(const egObject *geom, double *xyz,
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_arcLength(const egObject *geom, double t1, double t2, double *alen)
 {
   int            i, stat;
@@ -802,7 +1128,7 @@ EG_arcLength(const egObject *geom, double t1, double t2, double *alen)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_curvature(const egObject *geom, const double *param, double *result)
 {
   int    i, stat;
@@ -939,7 +1265,7 @@ EG_curvature(const egObject *geom, const double *param, double *result)
 }
 
 
-int
+__HOST_AND_DEVICE__ int
 EG_relPosTs(egObject *geom, int n, /*@null@*/ const double *rel,
             double *ts, double *xyzs)
 {

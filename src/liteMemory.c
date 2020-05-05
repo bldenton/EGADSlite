@@ -15,32 +15,56 @@
 
 #include "egadsTypes.h"
 
+#ifdef __HOST_AND_DEVICE__
+#undef __HOST_AND_DEVICE__
+#endif
+#ifdef __DEVICE__
+#undef __DEVICE__
+#endif
 
-/*@null@*/ /*@out@*/ /*@only@*/ void *
-EG_alloc(int nbytes)
+#ifdef __CUDACC__
+#define __HOST_AND_DEVICE__ extern "C" __host__ __device__
+#define __DEVICE__ extern "C" __device__
+#else
+#define __HOST_AND_DEVICE__
+#define __DEVICE__
+#endif
+
+
+__HOST_AND_DEVICE__ /*@null@*/ /*@out@*/ /*@only@*/ void *
+EG_alloc(size_t nbytes)
 {
-  if (nbytes <= 0) return NULL;
+  if (nbytes == 0) return NULL;
   return malloc(nbytes);
 }
 
 
-/*@null@*/ /*@only@*/ void *
-EG_calloc(int nele, int size)
+__HOST_AND_DEVICE__ /*@null@*/ /*@only@*/ void *
+EG_calloc(size_t nele, size_t size)
 {
-  if (nele*size <= 0) return NULL;
+#ifndef __CUDA_ARCH__
+  if (nele*size == 0) return NULL;
   return calloc(nele, size);
+#else
+  void *ptr = EG_alloc(nele*size);
+  return memset(ptr, 0, nele*size);
+#endif
 }
 
 
-/*@null@*/ /*@only@*/ void *
-EG_reall(/*@null@*/ /*@only@*/ /*@returned@*/ void *ptr, int nbytes)
+__HOST_AND_DEVICE__ /*@null@*/ /*@only@*/ void *
+EG_reall(/*@null@*/ /*@only@*/ /*@returned@*/ void *ptr, size_t nbytes)
 {
-  if (nbytes <= 0) return NULL;
+#ifndef __CUDA_ARCH__
+  if (nbytes == 0) return NULL;
   return realloc(ptr, nbytes);
+#else
+  return NULL;
+#endif
 }
 
 
-void
+__HOST_AND_DEVICE__ void
 EG_free(/*@null@*/ /*@only@*/ void *ptr)
 {
   if (ptr == NULL) return;
@@ -48,9 +72,10 @@ EG_free(/*@null@*/ /*@only@*/ void *ptr)
 }
 
 
-/*@null@*/ /*@only@*/ char *
+__HOST_AND_DEVICE__ /*@null@*/ /*@only@*/ char *
 EG_strdup(/*@null@*/ const char *str)
 {
+#ifndef __CUDA_ARCH__
   int  i, len;
   char *dup;
 
@@ -62,5 +87,8 @@ EG_strdup(/*@null@*/ const char *str)
     for (i = 0; i < len; i++) dup[i] = str[i];
 
   return dup;
+#else
+  return NULL;
+#endif
 }
 

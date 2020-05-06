@@ -6,9 +6,9 @@
 
 PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCoords[], PetscScalar coords[])
 {
-  DMLabel         bodyLabel, faceLabel, edgeLabel, tLabel, uLabel, vLabel;
+  DMLabel         bodyLabel, faceLabel, edgeLabel, vertexLabel, tLabel, uLabel, vLabel;
   PetscContainer  modelObj;
-  PetscInt        cdim, d, bodyID, faceID, edgeID;
+  PetscInt        cdim, d, bodyID, faceID, edgeID, vertexID;
   PetscScalar     tParamA, uParamA, vParamA, tParamB, uParamB, vParamB;
   PetscInt        vecSize, vStart, vEnd, eConeSize, ni;
   PetscInt        ix[3];
@@ -21,6 +21,7 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
   double          resultA[3], resultB[3];
   double          eval[18], evalC[18];
   double          errTolr = 1.0e-4;
+  double          delta;
   int             Nb, oclass, mtype, *senses, pntCntr;
   PetscErrorCode  ierr;
 
@@ -31,12 +32,14 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
   ierr = DMGetLabel(dm, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
   ierr = DMGetLabel(dm, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
   ierr = DMGetLabel(dm, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
   ierr = DMGetLabel(dm, "EGADS t param", &tLabel);CHKERRQ(ierr);
   ierr = DMGetLabel(dm, "EGADS u param", &uLabel);CHKERRQ(ierr);
   ierr = DMGetLabel(dm, "EGADS v param", &vLabel);CHKERRQ(ierr);
   ierr = DMLabelGetValue(bodyLabel, p, &bodyID);CHKERRQ(ierr);
   ierr = DMLabelGetValue(faceLabel, p, &faceID);CHKERRQ(ierr);
   ierr = DMLabelGetValue(edgeLabel, p, &edgeID);CHKERRQ(ierr);
+  ierr = DMLabelGetValue(edgeLabel, p, &vertexID);CHKERRQ(ierr);
   ierr = PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj);CHKERRQ(ierr);
   ierr = PetscContainerGetPointer(modelObj, (void **) &model);CHKERRQ(ierr);
   ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses);CHKERRQ(ierr);
@@ -82,6 +85,23 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
   //  ierr = PetscPrintf(PETSC_COMM_SELF, "      uParamB = %lf \n", uParamB); CHKERRQ(ierr);
   //  ierr = PetscPrintf(PETSC_COMM_SELF, "      vParamB = %lf \n", vParamB); CHKERRQ(ierr);
   //}
+  ierr = PetscPrintf(PETSC_COMM_SELF, "-- p = %d \n", p); CHKERRQ(ierr);
+  ierr = DMLabelGetValue(vertexLabel, eCone[0], &vertexID); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "   eCone[0] = %d \n", eCone[0]); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "      vertexID = %d \n", vertexID); CHKERRQ(ierr);
+  ierr = DMLabelGetValue(vertexLabel, eCone[1], &vertexID); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "   eCone[1] = %d \n", eCone[1]); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "      vertexID = %d \n", vertexID); CHKERRQ(ierr);
+  
+  if (p == 238) {
+      ierr = PetscPrintf(PETSC_COMM_SELF, "--------------------\n"); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "   p = %d \n", p); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "     bodyID = %d \n", bodyID); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "     faceID = %d \n", faceID); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "     edgeID = %d \n", edgeID); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "     vertexID = %d \n", vertexID); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "--------------------\n"); CHKERRQ(ierr);
+  }
   /* End of Trial Debug */
  
   /* Get Coordinates of Vertices defining the 1st Edge on Face 1 */
@@ -99,6 +119,8 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
     pntCntr = pntCntr + 1;
   }
   ierr = VecGetValues(vCoords, ni, ix, xyzB); CHKERRQ(ierr);  // Vertex B coordinates (x,y,z)
+
+
     
   /* Snap new Vertex to Geometry */
   if (edgeID >= 0) {
@@ -108,33 +130,185 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
     ierr = EG_objectBodyTopo(body, EDGE, edgeID, &edge);CHKERRQ(ierr);
     ierr = EG_invEvaluate(edge, xyzA, paramsA, resultA); CHKERRQ(ierr);   // t- parameter for Vertex A
     ierr = EG_invEvaluate(edge, xyzB, paramsB, resultB); CHKERRQ(ierr);   // t- parameter for Vertex B
-    double range[2];
+    
+    double range[4];    // [umin, umax, vmin, vmax]
     int    peri;
     ierr = EG_getRange(edge, range, &peri); CHKERRQ(ierr);
     
+    /* Check to make sure we get the rigth t parameter */
+    ierr = EG_evaluate(edge, paramsA, eval);
+    
+    delta = 0.;
+    for (int ii=0; ii<3; ++ii){
+      delta = delta + ((eval[ii]-xyzA[ii]) * (eval[ii]-xyzA[ii]))/xyzA[ii];
+    }
+    delta = sqrt(abs(delta));
+    
+     //if (delta > errTolr){
+      ierr = PetscPrintf(PETSC_COMM_SELF, " EDGE Point A doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "  jj = %d \n", jj); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "    eCone[0] = %d \n", eCone[0]); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzA (x, y, z) = (%lf, %lf, %lf) \n", xyzA[0], xyzA[1], xyzA[2]);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsA[0]); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    range (tmin, tmax) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "    range (vmin, vmax) = (%lf, %lf) \n", range[2], range[3]);CHKERRQ(ierr);
+      //ierr = PetscPrintf(PETSC_COMM_SELF, "    peri = %d \n", peri);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    faceId = %d \n", faceID);CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "    edgeId = %d \n", edgeID);CHKERRQ(ierr);
+     //} 
+     
+    ierr = EG_evaluate(edge, paramsB, eval);
+    
+    delta = 0.;
+    for (int ii=0; ii<3; ++ii){
+      delta = delta + ((eval[ii]-xyzB[ii]) * (eval[ii]-xyzB[ii]))/xyzB[ii];
+    }
+    delta = sqrt(abs(delta));
+    
+     //if (delta > errTolr){
+       double dx, dy, dz, dt;
+       double dtdx, dtdy, dtdz;
+       
+       
+       //for (int jj=0; jj<6; ++jj){
+        ierr = PetscPrintf(PETSC_COMM_SELF, " EDGE Point B doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "  p = %d \n", p); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "  jj = %d \n", jj); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eCone[0] = %d \n", eCone[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzB (x, y, z) = (%lf, %lf, %lf) \n", xyzB[0], xyzB[1], xyzB[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsB[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range (tmin, tmax) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    range (vmin, vmax) = (%lf, %lf) \n", range[2], range[3]);CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    peri = %d \n", peri);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    faceId = %d \n", faceID);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    edgeId = %d \n", edgeID);CHKERRQ(ierr);
+      
+        dx = eval[0] - xyzB[0];
+        dy = eval[1] - xyzB[1];
+        dz = eval[2] - xyzB[2];
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dx = %lf \n", dx); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dy = %lf \n", dy); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dz = %lf \n", dz); CHKERRQ(ierr);
+        
+        //dv = (eval[3]*dy - eval[4]*dx)/(eval[3]*eval[7] - eval[4]*eval[6]);
+        //du = (dx - eval[6]*dv)/eval[3];
+        
+        if (eval[3] != 0.){
+          dtdx = 1. / eval[3];
+        } else {
+          dtdx = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dtdx = %lf \n", dtdx); CHKERRQ(ierr);
+        
+        if (eval[4] != 0.){
+          dtdy = 1. / eval[4];
+        } else {
+          dtdy = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dtdy = %lf \n", dtdy); CHKERRQ(ierr);
+        
+        if (eval[5] != 0.){
+          dtdz = 1. / eval[5];
+        } else {
+          dtdz = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dtdz = %lf \n", dtdz); CHKERRQ(ierr);
+       
+        //dudx = eval[3];
+        //dudy = eval[4];
+        //dudz = eval[5];
+        
+        dt = dtdx*dx + dtdy*dy + dtdz*dz;
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dt = %.6e \n", dt); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[3] = %.6e \n", eval[3]); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[4] = %.6e \n", eval[4]); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[5] = %.6e \n", eval[5]); CHKERRQ(ierr);
+        
+        //**if (paramsB[0] - dt < range[0]){
+        //**  //paramsB[0] = (paramsB[0] + range[0]) / 2.;
+        //**  //paramsB[0] = paramsB[0]; // - (dt/abs(dt))*1.e-4;
+        //**  paramsB[0] = range[0];
+        //**} else if (paramsB[0] - dt > range[1]) {
+        //**  //paramsB[0] = (paramsB[0] + range[1]) / 2.;
+        //**  //paramsB[0] = paramsB[0]; // - (dt/abs(dt))*1.e-4;
+        //**  paramsB[0] = range[0];
+        //**} else {
+        //**  paramsB[0] = paramsB[0] - dt;
+        //**}
+        
+        //paramsA[0] = paramsA[0] - du;
+        //paramsA[1] = paramsA[1] - dv;
+        
+        //**ierr = EG_evaluate(edge, paramsB, &eval); CHKERRQ(ierr);
+        
+        //**delta = 0.;
+        //**for (int ii=0; ii<3; ++ii){
+        //**  delta = delta + ((eval[ii]-xyzB[ii]) * (eval[ii]-xyzB[ii]));
+        //**}
+        //**delta = sqrt(delta);
+       //}
+     //}    
+     // End of Check
+    
+    //double range[2];
+    //int    peri;
+    //ierr = EG_getRange(edge, range, &peri); CHKERRQ(ierr);
+    
     paramsNew[0] = (paramsA[0] + paramsB[0]) / 2.;          // t- parameter for New Vertex at midpoint
+    
+    /*if ((paramsA[0] <= range[0]) && (paramsA[0] >= range[1])){
+      ierr = PetscPrintf(PETSC_COMM_SELF, "  -- PT A OUTSIDE OF EDGE RANGE -- \n"); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsA[0]); CHKERRQ(ierr);
+    }
+      
+    if ((paramsB[0] <= range[0]) && (paramsB[0] >= range[1])){
+      ierr = PetscPrintf(PETSC_COMM_SELF, "  -- PT B OUTSIDE OF EDGE RANGE -- \n"); CHKERRQ(ierr);
+      ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsB[0]); CHKERRQ(ierr);
+    }*/ 
     
     if ((paramsNew[0] >= range[0]) && (paramsNew[0] <= range[1])){
       ierr = EG_evaluate(edge, paramsNew, eval); CHKERRQ(ierr);  // (x,y,z) coordinates for New Vertex at midpoint
     } else {
-      ierr = EG_invEvaluate(edge, initCoords, paramsC, eval); CHKERRQ(ierr);
-    }
-    
-    /* Debug */
-    //if (p == 238){
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "  -- EDGE Refinement -- \n"); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    point p = %d \n", p); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    Face ID = %d \n", faceID); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    Edge ID = %d \n", edgeID); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzA (x, y, z) = (%lf, %lf, %lf) \n", xyzA[0], xyzA[1], xyzA[2]);CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsA[0]); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzB (x, y, z) = (%lf, %lf, %lf) \n", xyzB[0], xyzB[1], xyzB[2]);CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsB[0]); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsNew[0]); CHKERRQ(ierr);
-    //  ierr = PetscPrintf(PETSC_COMM_SELF, "    range(tstart, tend) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+      //ierr = EG_invEvaluate(edge, initCoords, paramsC, eval); CHKERRQ(ierr);
+      //if ((paramsA[0] <= range[0]) && (paramsA[0] >= range[1])){
+      //  ierr = PetscPrintf(PETSC_COMM_SELF, "  -- PT A OUTSIDE OF EDGE RANGE -- \n"); CHKERRQ(ierr);
+      //  ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsA[0]); CHKERRQ(ierr);
+      //}
+      //
+      //if ((paramsB[0] <= range[0]) && (paramsB[0] >= range[1])){
+      //  ierr = PetscPrintf(PETSC_COMM_SELF, "  -- PT B OUTSIDE OF EDGE RANGE -- \n"); CHKERRQ(ierr);
+      //  ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsB[0]); CHKERRQ(ierr);
+      //}    
+      
+      ierr = EG_evaluate(edge, paramsNew, eval); CHKERRQ(ierr);  // (x,y,z) coordinates for New Vertex at midpoint
     //}
     
+      /* Debug */
+      if (p == 238){
+        ierr = PetscPrintf(PETSC_COMM_SELF, "  -- EDGE Refinement -- \n"); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    point p = %d \n", p); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    Face ID = %d \n", faceID); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    Edge ID = %d \n", edgeID); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzA (x, y, z) = (%lf, %lf, %lf) \n", xyzA[0], xyzA[1], xyzA[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsA[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzB (x, y, z) = (%lf, %lf, %lf) \n", xyzB[0], xyzB[1], xyzB[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsB[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsNew[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range(tstart, tend) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+      }
+    }
+    
+    ierr = PetscPrintf(PETSC_COMM_SELF, "  ********************************************** \n", p); CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, "    point p = %d \n", p); CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+    ierr = PetscPrintf(PETSC_COMM_SELF, "               (t) = (%lf) \n", paramsNew[0]); CHKERRQ(ierr);
     //ierr = EG_objectBodyTopo(body, EDGE, edgeID, &edge);CHKERRQ(ierr);
     //ierr = EG_invEvaluate(edge, point, params, eval);
     
@@ -160,8 +334,14 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
     
     // Check if we get the same xyz Location back -- if not we have to correct
     ierr = EG_evaluate(face, paramsA, &eval); CHKERRQ(ierr);
-    double delta;
+    //double delta;
     double dx, dy, dz, du, dv;
+    double dudx, dudy, dudz, dvdx, dvdy, dvdz;
+    
+    double range[4];    // [umin, umax, vmin, vmax]
+    int    peri;
+    ierr = EG_getRange(face, range, &peri); CHKERRQ(ierr);
+    
     delta = 0.;
     
     for (int ii=0; ii<3; ++ii){
@@ -170,39 +350,135 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
     delta = sqrt(delta);
     
     int  xyzCheck = 0;
-    if (delta > errTolr){
-        xyzCheck = 1;      
+    /*if (delta > errTolr){
+      //xyzCheck = 1;      
+      
+      // Trial for better Evaluation of (u,v) parameters  
+      //paramsA[0] = paramsA[0] / 2.;
+      //paramsA[1] = paramsA[1] / 2.;
+      ierr = EG_evaluate(face, paramsA, &eval); CHKERRQ(ierr);
+      //int jj = 0;
+      //while (delta > errTolr) {
+      for (int jj=0; jj<6; ++jj){
+        ierr = PetscPrintf(PETSC_COMM_SELF, "Point A doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "  jj = %d \n", jj); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eCone[0] = %d \n", eCone[0]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzA (x, y, z) = (%lf, %lf, %lf) \n", xyzA[0], xyzA[1], xyzA[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "            (u, v) = (%lf, %lf) \n", paramsA[0], paramsA[1]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range (umin, umax) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range (vmin, vmax) = (%lf, %lf) \n", range[2], range[3]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    peri = %d \n", peri);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    faceId = %d \n", faceID);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    edgeId = %d \n", edgeID);CHKERRQ(ierr);
         
-    //  paramsA[0] = paramsA[0] / 2.;
-    //  paramsA[1] = paramsA[1] / 2.;
-    //  ierr = EG_evaluate(face, paramsA, &eval); CHKERRQ(ierr);
-    //  for (int jj=0; jj<3; ++jj){
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    PointA doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzA (x, y, z) = (%lf, %lf, %lf) \n", xyzA[0], xyzA[1], xyzA[2]);CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "            (u, v) = (%lf, %lf) \n", paramsA[0], paramsA[1]); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
-    //    
-    //    dx = eval[0] - xyzA[0];
-    //    dy = eval[1] - xyzA[1];
-    //    dv = (eval[3]*dy - eval[4]*dx)/(eval[3]*eval[7] - eval[4]*eval[6]);
-    //    du = (dx - eval[6]*dv)/eval[3];
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    du = %.6e \n", du); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    dv = %.6e \n", dv); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[3] = %.6e \n", eval[3]); CHKERRQ(ierr);
-    //    ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[4] = %.6e \n", eval[4]); CHKERRQ(ierr);
-    //    
-    //    paramsA[0] = paramsA[0] - du;
-    //    paramsA[1] = paramsA[1] - dv;
-    //    ierr = EG_evaluate(face, paramsA, &eval); CHKERRQ(ierr);
-    //    
-    //    delta = 0.;
-    //    for (int ii=0; ii<3; ++ii){
-    //      delta = delta + ((eval[ii]-xyzA[ii]) * (eval[ii]-xyzA[ii]));
-    //    }
-    //    delta = sqrt(delta);
-    //  }
-    }
+        dx = eval[0] - xyzA[0];
+        dy = eval[1] - xyzA[1];
+        dz = eval[2] - xyzA[2];
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dx = %lf \n", dx); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dy = %lf \n", dy); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dz = %lf \n", dz); CHKERRQ(ierr);
+        
+        //dv = (eval[3]*dy - eval[4]*dx)/(eval[3]*eval[7] - eval[4]*eval[6]);
+        //du = (dx - eval[6]*dv)/eval[3];
+        
+        if (eval[3] != 0.){
+          dudx = 1. / eval[3];
+        } else {
+          dudx = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudx = %lf \n", dudx); CHKERRQ(ierr);
+        
+        if (eval[4] != 0.){
+          dudy = 1. / eval[4];
+        } else {
+          dudy = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudy = %lf \n", dudy); CHKERRQ(ierr);
+        
+        if (eval[5] != 0.){
+          dudz = 1. / eval[5];
+        } else {
+          dudz = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudz = %lf \n", dudz); CHKERRQ(ierr);
+        
+        if (eval[6] != 0.){
+          dvdx = 1. / eval[6];
+        } else {
+          dvdx = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdx = %lf \n", dvdx); CHKERRQ(ierr);
+        
+        if (eval[7] != 0.){
+          dvdy = 1. / eval[7];
+        } else {
+          dvdy = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdy = %lf \n", dvdy); CHKERRQ(ierr);
+        
+        if (eval[8] != 0.){
+          dvdz = 1. / eval[8];
+        } else {
+          dvdz = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdz = %lf \n", dvdz); CHKERRQ(ierr);
+       
+        //dudx = eval[3];
+        //dudy = eval[4];
+        //dudz = eval[5];
+        //dvdx = eval[6];
+        //dvdy = eval[7];
+        //dvdz = eval[8];
+        
+        du = dudx*dx + dudy*dy + dudz*dz;
+        dv = dvdx*dx + dvdy*dy + dvdz*dz;
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    du = %.6e \n", du); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dv = %.6e \n", dv); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[3] = %.6e \n", eval[3]); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[4] = %.6e \n", eval[4]); CHKERRQ(ierr);
+        
+        if (paramsA[0] - du < range[0]){
+          //paramsA[0] = (paramsA[0] + range[0]) / 2.;
+          //paramsA[0] = paramsA[0]; // - (du/abs(du))*1.e-4;
+          paramsA[0] = range[0];
+        } else if (paramsA[0] - du > range[1]) {
+          //paramsA[0] = (paramsA[0] + range[1]) / 2.;
+          //paramsA[0] = paramsA[0]; // - (du/abs(du))*1.e-4;
+          paramsA[0] = range[0];
+        } else {
+          paramsA[0] = paramsA[0] - du;
+        }
+        
+        if (paramsA[1] - dv < range[2]){
+          //paramsA[1] = (paramsA[1] + range[2]) / 2.;
+          //paramsA[1] = paramsA[1]; // - (dv/abs(dv))*1.e-4;
+          paramsA[1] = range[2];
+        } else if (paramsA[1] - dv > range[3]) {
+          //paramsA[1] = (paramsA[1] + range[3]) / 2.;
+          //paramsA[1] = paramsA[1]; // - (dv/abs(dv))*1.e-4;
+          paramsA[1] = range[3];
+        } else {
+          paramsA[1] = paramsA[1] - dv;
+        }
+        
+        //paramsA[0] = paramsA[0] - du;
+        //paramsA[1] = paramsA[1] - dv;
+        
+        ierr = EG_evaluate(face, paramsA, &eval); CHKERRQ(ierr);
+        
+        delta = 0.;
+        for (int ii=0; ii<3; ++ii){
+          delta = delta + ((eval[ii]-xyzA[ii]) * (eval[ii]-xyzA[ii]));
+        }
+        delta = sqrt(delta);
+        
+        //jj = ++jj;
+      } // End of Trial
+    }*/
     
     ierr = EG_evaluate(face, paramsB, eval); CHKERRQ(ierr);
     delta = 0.;
@@ -211,20 +487,146 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar initCo
     }
     delta = sqrt(delta);
     
-    if (delta > errTolr){
-        xyzCheck = 1;
+    /*if (delta > errTolr){
+        //xyzCheck = 1;
         
     //  ierr = PetscPrintf(PETSC_COMM_SELF, "    PointB doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
     //  ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
     //  ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzB (x, y, z) = (%lf, %lf, %lf) \n", xyzB[0], xyzB[1], xyzB[2]);CHKERRQ(ierr);
     //  ierr = PetscPrintf(PETSC_COMM_SELF, "            (u, v) = (%lf, %lf) \n", paramsB[0], paramsB[1]); CHKERRQ(ierr);
     //  ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
-    }   
+
+      // Trial for better Evaluation of (u,v) parameters 
+      //paramsA[0] = paramsA[0] / 2.;
+      //paramsA[1] = paramsA[1] / 2.;
+      ierr = EG_evaluate(face, paramsB, &eval); CHKERRQ(ierr);
+      //int jj = 0;
+      //while (delta > errTolr) {
+      for (int jj=0; jj<6; ++jj){
+        ierr = PetscPrintf(PETSC_COMM_SELF, "Point B doesn't match DMPlex Coordinates \n"); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "  jj = %d \n", jj); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    delta = %.6e \n", delta); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eCone[1] = %d \n", eCone[1]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    xyzB (x, y, z) = (%lf, %lf, %lf) \n", xyzB[0], xyzB[1], xyzB[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "            (u, v) = (%lf, %lf) \n", paramsB[0], paramsB[1]); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    eval (x, y, z) = (%lf, %lf, %lf) \n", eval[0], eval[1], eval[2]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range (umin, umax) = (%lf, %lf) \n", range[0], range[1]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    range (vmin, vmax) = (%lf, %lf) \n", range[2], range[3]);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    peri = %d \n", peri);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    faceId = %d \n", faceID);CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    edgeId = %d \n", edgeID);CHKERRQ(ierr);
+        
+        dx = eval[0] - xyzB[0];
+        dy = eval[1] - xyzB[1];
+        dz = eval[2] - xyzB[2];
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dx = %lf \n", dx); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dy = %lf \n", dy); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dz = %lf \n", dz); CHKERRQ(ierr);
+        
+        //dv = (eval[3]*dy - eval[4]*dx)/(eval[3]*eval[7] - eval[4]*eval[6]);
+        //du = (dx - eval[6]*dv)/eval[3];
+        
+        if (eval[3] != 0.){
+          dudx = 1. / eval[3];
+        } else {
+          dudx = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudx = %lf \n", dudx); CHKERRQ(ierr);
+        
+        if (eval[4] != 0.){
+          dudy = 1. / eval[4];
+        } else {
+          dudy = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudy = %lf \n", dudy); CHKERRQ(ierr);
+        
+        if (eval[5] != 0.){
+          dudz = 1. / eval[5];
+        } else {
+          dudz = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dudz = %lf \n", dudz); CHKERRQ(ierr);
+        
+        if (eval[6] != 0.){
+          dvdx = 1. / eval[6];
+        } else {
+          dvdx = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdx = %lf \n", dvdx); CHKERRQ(ierr);
+        
+        if (eval[7] != 0.){
+          dvdy = 1. / eval[7];
+        } else {
+          dvdy = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdy = %lf \n", dvdy); CHKERRQ(ierr);
+        
+        if (eval[8] != 0.){
+          dvdz = 1. / eval[8];
+        } else {
+          dvdz = 0.;
+        }
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dvdz = %lf \n", dvdz); CHKERRQ(ierr);
+       
+        //dudx = eval[3];
+        //dudy = eval[4];
+        //dudz = eval[5];
+        //dvdx = eval[6];
+        //dvdy = eval[7];
+        //dvdz = eval[8];
+        
+        du = dudx*dx + dudy*dy + dudz*dz;
+        dv = dvdx*dx + dvdy*dy + dvdz*dz;
+        
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    du = %.6e \n", du); CHKERRQ(ierr);
+        ierr = PetscPrintf(PETSC_COMM_SELF, "    dv = %.6e \n", dv); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[3] = %.6e \n", eval[3]); CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "    eval[4] = %.6e \n", eval[4]); CHKERRQ(ierr);
+        
+        if (paramsB[0] - du < range[0]){
+          //paramsB[0] = (paramsB[0] + range[0]) / 2.;
+          //paramsB[0] = paramsB[0]; // - (du/abs(du))*1.e-4;
+          paramsB[0] = range[0];
+        } else if (paramsB[0] - du > range[1]) {
+          //paramsB[0] = (paramsB[0] + range[1]) / 2.;
+          //paramsB[0] = paramsB[0]; // - (du/abs(du))*1.e-4;
+          paramsB[0] = range[1];
+        } else {
+          paramsB[0] = paramsB[0] - du;
+        }
+        
+        if (paramsB[1] - dv < range[2]){
+          //paramsB[1] = (paramsB[1] + range[2]) / 2.;
+          //paramsB[1] = paramsB[1]; // - (dv/abs(dv))*1.e-4;
+          paramsB[1] = range[2];
+        } else if (paramsB[1] - dv > range[3]) {
+          //paramsB[1] = (paramsB[1] + range[3]) / 2.;
+          //paramsB[1] = paramsB[1]; // - (dv/abs(dv))*1.e-4;
+          paramsB[1] = range[3];
+        } else {
+          paramsB[1] = paramsB[1] - dv;
+        }
+        
+        //paramsB[0] = paramsB[0] - du;
+        //paramsB[1] = paramsB[1] - dv;
+        
+        ierr = EG_evaluate(face, paramsB, &eval); CHKERRQ(ierr);
+        
+        delta = 0.;
+        for (int ii=0; ii<3; ++ii){
+          delta = delta + ((eval[ii]-xyzB[ii]) * (eval[ii]-xyzB[ii]));
+        }
+        delta = sqrt(delta);
+        
+        //jj = ++jj;
+      } // End of Trial    
+    }*/   
     // End Check 
     
     /* Get (u,v) range for FACE */
-    double range[4];    // [umin, umax, vmin, vmax]
-    int    peri;
+    //double range[4];    // [umin, umax, vmin, vmax]
+    //int    peri;
     ierr = EG_getRange(face, range, &peri); CHKERRQ(ierr);
     
     /* Calculate (u, v) parameters for refined point */

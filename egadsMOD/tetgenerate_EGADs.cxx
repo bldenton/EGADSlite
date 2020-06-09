@@ -257,7 +257,7 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 #endif
 	
     /* -- Set labels -- */
-	/* Vertices Labels */
+	/* Vertices Labels */		//rewrite to utilize newly created DMPlex from Tetgen. I think it will stabilize the mesh generation labeling
     for (v = 0; v < numVertices; ++v) {
 #ifdef PETSC_HAVE_EGADS
 	  PetscInt val;

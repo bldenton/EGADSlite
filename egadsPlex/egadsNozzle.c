@@ -661,8 +661,10 @@ int main(int argc, char *argv[])
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
   
   /* Refine Volumetric Mesh (dmMesh) */
+  // Petsc Refinement
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying Refinement \n");CHKERRQ(ierr);
   ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  // Tetgen Refinement
   //DMRefine(dmMesh,PETSC_COMM_WORLD,&dm);
   
   

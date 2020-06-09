@@ -620,7 +620,7 @@ int main(int argc, char *argv[])
   ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
   //ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
-  ierr = DMSetFromOptions(dmNozzle); CHKERRQ(ierr);
+  //ierr = DMSetFromOptions(dmNozzle); CHKERRQ(ierr);
   
   // Remove when not using Tetgen
   ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
@@ -640,32 +640,59 @@ int main(int argc, char *argv[])
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n Inflated dmMesh \n");CHKERRQ(ierr);
   
   /* Output State of DMLabels for dmMesh after Volumetric Mesh generated */
-  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
-  ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
-  
-  ierr = DMCreateLabel(dmMesh, "EGADS Body ID");CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
-  ierr = DMCreateLabel(dmMesh, "EGADS Face ID");CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
-  ierr = DMCreateLabel(dmMesh, "EGADS Edge ID");CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
-  ierr = DMCreateLabel(dmMesh, "EGADS Vertex ID");CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
-  
-  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
+  //ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
+  //
+  //ierr = DMCreateLabel(dmMesh, "EGADS Body ID");CHKERRQ(ierr);
+  //ierr = DMGetLabel(dmMesh, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
+  //ierr = DMCreateLabel(dmMesh, "EGADS Face ID");CHKERRQ(ierr);
+  //ierr = DMGetLabel(dmMesh, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
+  //ierr = DMCreateLabel(dmMesh, "EGADS Edge ID");CHKERRQ(ierr);
+  //ierr = DMGetLabel(dmMesh, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
+  //ierr = DMCreateLabel(dmMesh, "EGADS Vertex ID");CHKERRQ(ierr);
+  //ierr = DMGetLabel(dmMesh, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
+  //
+  //ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  //ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  //ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  //ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
   
   /* Refine Volumetric Mesh (dmMesh) */
   // Petsc Refinement
-  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying Refinement \n");CHKERRQ(ierr);
+  // 1st time
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 1st Refinement \n");CHKERRQ(ierr);
   ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view4");CHKERRQ(ierr);
+  
+  // 2nd Time
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 2nd Refinement \n");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view5");CHKERRQ(ierr);
+  
+  // 3rd Time
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 3rd Refinement \n");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view6");CHKERRQ(ierr);
+
+  // 4th Time
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 4th Refinement \n");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view7");CHKERRQ(ierr);
+  
+  // 5th Time
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 5th Refinement \n");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view8");CHKERRQ(ierr);
+  
   // Tetgen Refinement
   //DMRefine(dmMesh,PETSC_COMM_WORLD,&dm);
+  
+    /* Inflate Mesh to EGADS Geometry */
+  //ierr = DMPlexInflateToGeomModel(dmMesh); CHKERRQ(ierr);
+  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n Inflated Refined dmMesh \n");CHKERRQ(ierr);
   
   
   
@@ -716,7 +743,7 @@ int main(int argc, char *argv[])
   //ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
   //ierr = DMViewFromOptions(dm, NULL, "-dm_view2");CHKERRQ(ierr);        // Use when Revine dmMesh 1st
-  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view2");CHKERRQ(ierr);    // Use when Refine dmNozzle 1st
+  //ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view2");CHKERRQ(ierr);    // Use when Refine dmNozzle 1st
   ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view");CHKERRQ(ierr);
   
   //ierr = DMDestroy(&dm);CHKERRQ(ierr);

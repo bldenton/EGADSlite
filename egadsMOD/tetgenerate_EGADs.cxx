@@ -2,6 +2,10 @@
 
 #include <tetgen.h>
 
+#ifdef PETSC_HAVE_EGADS
+#include <egads.h>
+#endif
+
 /* This is to fix the tetrahedron orientation from TetGen */
 static PetscErrorCode DMPlexInvertCells_Internal(PetscInt dim, PetscInt numCells, PetscInt numCorners, int cells[])
 {
@@ -31,7 +35,7 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 #ifdef PETSC_HAVE_EGADS
   DMLabel        bodyLabel, faceLabel, edgeLabel, vertexLabel;
   const char    *labelName;
-  const PetscInt vertexOffset = 100000000, edgeOffset = 200000000, faceOffset = 300000000;
+  const PetscInt vertexOffset = 100000000, edgeOffset = 200000000, faceOffset = 300000000, bodyOffset = 1000000;
   PetscInt       numLabels;
 #else
   const char    *labelName = "marker";
@@ -71,22 +75,27 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
       for (d = 0; d < dim; ++d) in.pointlist[idx*dim + d] = PetscRealPart(array[off+d]);
 	  
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(boundary, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, v, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(boundary, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
+		//PetscInt val;
         ierr = DMGetLabel(boundary, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, v, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID") == 0) {
-				in.pointmarkerlist[idx] = val + vertexOffset;
+				in.pointmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.pointmarkerlist[idx] = val + edgeOffset;
+				in.pointmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.pointmarkerlist[idx] = val + faceOffset;
+				in.pointmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
 	  }
@@ -119,22 +128,26 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	  in.edgelist[idx*2 + 1] = eCone[1] - vStart;
 
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(boundary, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, e, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(boundary, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
         ierr = DMGetLabel(boundary, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, e, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.edgemarkerlist[idx] = val + vertexOffset;
+				in.edgemarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.edgemarkerlist[idx] = val + edgeOffset;
+				in.edgemarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.edgemarkerlist[idx] = val + faceOffset;
+				in.edgemarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
 	  }
@@ -180,22 +193,26 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
       }
 	  
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(boundary, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, f, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(boundary, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
         ierr = DMGetLabel(boundary, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, f, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.facetmarkerlist[idx] = val + vertexOffset;
+				in.facetmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.facetmarkerlist[idx] = val + edgeOffset;
+				in.facetmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.facetmarkerlist[idx] = val + faceOffset;
+				in.facetmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
 	  }
@@ -234,7 +251,10 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
     int            *cells      = out.tetrahedronlist;
 
 #ifdef PETSC_HAVE_EGADS
-	// Do Nothing
+	PetscContainer modelObj;
+	ego           *bodies;
+	ego            model, geom, body;
+	int            Nb, oclass, mtype, *senses;
 #else
 	DMLabel         glabel     = NULL;
 #endif
@@ -251,6 +271,16 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	ierr = DMGetLabel(*dm, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
 	ierr = DMCreateLabel(*dm, "EGADS Vertex ID");CHKERRQ(ierr);
 	ierr = DMGetLabel(*dm, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
+	
+	/* Get Attached EGADS Model from Original DMPlex*/
+	ierr = PetscObjectQuery((PetscObject) boundary, "EGADS Model", (PetscObject *) &modelObj);CHKERRQ(ierr);
+	ierr = PetscContainerGetPointer(modelObj, (void **) &model);CHKERRQ(ierr);
+	ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses);CHKERRQ(ierr);
+	
+	/* Transfer EGADS Model to Volumetric Mesh */
+	ierr = PetscObjectCompose((PetscObject) *dm, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
+	ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
+	ierr = PetscPrintf(PETSC_COMM_SELF, "\n Attached EGADS Model \n");CHKERRQ(ierr);
 #else
     if (label) {ierr = DMCreateLabel(*dm, labelName);
 	ierr = DMGetLabel(*dm, labelName, &glabel);}
@@ -260,13 +290,30 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	/* Vertices Labels */		//rewrite to utilize newly created DMPlex from Tetgen. I think it will stabilize the mesh generation labeling
     for (v = 0; v < numVertices; ++v) {
 #ifdef PETSC_HAVE_EGADS
-	  PetscInt val;
+	  PetscInt val, bodyVal, bodyValOffset;
 	  
 	  val = out.pointmarkerlist[v];
-	  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, v+numCells, out.pointmarkerlist[v] - vertexOffset); CHKERRQ(ierr);}
-	  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, v+numCells, out.pointmarkerlist[v] - edgeOffset); CHKERRQ(ierr);}
-	  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, v+numCells, out.pointmarkerlist[v] - faceOffset); CHKERRQ(ierr);}
-	  ierr = DMLabelSetValue(bodyLabel, v+numCells, 0); CHKERRQ(ierr);
+	  if (val >= vertexOffset && val < edgeOffset) {
+		val = val - vertexOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+		ierr = DMLabelSetValue(vertexLabel, v+numCells, out.pointmarkerlist[v] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
+	  if (val >= edgeOffset && val < faceOffset) {
+		val = val - edgeOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+		ierr = DMLabelSetValue(edgeLabel, v+numCells, out.pointmarkerlist[v] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
+	  if (val >= faceOffset) {
+		val = val - faceOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+	    ierr = DMLabelSetValue(faceLabel, v+numCells, out.pointmarkerlist[v] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
 #else
       if (out.pointmarkerlist[v]) {
         if (glabel) {ierr = DMLabelSetValue(glabel, v+numCells, out.pointmarkerlist[v]);CHKERRQ(ierr);}
@@ -291,12 +338,30 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
           if (numEdges != 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Two vertices must cover only one edge, not %D", numEdges);
 		  
 #ifdef PETSC_HAVE_EGADS
-		  PetscInt val;
+		  PetscInt val, bodyVal, bodyValOffset;
 	  
 		  val = out.edgemarkerlist[e];
-		  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, edges[0], out.edgemarkerlist[e] - vertexOffset); CHKERRQ(ierr);}
-		  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, edges[0], out.edgemarkerlist[e] - edgeOffset); CHKERRQ(ierr);}
-		  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, edges[0], out.edgemarkerlist[e] - faceOffset); CHKERRQ(ierr);}
+		  if (val >= vertexOffset && val < edgeOffset) {
+			val = val - vertexOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(vertexLabel, edges[0], out.edgemarkerlist[e] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= edgeOffset && val < faceOffset) {
+			val = val - edgeOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+	        ierr = DMLabelSetValue(edgeLabel, edges[0], out.edgemarkerlist[e] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= faceOffset) {
+			val = val - faceOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(faceLabel, edges[0], out.edgemarkerlist[e] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
 #else
           if (glabel) {ierr = DMLabelSetValue(glabel, edges[0], out.edgemarkerlist[e]);CHKERRQ(ierr);}
 #endif
@@ -318,12 +383,30 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
           if (numFaces != 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Three vertices must cover only one face, not %D", numFaces);
 		  
 #ifdef PETSC_HAVE_EGADS
-		  PetscInt val;
+		  PetscInt val, bodyVal, bodyValOffset;
 	  
 		  val = out.trifacemarkerlist[f];
-		  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, faces[0], out.trifacemarkerlist[f] - vertexOffset); CHKERRQ(ierr);}
-		  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, faces[0], out.trifacemarkerlist[f] - edgeOffset); CHKERRQ(ierr);}
-		  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, faces[0], out.trifacemarkerlist[f] - faceOffset); CHKERRQ(ierr);}
+		  if (val >= vertexOffset && val < edgeOffset) {
+			val = val - vertexOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+			ierr = DMLabelSetValue(vertexLabel, faces[0], out.trifacemarkerlist[f] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= edgeOffset && val < faceOffset) {
+			val = val - edgeOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+			ierr = DMLabelSetValue(edgeLabel, faces[0], out.trifacemarkerlist[f] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= faceOffset) {
+			val = val - faceOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(faceLabel, faces[0], out.trifacemarkerlist[f] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
 #else
           if (glabel) {ierr = DMLabelSetValue(glabel, faces[0], out.trifacemarkerlist[f]);CHKERRQ(ierr);}
 #endif
@@ -334,13 +417,59 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	
 	/* Set Cell Labels */
 #ifdef PETSC_HAVE_EGADS
-	for ( c = 0; c < numCells; c++) {
-		ierr = DMLabelSetValue(bodyLabel, c, 0); CHKERRQ(ierr);
-	}
+	/* NEED TO UPDATE TO DEAL WITH WHAT BODY THE CELL IS LOCATED IN */
+	/*   1 - Cycle Through Cells 									*/
+	/*   2 - Calculate the centroid (x,y,z) of tetrahedrals			*/
+	/*   3 - Perfrom EG_inTopology() function to see which body		*/
+	/*   4 - Perform transitive closure								*/
+	/*   5 - if attached enitites don't have a bodyID assigned		*/
+	/*       assign the current bodyID								*/
 	
-	ierr = DMPlexGetChart(*dm, &cStart, &cEnd); CHKERRQ(ierr);
-	for ( c = cStart; c <= cEnd; c++) {
-		ierr = DMLabelSetValue(bodyLabel, c, 0); CHKERRQ(ierr);
+	ierr = DMPlexGetHeightStratum(*dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+	ierr = DMPlexGetHeightStratum(*dm, 1, &fStart, &fEnd);CHKERRQ(ierr);
+	ierr = DMPlexGetHeightStratum(*dm, 2, &eStart, &eEnd);CHKERRQ(ierr);
+
+	for ( c = cStart; c < cEnd; c++) {
+		PetscInt 	   val, eVal, fVal;
+		PetscReal	   vol;
+		PetscReal	   centroid[dim], normal[dim];
+		PetscInt      *points = NULL, numPoints;
+		
+		ierr = DMPlexGetTransitiveClosure(*dm, c, PETSC_TRUE, &numPoints, &points);CHKERRQ(ierr);		// Get all DMPlex points associated with the current cell
+		ierr = DMPlexComputeCellGeometryFVM(*dm, c, &vol, centroid, normal); CHKERRQ(ierr);		
+		
+		/* Deterimine what body the cell's centroid is located in */
+		for (int ii = 0; ii < Nb; ++ii){
+			body = bodies[ii];
+			ierr = EG_inTopology(body, centroid); CHKERRQ(ierr);
+			if (ierr == 0) {
+				val = ii;
+				break;
+			}
+		}
+
+		if (val >= 0) {
+			ierr = DMLabelSetValue(bodyLabel, c, val); CHKERRQ(ierr);
+			
+			for (int ii = 0; ii < numPoints; ++ii){
+				if (points[ii] >= eStart && points[ii] < eEnd) {
+					ierr = DMLabelGetValue(bodyLabel, points[ii], &eVal); CHKERRQ(ierr);		// We don't want to overwrite the work done above
+					if (eVal < 0) {ierr = DMLabelSetValue(bodyLabel, points[ii], val); CHKERRQ(ierr);}
+				} else {
+					// Do Nothing - Skip
+				}
+				
+				if (points[ii] >= fStart && points[ii] < fEnd) {
+					ierr = DMLabelGetValue(bodyLabel, points[ii], &fVal); CHKERRQ(ierr);		// We don't want to overwrite the work done above
+					if (fVal < 0) {ierr = DMLabelSetValue(bodyLabel, points[ii], val); CHKERRQ(ierr);}
+				} else {
+					// Do Nothing - Skip
+				}
+			}
+		} else {
+			// Do Nothing
+		}		
+		ierr = DMPlexRestoreTransitiveClosure(*dm, c, PETSC_TRUE, &numPoints, &points); CHKERRQ(ierr);
 	}
 #else
 	// Do Nothing
@@ -350,6 +479,16 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
   }
   PetscFunctionReturn(0);
 }
+
+
+
+
+
+
+
+
+
+
 
 
 PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *dmRefined)
@@ -368,7 +507,7 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
 #ifdef PETSC_HAVE_EGADS
   DMLabel        bodyLabel, faceLabel, edgeLabel, vertexLabel;
   const char    *labelName;
-  const PetscInt vertexOffset = 100000000, edgeOffset = 200000000, faceOffset = 300000000;
+  const PetscInt vertexOffset = 100000000, edgeOffset = 200000000, faceOffset = 300000000, bodyOffset = 1000000;
   PetscInt       numLabels;
 #else
   const char    *labelName = "marker";
@@ -409,25 +548,30 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
       for (d = 0; d < dim; ++d) in.pointlist[idx*dim + d] = PetscRealPart(array[off+d]);
 	  
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(dm, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, v, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(dm, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
         ierr = DMGetLabel(dm, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, v, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID") == 0) {
-				in.pointmarkerlist[idx] = val + vertexOffset;
+				in.pointmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.pointmarkerlist[idx] = val + edgeOffset;
+				in.pointmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.pointmarkerlist[idx] = val + faceOffset;
+				in.pointmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
-	  }
+	  }	  
+	  
 #else
       if (label) {
         PetscInt val;
@@ -458,22 +602,26 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
 	  in.edgelist[idx*2 + 1] = eCone[1] - vStart;
 
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(dm, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, e, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(dm, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
         ierr = DMGetLabel(dm, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, e, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.edgemarkerlist[idx] = val + vertexOffset;
+				in.edgemarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.edgemarkerlist[idx] = val + edgeOffset;
+				in.edgemarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.edgemarkerlist[idx] = val + faceOffset;
+				in.edgemarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
 	  }
@@ -519,22 +667,26 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
       }
 	  
 #ifdef PETSC_HAVE_EGADS
+	  PetscInt	val, bodyOffsetVal;
+	  ierr = DMGetLabel(dm, "EGADS Body ID", &label); CHKERRQ(ierr);
+	  ierr = DMLabelGetValue(label, f, &val); CHKERRQ(ierr);
+	  bodyOffsetVal = val * bodyOffset;
+	  
       for (int ii = 0; ii < numLabels; ++ii){
         ierr = DMGetLabelName(dm, ii, &labelName); CHKERRQ(ierr);
 		
-		PetscInt val;
         ierr = DMGetLabel(dm, labelName, &label); CHKERRQ(ierr);
 		ierr = DMLabelGetValue(label, f, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
 			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.facetmarkerlist[idx] = val + vertexOffset;
+				in.facetmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
 			}		// Store EGADS Vertex date
 			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.facetmarkerlist[idx] = val + edgeOffset;
+				in.facetmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
 			}			// Store EGADS Edge data 
 			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.facetmarkerlist[idx] = val + faceOffset;
+				in.facetmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
 			}			// Store EGADS Face data 
 		}
 	  }
@@ -599,7 +751,10 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
     PetscBool      interpolate = depthGlobal > 1 ? PETSC_TRUE : PETSC_FALSE;
 	
 #ifdef PETSC_HAVE_EGADS
-	// Do Nothing
+	PetscContainer modelObj;
+	ego           *bodies;
+	ego            model, geom, body;
+	int            Nb, oclass, mtype, *senses;
 #else
 	DMLabel         rlabel     = NULL;
 #endif
@@ -616,6 +771,15 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
 	ierr = DMGetLabel(*dmRefined, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
 	ierr = DMCreateLabel(*dmRefined, "EGADS Vertex ID");CHKERRQ(ierr);
 	ierr = DMGetLabel(*dmRefined, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
+	
+	/* Get Attached EGADS Model from Original DMPlex*/
+	ierr = PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj);CHKERRQ(ierr);
+	ierr = PetscContainerGetPointer(modelObj, (void **) &model);CHKERRQ(ierr);
+	ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses);CHKERRQ(ierr);
+	
+	/* Transfer EGADS Model to Volumetric Mesh */
+	ierr = PetscObjectCompose((PetscObject) *dmRefined, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
+	ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
 #else
     if (label) {ierr = DMCreateLabel(*dmRefined, labelName);
 	ierr = DMGetLabel(*dmRefined, labelName, &rlabel);}
@@ -625,13 +789,30 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
 	/* Vertices Labels */
     for (v = 0; v < numVertices; ++v) {
 #ifdef PETSC_HAVE_EGADS
-	  PetscInt val;
+	  PetscInt val, bodyVal, bodyValOffset;
 	  
 	  val = out.pointmarkerlist[v];
-	  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, v+numCells, out.pointmarkerlist[v] - vertexOffset); CHKERRQ(ierr);}
-	  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, v+numCells, out.pointmarkerlist[v] - edgeOffset); CHKERRQ(ierr);}
-	  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, v+numCells, out.pointmarkerlist[v] - faceOffset); CHKERRQ(ierr);}
-	  ierr = DMLabelSetValue(bodyLabel, v+numCells, 0); CHKERRQ(ierr);
+	  if (val >= vertexOffset && val < edgeOffset) {
+		val = val - vertexOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+		ierr = DMLabelSetValue(vertexLabel, v+numCells, out.pointmarkerlist[v] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
+	  if (val >= edgeOffset && val < faceOffset) {
+		val = val - edgeOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+		ierr = DMLabelSetValue(edgeLabel, v+numCells, out.pointmarkerlist[v] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
+	  if (val >= faceOffset) {
+		val = val - faceOffset;
+		bodyVal = val / bodyOffset;		// Integer Division
+		bodyValOffset = bodyVal * bodyOffset;
+	    ierr = DMLabelSetValue(faceLabel, v+numCells, out.pointmarkerlist[v] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+		ierr = DMLabelSetValue(bodyLabel, v+numCells, bodyVal); CHKERRQ(ierr);
+	  }
 #else
       if (out.pointmarkerlist[v]) {
         if (rlabel) {ierr = DMLabelSetValue(rlabel, v+numCells, out.pointmarkerlist[v]);CHKERRQ(ierr);}
@@ -655,12 +836,30 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
           if (numEdges != 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Two vertices must cover only one edge, not %D", numEdges);
 		  
 #ifdef PETSC_HAVE_EGADS
-		  PetscInt val;
+		  PetscInt val, bodyVal, bodyValOffset;
 	  
 		  val = out.edgemarkerlist[e];
-		  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, edges[0], out.edgemarkerlist[e] - vertexOffset); CHKERRQ(ierr);}
-		  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, edges[0], out.edgemarkerlist[e] - edgeOffset); CHKERRQ(ierr);}
-		  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, edges[0], out.edgemarkerlist[e] - faceOffset); CHKERRQ(ierr);}
+		  if (val >= vertexOffset && val < edgeOffset) {
+			val = val - vertexOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(vertexLabel, edges[0], out.edgemarkerlist[e] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= edgeOffset && val < faceOffset) {
+			val = val - edgeOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+	        ierr = DMLabelSetValue(edgeLabel, edges[0], out.edgemarkerlist[e] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= faceOffset) {
+			val = val - faceOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(faceLabel, edges[0], out.edgemarkerlist[e] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, edges[0], bodyVal); CHKERRQ(ierr);
+		  }
 #else
           if (rlabel) {ierr = DMLabelSetValue(rlabel, edges[0], out.edgemarkerlist[e]);CHKERRQ(ierr);}
 #endif
@@ -668,7 +867,7 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
           ierr = DMPlexRestoreJoin(*dmRefined, 2, vertices, &numEdges, &edges);CHKERRQ(ierr);
         }
       }
-	  
+ 
 	  /* Set Face Labels */
 	  ierr = DMPlexGetHeightStratum(*dmRefined, 1, &fStart, &fEnd);CHKERRQ(ierr);
       for (f = 0; f < out.numberoftrifaces; f++) {
@@ -682,12 +881,30 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
           if (numFaces != 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Three vertices must cover only one face, not %D", numFaces);
 		  
 #ifdef PETSC_HAVE_EGADS
-		  PetscInt val;
+		  PetscInt val, bodyVal, bodyValOffset;
 	  
 		  val = out.trifacemarkerlist[f];
-		  if (val >= vertexOffset && val < edgeOffset) { ierr = DMLabelSetValue(vertexLabel, faces[0], out.trifacemarkerlist[f] - vertexOffset); CHKERRQ(ierr);}
-		  if (val >= edgeOffset && val < faceOffset) { ierr = DMLabelSetValue(edgeLabel, faces[0], out.trifacemarkerlist[f] - edgeOffset); CHKERRQ(ierr);}
-		  if (val >= faceOffset) { ierr = DMLabelSetValue(faceLabel, faces[0], out.trifacemarkerlist[f] - faceOffset); CHKERRQ(ierr);}
+		  if (val >= vertexOffset && val < edgeOffset) {
+			val = val - vertexOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+			ierr = DMLabelSetValue(vertexLabel, faces[0], out.trifacemarkerlist[f] - vertexOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= edgeOffset && val < faceOffset) {
+			val = val - edgeOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+			ierr = DMLabelSetValue(edgeLabel, faces[0], out.trifacemarkerlist[f] - edgeOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
+		  if (val >= faceOffset) {
+			val = val - faceOffset;
+			bodyVal = val / bodyOffset;		// Integer Division
+			bodyValOffset = bodyVal * bodyOffset;
+		    ierr = DMLabelSetValue(faceLabel, faces[0], out.trifacemarkerlist[f] - faceOffset - bodyValOffset); CHKERRQ(ierr);
+			ierr = DMLabelSetValue(bodyLabel, faces[0], bodyVal); CHKERRQ(ierr);
+		  }
 #else
           if (rlabel) {ierr = DMLabelSetValue(rlabel, faces[0], out.trifacemarkerlist[f]);CHKERRQ(ierr);}
 #endif
@@ -698,14 +915,60 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
 	
 	/* Set Cell Labels */
 #ifdef PETSC_HAVE_EGADS
-	for ( c = 0; c < numCells; c++) {
-		ierr = DMLabelSetValue(bodyLabel, c, 0); CHKERRQ(ierr);
-	}
+	/* NEED TO UPDATE TO DEAL WITH WHAT BODY THE CELL IS LOCATED IN */
+	/*   1 - Cycle Through Cells 									*/
+	/*   2 - Calculate the centroid (x,y,z) of tetrahedrals			*/
+	/*   3 - Perfrom EG_inTopology() function to see which body		*/
+	/*   4 - Perform transitive closure								*/
+	/*   5 - if attached enitites don't have a bodyID assigned		*/
+	/*       assign the current bodyID								*/
 	
-	ierr = DMPlexGetChart(*dmRefined, &cStart, &cEnd); CHKERRQ(ierr);
-	for ( c = cStart; c <= cEnd; c++) {
-		ierr = DMLabelSetValue(bodyLabel, c, 0); CHKERRQ(ierr);
-	}	
+	ierr = DMPlexGetHeightStratum(*dmRefined, 0, &cStart, &cEnd);CHKERRQ(ierr);
+	ierr = DMPlexGetHeightStratum(*dmRefined, 1, &fStart, &fEnd);CHKERRQ(ierr);
+	ierr = DMPlexGetHeightStratum(*dmRefined, 2, &eStart, &eEnd);CHKERRQ(ierr);
+
+	for ( c = cStart; c < cEnd; c++) {
+		PetscInt 	   val, eVal, fVal;
+		PetscReal	   vol;
+		PetscReal	   centroid[dim], normal[dim];
+		PetscInt      *points = NULL, numPoints;
+		
+		ierr = DMPlexGetTransitiveClosure(*dmRefined, c, PETSC_TRUE, &numPoints, &points);CHKERRQ(ierr);		// Get all DMPlex points associated with the current cell
+		ierr = DMPlexComputeCellGeometryFVM(*dmRefined, c, &vol, centroid, normal); CHKERRQ(ierr);		
+		
+		/* Deterimine what body the cell's centroid is located in */
+		for (int ii = 0; ii < Nb; ++ii){
+			body = bodies[ii];
+			ierr = EG_inTopology(body, centroid); CHKERRQ(ierr);
+			if (ierr == 0) {
+				val = ii;
+				break;
+			}
+		}
+
+		if (val >= 0) {
+			ierr = DMLabelSetValue(bodyLabel, c, val); CHKERRQ(ierr);
+			
+			for (int ii = 0; ii < numPoints; ++ii){
+				if (points[ii] >= eStart && points[ii] < eEnd) {
+					ierr = DMLabelGetValue(bodyLabel, points[ii], &eVal); CHKERRQ(ierr);		// We don't want to overwrite the work done above
+					if (eVal < 0) {ierr = DMLabelSetValue(bodyLabel, points[ii], val); CHKERRQ(ierr);}
+				} else {
+					// Do Nothing - Skip
+				}
+				
+				if (points[ii] >= fStart && points[ii] < fEnd) {
+					ierr = DMLabelGetValue(bodyLabel, points[ii], &fVal); CHKERRQ(ierr);		// We don't want to overwrite the work done above
+					if (fVal < 0) {ierr = DMLabelSetValue(bodyLabel, points[ii], val); CHKERRQ(ierr);}
+				} else {
+					// Do Nothing - Skip
+				}
+			}
+		} else {
+			// Do Nothing
+		}		
+		ierr = DMPlexRestoreTransitiveClosure(*dmRefined, c, PETSC_TRUE, &numPoints, &points); CHKERRQ(ierr);
+	}
 #else
 	// Do Nothing
 #endif

@@ -626,14 +626,14 @@ int main(int argc, char *argv[])
   ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
   
   /* Attached EGADS model to Volumetric Mesh DMPlex */
-{
-  PetscContainer modelObj;
-  ierr = PetscContainerCreate(PETSC_COMM_SELF, &modelObj);CHKERRQ(ierr);
-  ierr = PetscContainerSetPointer(modelObj, model);CHKERRQ(ierr);
-  ierr = PetscObjectCompose((PetscObject) dmMesh, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
-  ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "\n Attached EGADS Model \n");CHKERRQ(ierr);
-}
+//{
+//  PetscContainer modelObj;
+//  ierr = PetscContainerCreate(PETSC_COMM_SELF, &modelObj);CHKERRQ(ierr);
+//  ierr = PetscContainerSetPointer(modelObj, model);CHKERRQ(ierr);
+//  ierr = PetscObjectCompose((PetscObject) dmMesh, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
+//  ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
+//  ierr = PetscPrintf(PETSC_COMM_SELF, "\n Attached EGADS Model \n");CHKERRQ(ierr);
+//}
   
   /* Inflate Mesh to EGADS Geometry */
   //ierr = DMPlexInflateToGeomModel(dmMesh); CHKERRQ(ierr);
@@ -748,7 +748,7 @@ int main(int argc, char *argv[])
   
   //ierr = DMDestroy(&dm);CHKERRQ(ierr);
   ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
-  ierr = DMDestroy(&dmNozzle);CHKERRQ(ierr);
+  //ierr = DMDestroy(&dmNozzle);CHKERRQ(ierr);		// Strange error
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);

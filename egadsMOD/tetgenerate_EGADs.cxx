@@ -88,15 +88,9 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 		ierr = DMLabelGetValue(label, v, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
-			if (strcmp(labelName, "EGADS Vertex ID") == 0) {
-				in.pointmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
-			}		// Store EGADS Vertex date
-			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.pointmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
-			}			// Store EGADS Edge data 
-			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.pointmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
-			}			// Store EGADS Face data 
+			if (strcmp(labelName, "EGADS Vertex ID") == 0) { in.pointmarkerlist[idx] = val + vertexOffset + bodyOffsetVal; }		// Store EGADS Vertex date
+			if (strcmp(labelName, "EGADS Edge ID") == 0) { in.pointmarkerlist[idx] = val + edgeOffset + bodyOffsetVal; }			// Store EGADS Edge data 
+			if (strcmp(labelName, "EGADS Face ID") == 0) { in.pointmarkerlist[idx] = val + faceOffset + bodyOffsetVal; }			// Store EGADS Face data 
 		}
 	  }
 #else
@@ -140,15 +134,9 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 		ierr = DMLabelGetValue(label, e, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
-			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.edgemarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
-			}		// Store EGADS Vertex date
-			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.edgemarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
-			}			// Store EGADS Edge data 
-			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.edgemarkerlist[idx] = val + faceOffset + bodyOffsetVal;
-			}			// Store EGADS Face data 
+			if (strcmp(labelName, "EGADS Vertex ID")== 0) { in.edgemarkerlist[idx] = val + vertexOffset + bodyOffsetVal; }		// Store EGADS Vertex date
+			if (strcmp(labelName, "EGADS Edge ID") == 0) { in.edgemarkerlist[idx] = val + edgeOffset + bodyOffsetVal; }			// Store EGADS Edge data 
+			if (strcmp(labelName, "EGADS Face ID") == 0) { in.edgemarkerlist[idx] = val + faceOffset + bodyOffsetVal; }			// Store EGADS Face data 
 		}
 	  }
 #else
@@ -205,15 +193,9 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 		ierr = DMLabelGetValue(label, f, &val); CHKERRQ(ierr);
 		
 		if (val >= 0) {
-			if (strcmp(labelName, "EGADS Vertex ID")== 0) {
-				in.facetmarkerlist[idx] = val + vertexOffset + bodyOffsetVal;
-			}		// Store EGADS Vertex date
-			if (strcmp(labelName, "EGADS Edge ID") == 0) {
-				in.facetmarkerlist[idx] = val + edgeOffset + bodyOffsetVal;
-			}			// Store EGADS Edge data 
-			if (strcmp(labelName, "EGADS Face ID") == 0) {
-				in.facetmarkerlist[idx] = val + faceOffset + bodyOffsetVal;
-			}			// Store EGADS Face data 
+			if (strcmp(labelName, "EGADS Vertex ID")== 0) { in.facetmarkerlist[idx] = val + vertexOffset + bodyOffsetVal; }		// Store EGADS Vertex date
+			if (strcmp(labelName, "EGADS Edge ID") == 0) { in.facetmarkerlist[idx] = val + edgeOffset + bodyOffsetVal; }		// Store EGADS Edge data 
+			if (strcmp(labelName, "EGADS Face ID") == 0) { in.facetmarkerlist[idx] = val + faceOffset + bodyOffsetVal; }		// Store EGADS Face data 
 		}
 	  }
 #else
@@ -232,7 +214,11 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
   /* Generate Mesh using Tetgen */
   if (!rank) {
     char args[32];
-
+	
+	//ierr = PetscPrintf(PETSC_COMM_SELF, "\n ---------------------- \n");CHKERRQ(ierr);
+	//ierr = PetscPrintf(PETSC_COMM_SELF, "\n     GENERATING MESH    \n");CHKERRQ(ierr);
+	//ierr = PetscPrintf(PETSC_COMM_SELF, "\n ---------------------- \n");CHKERRQ(ierr);
+	
     /* Take away 'Q' for verbose output */ 
 #ifdef PETSC_HAVE_EGADS
     /* Add Y to preserve Surface Mesh for EGADS */
@@ -280,7 +266,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	/* Transfer EGADS Model to Volumetric Mesh */
 	ierr = PetscObjectCompose((PetscObject) *dm, "EGADS Model", (PetscObject) modelObj);CHKERRQ(ierr);
 	ierr = PetscContainerDestroy(&modelObj);CHKERRQ(ierr);
-	ierr = PetscPrintf(PETSC_COMM_SELF, "\n Attached EGADS Model \n");CHKERRQ(ierr);
 #else
     if (label) {ierr = DMCreateLabel(*dm, labelName);
 	ierr = DMGetLabel(*dm, labelName, &glabel);}
@@ -328,7 +313,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	  /* Set Edge Labels */
 	  ierr = DMPlexGetHeightStratum(*dm, 2, &eStart, &eEnd);CHKERRQ(ierr);
       for (e = 0; e < out.numberofedges; e++) {
-		ierr = DMLabelSetValue(bodyLabel, e + eStart, 0); CHKERRQ(ierr);
         if (out.edgemarkerlist[e]) {
           const PetscInt  vertices[2] = {out.edgelist[e*2+0]+numCells, out.edgelist[e*2+1]+numCells};
           const PetscInt *edges;
@@ -373,7 +357,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	  /* Set Face Labels */
 	  ierr = DMPlexGetHeightStratum(*dm, 1, &fStart, &fEnd);CHKERRQ(ierr);
       for (f = 0; f < out.numberoftrifaces; f++) {
-		ierr = DMLabelSetValue(bodyLabel, f + fStart, 0); CHKERRQ(ierr);
         if (out.trifacemarkerlist[f]) {
           const PetscInt  vertices[3] = {out.trifacelist[f*3+0]+numCells, out.trifacelist[f*3+1]+numCells, out.trifacelist[f*3+2]+numCells};
           const PetscInt *faces;
@@ -430,7 +413,7 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 	ierr = DMPlexGetHeightStratum(*dm, 2, &eStart, &eEnd);CHKERRQ(ierr);
 
 	for ( c = cStart; c < cEnd; c++) {
-		PetscInt 	   val, eVal, fVal;
+		PetscInt 	   val=-1, eVal, fVal;
 		PetscReal	   vol;
 		PetscReal	   centroid[dim], normal[dim];
 		PetscInt      *points = NULL, numPoints;
@@ -441,8 +424,8 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 		/* Deterimine what body the cell's centroid is located in */
 		for (int ii = 0; ii < Nb; ++ii){
 			body = bodies[ii];
-			ierr = EG_inTopology(body, centroid); CHKERRQ(ierr);
-			if (ierr == 0) {
+			int cgCheck = EG_inTopology(body, centroid); 
+			if (cgCheck == EGADS_SUCCESS) {
 				val = ii;
 				break;
 			}
@@ -450,6 +433,7 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 
 		if (val >= 0) {
 			ierr = DMLabelSetValue(bodyLabel, c, val); CHKERRQ(ierr);
+			
 			
 			for (int ii = 0; ii < numPoints; ++ii){
 				if (points[ii] >= eStart && points[ii] < eEnd) {
@@ -466,6 +450,10 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
 					// Do Nothing - Skip
 				}
 			}
+			
+			/*for (int ii = 0; ii < numPoints; ++ii){
+				ierr = DMLabelSetValue(bodyLabel, points[ii], val); CHKERRQ(ierr);
+			}*/
 		} else {
 			// Do Nothing
 		}		

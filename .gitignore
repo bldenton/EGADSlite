@@ -2,3 +2,7 @@ src/*.o
 src/liteTest
 libegadslite.dylib
 *.dSYM
+egadsPlex/*.h5
+egadsPlex/*.xmf
+egadsPlex/*_old_*.c
+

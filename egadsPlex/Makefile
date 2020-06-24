@@ -10,9 +10,12 @@ testPlex: egadsPlex.o
 
 testNozzle: egadsNozzle.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
+	
+testTess: egadsTess.o
+	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
 
 clean::
-	${RM} testPlex egadsPlex.o egadsNozzle.o testNozzle
+	${RM} testPlex egadsPlex.o egadsNozzle.o testNozzle egadsTess.o testTess
 
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules

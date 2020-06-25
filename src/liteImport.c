@@ -1574,14 +1574,14 @@ EG_importModel(egObject *context, const size_t nbytes, const char *stream,
   obj_h->oclass = MODEL;
   obj_h->mtype  = 0;
   obj_h->blind  = lmodel;
-/*@-nullret@*/
-  EG_SET_OBJECT(&obj, obj_h);
-/*@+nullret@*/
   i = EG_readAttrs(fp, (egAttrs **) &obj_h->attrs);
   if (i != EGADS_SUCCESS) {
     EG_close(context);
     return i;
   }
+/*@-nullret@*/
+  EG_SET_OBJECT(&obj, obj_h);
+/*@+nullret@*/
 
   /* get all of the bodies */
   for (n = 0; n < nbody; n++) {

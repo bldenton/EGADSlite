@@ -182,7 +182,8 @@ __ProtoExt__ int  EG_getBody( const ego object, ego *body );
 __ProtoExt__ int  EG_makeSolidBody( ego context, int stype, const double *rvec,
                                     ego *body );
 __ProtoExt__ int  EG_getBoundingBox( const ego topo, double *bbox );
-__ProtoExt__ int  EG_getMassProperties( const ego topo, double *result );
+__ProtoExt__ int  EG_getMassProperties( const ego topo, 
+                                        /*@null@*/ double *result );
 __ProtoExt__ int  EG_isEquivalent( const ego topo1, const ego topo2 );
 __ProtoExt__ int  EG_sewFaces( int nobj, const ego *objs, double toler,
                                int flag, ego *result );

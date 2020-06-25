@@ -2588,6 +2588,30 @@ EG_tessellate(int outLevel, triStruct *ts, long tID)
 #endif
 
     /* add nodes -- try to get geometrically correct (lettered phases) */
+    
+    /* 0) start out Delauney-ish if maxlen is set -- use 2*maxlen */
+    if (ts->maxlen > 0.0) {
+      count = i = 0;
+      do {
+        split = EG_addSideDist(i, 4.0*maxlen2, sideMid, ts);
+        if (split > 0) {
+          EG_swapTris(EG_angUVTest, "angleUV",  0.0, ts);
+          lang = ts->accum;
+          EG_swapTris(EG_diagTest, "diagonals", 1.0, ts);
+          count += split;
+          if ((lang > MAXANG) && (ts->accum < 0.0)) split = 0;
+        }
+        i++;
+        if (ts->maxPts > 0)
+          if (ts->nverts > ts->maxPts) break;
+        if (ts->maxPts < 0)
+          if ((ts->nverts-ts->nfrvrts+2) > -ts->maxPts) break;
+      } while ((split > 0) && (ts->orCnt < MAXORCNT));
+#ifdef REPORT
+      printf("%lX Phase 0: dotN = %le,  UVang = %le,  split = %d\n",
+             tID, ts->accum, lang, count);
+#endif
+    }
 
     /* A) split big tris with inverted neighbors */
     count = 0;

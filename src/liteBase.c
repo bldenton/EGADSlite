@@ -699,21 +699,3 @@ EG_close(egObject *context)
   
   return EGADS_SUCCESS;
 }
-
-/* Added from egadsBase.c */
-int
-EG_getInfo(const egObject *object, int *oclass, int *mtype, egObject **top,
-           egObject **prev, egObject **next)
-{
-  if (object == NULL)               return EGADS_NULLOBJ;
-  if (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (object->oclass == EMPTY)      return EGADS_EMPTY;
-
-  *oclass = object->oclass;
-  *mtype  = object->mtype;
-  *top    = object->topObj;
-  *prev   = object->prev;
-  *next   = object->next;
-
-  return EGADS_SUCCESS;
-}

@@ -94,7 +94,7 @@ __PROTO_H_AND_D__ int  EG_evaluate( const egObject *geom,
                                     double *result );
 __PROTO_H_AND_D__ int  EG_invEvaluate( const egObject *geom, double *xyz,
                                        double *param, double *result );
-__PROTO_H_AND_D__ int  EG_curvature( const egObject *geom, const double *param,
+__PROTO_H_AND_D__ int  EG_arcLength( const egObject *geom, double t1, double t2,
                                      double *result );
 __PROTO_H_AND_D__ int  EG_isSame( const egObject *geo1, const egObject *geo2 );
 __PROTO_H_AND_D__ int  EG_attributeRet( const ego obj, const char *name,
@@ -446,7 +446,7 @@ EG_crossSeg(int index, const double *mid, int i2, const double *vertices,
  * point shoud be repeated. i.e. if the outer contour is a square,
  * only the four distinct endpoints should be specified in order.
  *  
- * nc: absoulte value is #contours; (-) run silent
+ * nc: absolute value is #contours; (-) run silent
  * cntr: An array describing the number of points in each
  *	 contour. Thus, cntr[i] = #points in the i'th contour.
  * vertices: Input array of vertices. Vertices for each contour
@@ -659,6 +659,7 @@ EG_fillArea(int nc, const int *cntr, const double *vertices, int *triangles,
             if (fa->front[i].sleft != l) {
               index = fa->front[i].sleft;
               indx2 = fa->front[l].sright;
+              if (index == NOTFILLED) continue;
               fa->front[i].sleft      = l;
               fa->front[l].sright     = i;
               fa->front[index].sright = indx2;
@@ -667,6 +668,7 @@ EG_fillArea(int nc, const int *cntr, const double *vertices, int *triangles,
             if (fa->front[i].sright != k) {
               index = fa->front[i].sright;
               indx2 = fa->front[k].sleft;
+              if (indx2 == NOTFILLED) continue;
               fa->front[i].sright     = k;
               fa->front[k].sleft      = i;
               fa->front[index].sleft  = indx2;
@@ -1467,10 +1469,10 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
             triStruct *ts, fillArea *fa, long tID)
 {
   int      i, j, k, l, m, n, stat, nedge, nloop, oclass, mtype, ori, np, degen;
-  int      *senses, *sns, *tris, *tmp, npts, ntot, ntri, sen, n_fig8, nd, st;
-  int      outLevel, mm, mp, *lsenses, lor, atype, alen, iper;
+  int      *senses, *sns, *tris, *tmp, npts, ntot, ntri, sen, nfig8, nd, st;
+  int      outLevel, mm, mp, *lsenses, lor, atype, alen, iper, *fig8;
   double   range[4], srange[4], trange[2], uvm[2], uvp[2];
-  double   smallu, smallv, bigu, bigv, *uvs, *intEdg;
+  double   smallu, smallv, bigu, bigv, d, *uvs, *intEdg;
   egObject *geom, **edges, **loops, **nds, *outer;
   egTessel *btess;
   triVert  *tv;
@@ -1630,14 +1632,15 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
     ts->mloop = nloop;
   }
   ts->nloop = nloop;
-  uvs = (double *) EG_alloc((ntot*2+2)*sizeof(double));
+  uvs = (double *) EG_alloc((ntot*2+2)*sizeof(double) + ntot*sizeof(int));
   if (uvs == NULL) return EGADS_MALLOC;
+  fig8 = (int *) &uvs[2*ntot+2];
  
   /* fill in the loops & mark the boundary segments */
   
   np     = 1;
   uvs[0] = uvs[1] = 0.0;
-  for (i = 0; i < nloop; i++) {
+  for (nfig8 = i = 0; i < nloop; i++) {
     st   = np;
     stat = EG_getTopology(loops[i], &geom, &oclass, &mtype, NULL, &nedge,
                           &edges, &senses);
@@ -1764,27 +1767,13 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
                   uvs[2*np  ] = uvs[2*l  ];
                   uvs[2*np+1] = uvs[2*l+1];
                 } else if (ts->verts[l-1].loop > 0) {
-                  /* make room in UV for a gap */
-                  stat = EG_getEdgeUV(face, edges[n], senses[n]*lor,
-                                      tps[0]+0.1*(tps[1]-tps[0]), uvp);
-                  if (stat != EGADS_SUCCESS) {
-                    printf("%lX EGADS Error: getEdgeUV+ = %d for Face %d/%d, Edge = %d\n",
-                           tID, stat, iFace, i+1, n+1);
-                    EG_free(uvs);
-                    return stat;
+                  for (mm = 0; mm < nfig8; mm++)
+                    if (fig8[mm] == ts->verts[np-1].index) break;
+                  if (mm == nfig8) {
+                    fig8[nfig8] = ts->verts[np-1].index;
+                    nfig8++;
                   }
-                  uvm[0]      = uvp[0] - uvs[2*np  ];
-                  uvm[1]      = uvp[1] - uvs[2*np+1];
-                  uvp[0]      = atan2(-uvm[1], uvm[0]);
-                  uvs[2*np  ] = uvs[2*l  ] + sen*smallu*sin(uvp[0]);
-                  uvs[2*np+1] = uvs[2*l+1] + sen*smallv*cos(uvp[0]);
                 }
-//#ifdef DEBUG
-                if (ts->verts[l-1].loop > 0)
-                  printf("%lX Face %d: Loop %d/%d  vert = %d/%d, Node %d is Hit!\n",
-                         tID, iFace, i+1, ts->verts[l-1].loop, np, l,
-                         ts->verts[np-1].index);
-//#endif
                 break;
               }
             if (degen == 1) {
@@ -1831,14 +1820,14 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
             uvs[2*np+1] = intEdg[4*m+1] + intEdg[4*m+3];
           }
           if (m == npts-1) {
-            ts->verts[np-1].type   = NODE;
-            ts->verts[np-1].edge   = 0;
+            ts->verts[np-1].type    = NODE;
+            ts->verts[np-1].edge    = 0;
             if (mtype == TWONODE) {
               ts->verts[np-1].index = EG_indexBodyTopo(body, nds[1]);
             } else {
               ts->verts[np-1].index = EG_indexBodyTopo(body, nds[0]);
             }
-            ts->verts[np-1].loop   = i+1;
+            ts->verts[np-1].loop    = i+1;
             if (intEdg != NULL) ts->verts[np-1].loop = -(i+1);
             if (intEdg == NULL)
               for (l = 1; l < np; l++) {
@@ -1850,28 +1839,13 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
                   uvs[2*np  ] = uvs[2*l  ];
                   uvs[2*np+1] = uvs[2*l+1];
                 } else if (ts->verts[l-1].loop > 0) {
-                  /* make room in UV for a gap */
-                  stat = EG_getEdgeUV(face, edges[n], senses[n]*lor,
-                                      tps[npts-1]-0.1*(tps[npts-1]-tps[npts-2]),
-                                      uvm);
-                  if (stat != EGADS_SUCCESS) {
-                    printf("%lX EGADS Error: getEdgeUV- = %d for Face %d/%d, Edge = %d\n",
-                           tID, stat, iFace, i+1, n+1);
-                    EG_free(uvs);
-                    return stat;
+                  for (mm = 0; mm < nfig8; mm++)
+                    if (fig8[mm] == ts->verts[np-1].index) break;
+                  if (mm == nfig8) {
+                    fig8[nfig8] = ts->verts[np-1].index;
+                    nfig8++;
                   }
-                  uvp[0]      = uvs[2*np  ] - uvm[0];
-                  uvp[1]      = uvs[2*np+1] - uvm[1];
-                  uvm[0]      = atan2(-uvp[1], uvp[0]);
-                  uvs[2*np  ] = uvs[2*l  ] + sen*smallu*sin(uvm[0]);
-                  uvs[2*np+1] = uvs[2*l+1] + sen*smallv*cos(uvm[0]);
                 }
-//#ifdef DEBUG
-                if (ts->verts[l-1].loop > 0)
-                  printf("%lX Face %d: Loop %d/%d  Vert = %d/%d, Node %d is Hit!\n",
-                         tID, iFace, i+1, ts->verts[l-1].loop, np, l,
-                         ts->verts[np-1].index);
-//#endif
                 break;
               }
             if (degen == 1) {
@@ -1919,6 +1893,89 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
 #endif
     ts->loop[i] = ntot;
   }
+
+  /* handle Loops that touch each other at a Node */
+  for (mm = 0; mm < nfig8; mm++) {
+    mp = 0;
+    for (l = 1; l < np-1; l++) {
+      if (ts->verts[l-1].type  != NODE)     continue;
+      if (ts->verts[l-1].index != fig8[mm]) continue;
+      k = ts->verts[l-1].loop;
+      for (m = l+1; m < np; m++) {
+        if (ts->verts[m-1].type  != NODE)       continue;
+        if (ts->verts[m-1].index != fig8[mm])   continue;
+        if (fabs(uvs[2*m  ]-uvs[2*l  ]) > bigu) continue;
+        if (fabs(uvs[2*m+1]-uvs[2*l+1]) > bigv) continue;
+        j = ts->verts[m-1].loop;
+        if ((j == k) || (j <= 0))               continue;
+        printf("%lX Face %d: NM Node = %d, Loops = %d/%d %d/%d!\n",
+               tID, iFace, fig8[mm], j, lsenses[j-1], k, lsenses[k-1]);
+        /* store away indices and loop sense */
+        if (mp == 0) {
+          lor = lsenses[k-1];
+          if (lor ==  2) lor = -1;
+          if (lor == -2) lor =  1;
+          fig8[nfig8  ] = l;
+          fig8[nfig8+1] = lor;
+          mp++;
+        }
+        lor = lsenses[j-1];
+        if (lor ==  2) lor = -1;
+        if (lor == -2) lor =  1;
+        fig8[nfig8+2*mp  ] = m;
+        fig8[nfig8+2*mp+1] = lor;
+        mp++;
+      }
+    }
+    /* get outer loop -- k */
+    for (k = l = 0; l < mp; l++)
+      if (fig8[nfig8+2*l+1] == SFORWARD)
+        if (k == 0) {
+          k = fig8[nfig8+2*l];
+        } else {
+          printf("%lX Face %d: NM Node = %d  More than 1 outer Loop!\n",
+                 tID, iFace, fig8[mm]);
+          k = -1;
+        }
+    if (k == 0)
+      printf("%lX Face %d: NM Node = %d  No outer Loop!\n",
+             tID, iFace, fig8[mm]);
+    if (k <= 0) continue;
+
+    /* adjust inner loop UVs -- use centroid of triangle touching Node */
+    for (l = 0; l < mp; l++) {
+      int jm, jp;
+
+      if (fig8[nfig8+2*l+1] == SFORWARD) continue;
+      j  = fig8[nfig8+2*l];
+      jm = j-1;
+      jp = j+1;
+      if (jm == 0) jm = ts->loop[0];
+      if (ts->verts[jm-1].loop != ts->verts[j-1].loop)
+        jm += ts->loop[ts->verts[j-1].loop-1];
+      if (jp > np) jp -= ts->loop[ts->verts[j-1].loop-1];
+      if (ts->verts[j-1].loop != ts->verts[jp-1].loop)
+        if (ts->verts[j-1].loop == 1) {
+          jp = 1;
+        } else {
+          jp -= ts->loop[ts->verts[j-1].loop-1];
+        }
+/*    printf(" %d %d   %d %d   %d %d   %d\n", jm, ts->verts[jm-1].loop,
+             j, ts->verts[j-1].loop, jp, ts->verts[jp-1].loop,
+             ts->loop[ts->verts[j-1].loop-1]);  */
+      uvm[0] = (uvs[2*jm  ] + uvs[2*k  ] + uvs[2*jp  ])/3.0;
+      uvm[1] = (uvs[2*jm+1] + uvs[2*k+1] + uvs[2*jp+1])/3.0;
+      uvp[0] = uvm[0] - uvs[2*k  ];
+      uvp[1] = uvm[1] - uvs[2*k+1];
+      d      = sqrt(uvp[0]*uvp[0] + uvp[1]*uvp[1]);
+      if (d != 0.0) {
+        uvp[0] /= d;
+        uvp[1] /= d;
+      }
+      uvs[2*j  ] = uvs[2*k  ] + smallu*uvp[0];
+      uvs[2*j+1] = uvs[2*k+1] + smallv*uvp[1];
+    }
+  }
   
   /* handle quadding */
   if ((nloop == 1) && (ts->qparm[0] >= 0.0)) {
@@ -1945,17 +2002,17 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
     return EGADS_MALLOC;
   }
   
-  n = EG_fillArea(nloop, ts->loop, uvs, tris, &n_fig8, 0, fa);
+  n = EG_fillArea(nloop, ts->loop, uvs, tris, &nfig8, 0, fa);
   
   /* adjust for figure 8 configurations */
-  if (n_fig8 != 0) {
+  if (nfig8 != 0) {
     printf("%lX EG_fillArea Warning: Face %d -> Found %d figure 8's!\n",
-           tID, iFace, n_fig8);
-    for (i = 0; i < n_fig8; i++) if (n+2*i == ntri) ntri = n;
+           tID, iFace, nfig8);
+    for (i = 0; i < nfig8; i++) if (n+2*i == ntri) ntri = n;
   }
 #ifdef DEBUG
   printf("%lX:   EG_fillArea = %d (%d),  #loops = %d, or = %d,  #fig8 = %d\n",
-         tID, n, ntri, nloop, ori, n_fig8);
+         tID, n, ntri, nloop, ori, nfig8);
 #endif
          
   if (n != ntri) {
@@ -1996,7 +2053,7 @@ EG_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
         uvs[2*i  ] *= scl[j][0];
         uvs[2*i+1] *= scl[j][1];
       }
-      n = EG_fillArea(nloop, ts->loop, uvs, tris, &n_fig8, 1, fa);
+      n = EG_fillArea(nloop, ts->loop, uvs, tris, &nfig8, 1, fa);
       printf("%lX EGADS Internal: Face %d -> Renormalizing %d, ntris = %d (%d)!\n",
              tID, iFace, j, ntri, n);
       if (n == ntri) break;
@@ -2431,6 +2488,43 @@ EG_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
                           &ndum, &dum, &senses);
     if (stat != EGADS_SUCCESS) return stat;
     btess->tess1d[j].nodes[1] = EG_indexBodyTopo(body, nodes[1]);
+  }
+  if (mtype == ONENODE) {
+    stat = EG_tolerance(edge, &dist);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat = EG_arcLength(edge, limits[0], limits[1], &d);
+    if (stat != EGADS_SUCCESS) return stat;
+    /* we have an Edge with a single Node and no length -- ignore */
+    if (d < dist) {
+      if (outLevel > 0)
+        printf("%lX EGADS Warning: Edge %d Tol = %le aLen = %le (EG_tessEdges)!\n",
+               tID, j+1, dist, d);
+      npts = 1;
+      btess->tess1d[j].xyz = (double *) EG_alloc(3*npts*sizeof(double));
+      if (btess->tess1d[j].xyz == NULL) {
+        if (outLevel > 0)
+          printf("%lX EGADS Error: Alloc %d Pts Edge %d (EG_tessEdges)!\n",
+                 tID, npts, j+1);
+        return EGADS_MALLOC;
+      }
+      btess->tess1d[j].t = (double *) EG_alloc(npts*sizeof(double));
+      if (btess->tess1d[j].t == NULL) {
+        EG_free(btess->tess1d[j].xyz);
+        btess->tess1d[j].xyz = NULL;
+        if (outLevel > 0)
+          printf("%lX EGADS Error: Alloc %d Ts Edge %d (EG_tessEdges)!\n",
+                 tID, npts, j+1);
+        return EGADS_MALLOC;
+      }
+      for (i = 0; i < npts; i++) {
+        btess->tess1d[j].xyz[3*i  ] = xyz[i][0];
+        btess->tess1d[j].xyz[3*i+1] = xyz[i][1];
+        btess->tess1d[j].xyz[3*i+2] = xyz[i][2];
+        btess->tess1d[j].t[i]       = t[i];
+      }
+      btess->tess1d[j].npts = npts;
+      return EGADS_SUCCESS;
+    }
   }
   
   /* degenerate -- finish up */
@@ -3832,6 +3926,7 @@ EG_tessEdges(egTessel *btess, int ignore, /*@null@*/ int *retess)
   
   np = EMP_Init(&start);
   if (outLevel > 1) printf(" EMP NumProcs = %d!\n", np);
+  if (nedge < np) np = nedge;
   
   if (np > 1) {
     /* create the mutex to handle list synchronization */
@@ -5634,6 +5729,7 @@ EG_makeTessBody(egObject *object, double *paramx, egObject **tess)
   
   np = EMP_Init(&start);
   if (outLevel > 1) printf(" EMP NumProcs = %d!\n", np);
+  if (nface < np) np = nface;
   
   if (np > 1) {
     /* create the mutex to handle list synchronization */

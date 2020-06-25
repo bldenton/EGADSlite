@@ -1,6 +1,5 @@
 #!/bin/bash
 UPDATE_DIR=/mnt/c/Users/Brandon/Documents/School/Dissertation/Software/ESP_v1.18/EngSketchPad/src/EGADS
-UPDATE_DIR_ESP=/mnt/c/Users/Brandon/Documents/School/Dissertation/Software/ESP_v1.18/EngSketchPad
 DESTIN_DIR=/mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite
 
 echo "Updating EGADSlite version for Petsc"
@@ -11,7 +10,7 @@ cp $UPDATE_DIR/include/egads.h $DESTIN_DIR/include/egads.h
 cp $UPDATE_DIR/include/egadsErrors.h $DESTIN_DIR/include/egadsErrors.h
 cp $UPDATE_DIR/src/egadsInternals.h $DESTIN_DIR/include/egadsInternals.h
 cp $UPDATE_DIR/src/egadsTris.h $DESTIN_DIR/include/egadsTris.h
-cp $UPDATE_DIR_ESP/include/egadsTypes.h $DESTIN_DIR/include/egadsTypes.h
+cp $UPDATE_DIR/include/egadsTypes.h $DESTIN_DIR/include/egadsTypes.h
 cp $UPDATE_DIR/include/emp.h $DESTIN_DIR/include/emp.h
 cp $UPDATE_DIR/lite/liteClasses.h $DESTIN_DIR/include/liteClasses.h
 cp $UPDATE_DIR/lite/cudaUtil.h $DESTIN_DIR/include/cudaUtil.h

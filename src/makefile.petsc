@@ -1,9 +1,8 @@
 CFLAGS = -DLITE -I../include
 
 EGADS_OBJS = liteAttrs.o liteBase.o liteGeom.o liteImport.o liteMemory.o liteTopo.o \
-			 			 egadsTess.o egadsTris.o egadsQuads.o egadsTessInp.o egadsRobust.o \
-			 		 	 emp.o evaluate.o rational.o limitTessBody.o liteDevice.o liteString.o\
-						 regQuad.o retessFaces.o
+			 			 egadsTess.o egadsTris.o egadsQuads.o egadsTessInp.o egadsRobust.o regQuads.o \
+			 		 	 emp.o evaluate.o rational.o retessFaces.o limitTessBody.o liteString.o
 
 include ${PETSC_DIR}/lib/petsc/conf/variables
 include ${PETSC_DIR}/lib/petsc/conf/rules

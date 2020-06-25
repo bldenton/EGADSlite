@@ -28,11 +28,11 @@ SRCDIR     = src
 LIBBASE    = libegadslite
 LIBNAME    = ${LIBBASE}.${AR_LIB_SUFFIX}
 LIBSRC.h   = $(INCDIR)/egads.h $(INCDIR)/egadsErrors.h $(INCDIR)/egadsInternals.h $(INCDIR)/egadsTris.h \
-             $(INCDIR)/egadsTypes.h $(INCDIR)/emp.h $(INCDIR)/liteClasses.h
-LIBSRC.c   = $(SRCDIR)/liteAttrs.c $(SRCDIR)/liteBase.c $(SRCDIR)/liteGeom.c $(SRCDIR)/liteImport.c \
+             $(INCDIR)/egadsTypes.h $(INCDIR)/emp.h $(INCDIR)/liteClasses.h $(INCDIR)/liteString.h $(INCDIR)/regQuads.h
+LIBSRC.c   = $(SRCDIR)/liteAttrs.c $(SRCDIR)/liteBase.c $(SRCDIR)/liteGeom.c $(SRCDIR)/liteImport.c $(SRCDIR)/liteString.c \
              $(SRCDIR)/liteMemory.c $(SRCDIR)/liteTopo.c $(SRCDIR)/egadsTess.c $(SRCDIR)/egadsTris.c \
-             $(SRCDIR)/egadsQuads.c $(SRCDIR)/egadsTessInp.c $(SRCDIR)/egadsRobust.c \
-			 		 	 $(SRCDIR)/emp.c $(SRCDIR)/evaluate.c $(SRCDIR)/rational.c
+             $(SRCDIR)/egadsQuads.c $(SRCDIR)/egadsTessInp.c $(SRCDIR)/egadsRobust.c $(SRCDIR)/regQuads.c \
+			 		 	 $(SRCDIR)/emp.c $(SRCDIR)/evaluate.c $(SRCDIR)/rational.c $(SRCDIR)/retessFaces.c $(SRCDIR)/limitTessBody.c
 LIBSRC.o   = $(LIBSRC.c:%.c=%.o)
 
 lib : $(LIBNAME) ;

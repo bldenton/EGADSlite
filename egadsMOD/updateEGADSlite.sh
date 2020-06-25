@@ -62,7 +62,6 @@ cp $UPDATE_DIR/util/limits.mak $DESTIN_DIR/src/limits.mak
 cp $UPDATE_DIR/util/limits.make $DESTIN_DIR/src/limits.make
 cp $UPDATE_DIR/util/rational.c $DESTIN_DIR/src/rational.c
 cp $UPDATE_DIR/util/retessFaces.c $DESTIN_DIR/src/retessFaces.c
-cp $UPDATE_DIR/util/regQuads.h $DESTIN_DIR/src/regQuads.h
 cp $UPDATE_DIR/util/regQuads.c $DESTIN_DIR/src/regQuads.c
 
 # Update util folder - All files have been moved to either include or src or Petsc integration

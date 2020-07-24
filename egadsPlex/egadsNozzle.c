@@ -657,21 +657,21 @@ int main(int argc, char *argv[])
   ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view5");CHKERRQ(ierr);
   
   // 3rd Time
-  //Aierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 3rd Refinement \n");CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 3rd Refinement \n");CHKERRQ(ierr);
   //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view6");CHKERRQ(ierr);
   ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view6");CHKERRQ(ierr);
 
   // 4th Time
-  //Aierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 4th Refinement \n");CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 4th Refinement \n");CHKERRQ(ierr);
   //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view7");CHKERRQ(ierr);
   ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view7");CHKERRQ(ierr);
   
   // 5th Time
-  //Aierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 5th Refinement \n");CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 5th Refinement \n");CHKERRQ(ierr);
   //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view8");CHKERRQ(ierr);

@@ -2897,23 +2897,23 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
       }
     }
 
-    if ((per&1) != 0) {
+    if (((per&1) != 0) && ((param[0]+PARAMACC < range[0]) ||
+                           (param[0]-PARAMACC > range[1]))) {
       period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
-        if (param[0]+PARAMACC < srange[0]) {
-          if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
-        } else {
-          if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
-        }
+      if (param[0]+PARAMACC < range[0]) {
+        if (param[0]+period-PARAMACC < range[1]) param[0] += period;
+      } else {
+        if (param[0]-period+PARAMACC > range[0]) param[0] -= period;
+      }
     }
-    if ((per&2) != 0) {
+    if (((per&2) != 0) && ((param[1]+PARAMACC < range[2]) ||
+                           (param[1]-PARAMACC > range[3]))) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
-        if (param[1]+PARAMACC < srange[2]) {
-          if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
-        } else {
-          if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
-        }
+      if (param[1]+PARAMACC < range[2]) {
+        if (param[1]+period-PARAMACC < range[3]) param[1] += period;
+      } else {
+        if (param[1]-period+PARAMACC > range[2]) param[1] -= period;
+      }
     }
     
   }

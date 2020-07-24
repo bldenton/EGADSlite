@@ -51,6 +51,7 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar mcoord
   int            Nb, oclass, mtype, *senses;
   Vec            coordinatesLocal;
   PetscScalar   *coords = NULL;
+  //PetscScalar	 delta, tolr = 1.0e-8;
   PetscInt       Nv, v, Np = 0, pm;
 #endif
   PetscInt       dE, d;
@@ -95,129 +96,72 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, const PetscScalar mcoord
     PetscFunctionReturn(0);
   }
   if (Nv > 16) SETERRQ2(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Cannot handle %D coordinates associated to point %D", Nv, p);
-  /*// NEW CODE
-  double initCoordsA[3], initCoordsB[3];
-  double initUVa[2] = {0., 0.}, initUVb[2] = {0., 0.};
-  
-  double range[4]; // Edge [tmin, tmax 0 0 ] :: Face [umin, umax, vmin, vmax]
-  double initCoords[3];
-  int    peri;
-  ierr = EG_getRange(obj, range, &peri); CHKERRQ(ierr);
-  // END NEW CODE */
   for (v = 0; v < Nv; ++v) {
-	  ierr = EG_invEvaluate(obj, &coords[v*dE], &paramsV[v*3], &resultV[v*3]);CHKERRQ(ierr);
-	  /*// NEW CODE
-	  if ( v == 0) { 
-		initCoordsA[0] = coords[v*dE+0];
-		initCoordsA[1] = coords[v*dE+1];
-		initCoordsA[2] = coords[v*dE+2];
-		initUVa[0] = paramsV[v*3+0];
-		initUVa[1] = paramsV[v*3+1];
-	  }
-	  if ( v == 1) { 
-		initCoordsB[0] = coords[v*dE+0];
-		initCoordsB[1] = coords[v*dE+1];
-		initCoordsB[2] = coords[v*dE+2];
-		initUVb[0] = paramsV[v*3+0];
-		initUVb[1] = paramsV[v*3+1];
-	  }
+	  ierr = EG_invEvaluate(obj, &coords[v*dE], &paramsV[v*3], &resultV[v*3]);CHKERRQ(ierr);	//}
+	  //ierr = PetscPrintf(PETSC_COMM_SELF, "   p :: (paramsV_1, paramsV_2, paramsV_3) = %d :: ( %lf, %lf, %lf) \n", p, paramsV[v*3+0], paramsV[v*3+1], paramsV[v*3+2]);
+	  //ierr = PetscPrintf(PETSC_COMM_SELF, "        (coords_1, coords_2, coords_3) =          ( %lf, %lf, %lf) \n", coords[v*dE+0], coords[v*dE+1], coords[v*dE+2]);
+	  //ierr = PetscPrintf(PETSC_COMM_SELF, "        (resultV_1, resultV_2, resultV_3) =    ( %lf, %lf, %lf) \n", resultV[v*3+0], resultV[v*3+1], resultV[v*3+2]);
 	  
-	  if (peri > 0){
-		// u-parameter fix
-		if (paramsV[v*3+0] < range[0]){
-			paramsV[v*3+0] += 2. * PETSC_PI;
-		} else if (paramsV[v*3+0] > range[1]) {
-			paramsV[v*3+0] -= 2. * PETSC_PI;
-		} else {
-			// Do Nothing
-		}
-		
-		if (peri > 1 ) {
-			// v-parameter fix
-			if (paramsV[v*3+1] < range[2]){
-				paramsV[v*3+1] += 2. * PETSC_PI;
-			} else if (paramsV[v*3+1] > range[3]) {
-				paramsV[v*3+1] -= 2. * PETSC_PI;
-			} else {
-				// Do Nothing
-			} 
-		}
-	  }
+	  //params[0] = paramsV[v*3+0];
+	  //params[1] = paramsV[v*3+1];
+	  //params[2] = paramsV[v*3+2];
+	  //ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
+	  //ierr = PetscPrintf(PETSC_COMM_SELF, "        (result_1, result_2, result_3) =    ( %lf, %lf, %lf) \n", result[0], result[1], result[2]);
+  //  Add parameter correction call here
+	  //delta = 0.;
+      //for (int ii=0; ii<3; ++ii){
+      //  delta = delta + ((result[ii]-coords[v*dE+ii]) * (result[ii]-coords[v*dE+ii]));
+      //}
+      //delta = sqrt(abs(delta));
+	  //ierr = PetscPrintf(PETSC_COMM_SELF, "        delta = %.6e \n", delta); CHKERRQ(ierr);
 	  
-	  // END NEW CODE*/
+  //
   }
-  ierr = DMPlexVecRestoreClosure(cdm, NULL, coordinatesLocal, p, &Nv, &coords);CHKERRQ(ierr);
+  
+  ierr = DMPlexVecRestoreClosure(cdm, NULL, coordinatesLocal, p, &Nv, &coords);CHKERRQ(ierr);		// comment out when using TODO Check Section
   /* Calculate parameters (t or u,v) for new vertex at edge midpoint */
   for (pm = 0; pm < Np; ++pm) {
     params[pm] = 0.;
     for (v = 0; v < Nv; ++v) {params[pm] += paramsV[v*3+pm];}
     params[pm] /= Nv;
   }
-  // TODO Check
-    //Adouble range[4]; // Edge [tmin, tmax 0 0 ] :: Face [umin, umax, vmin, vmax]
-	//Adouble initCoords[3];
-    //Aint    peri;
-    //Aierr = EG_getRange(obj, range, &peri); CHKERRQ(ierr);
-	/*
+  /*// TODO Check
+    double range[4]; // Edge [tmin, tmax 0 0 ] :: Face [umin, umax, vmin, vmax]
+	double initCoords[3];
+    int    peri;
+    ierr = EG_getRange(obj, range, &peri); CHKERRQ(ierr);
 	if (edgeID > 0 ) {
 		if ((params[0] < range[0]) || (params[0] > range[1])) {
-			//for (d = 0; d < dE; ++d) {
-			//	initCoords[d]= 0.;
-			//	for (v = 0; v < Nv; ++v) { initCoords[d] += coords[v*dE+d]; }
-			//	coords[d] /= Nv;
-			//}
-			//ierr = EG_invEvaluate(obj, initCoords, params, result); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "WARNING :: invEvaluate() used on EGADS EDGE %d for DMPlex Node %d \n", edgeID, p); CHKERRQ(ierr);
+			for (d = 0; d < dE; ++d) {
+				initCoords[d]= 0.;
+				for (v = 0; v < Nv; ++v) { initCoords[d] += coords[v*dE+d]; }
+				coords[d] /= Nv;
+			}
+			ierr = EG_invEvaluate(obj, initCoords, params, result); CHKERRQ(ierr);
+			ierr = PetscPrintf(PETSC_COMM_SELF, "WARNING :: invEvaluate() used on DMPlex Node %d \n", p); CHKERRQ(ierr);
 		} else {
-			//ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
+			ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
 		}
 	} else if (faceID > 0) {
 		if ((params[0] < range[0]) || (params[0] > range[1]) || (params[1] < range[2]) || (params[1] > range[3])) {
-			//for (d = 0; d < dE; ++d) {
-			//	initCoords[d]= 0.;
-			//	for (v = 0; v < Nv; ++v) { initCoords[d] += coords[v*dE+d]; }
-			//	coords[d] /= Nv;
-			//}
-			//ierr = EG_invEvaluate(obj, initCoords, params, result); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "WARNING :: invEvaluate() used on EGADS FACE %d for DMPlex Node %d \n", faceID, p); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     initCoordsA = [%lf, %lf, %lf] \n", initCoordsA[0], initCoordsA[1], initCoordsA[2]); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     initUVa = [%lf, %lf] \n", initUVa[0], initUVa[1]); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     initCoordsB = [%lf, %lf, %lf] \n", initCoordsB[0], initCoordsB[1], initCoordsB[2]); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     initUVb = [%lf, %lf] \n", initUVb[0], initUVb[1]); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     params = [%lf, %lf] \n", params[0], params[1]); CHKERRQ(ierr);
-			ierr = PetscPrintf(PETSC_COMM_SELF, "                                     Range = [%lf, %lf, %lf, %lf] \n", range[0], range[1], range[2], range[3]); CHKERRQ(ierr);
-			
-			//
-			if (peri > 0){
-				// u-parameter fix
-				if (params[0] < range[0]){
-					params[0] += 2. * PETSC_PI;
-				} else if (params[0] > range[1]) {
-					params[0] -= 2. * PETSC_PI;
-				} else {
-					// Do Nothing
-				}
-				
-				// v-parameter fix
-				if (params[1] < range[2]){
-					params[1] += 2. * PETSC_PI;
-				} else if (params[1] > range[3]) {
-					params[1] -= 2. * PETSC_PI;
-				} else {
-					// Do Nothing
-				} 
+			for (d = 0; d < dE; ++d) {
+				initCoords[d]= 0.;
+				for (v = 0; v < Nv; ++v) { initCoords[d] += coords[v*dE+d]; }
+				coords[d] /= Nv;
 			}
-			//
+			ierr = EG_invEvaluate(obj, initCoords, params, result); CHKERRQ(ierr);
+			ierr = PetscPrintf(PETSC_COMM_SELF, "WARNING :: invEvaluate() used on DMPlex Node %d \n", p); CHKERRQ(ierr);
 		} else {
-			//ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
+			ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
 		}
 	} else {
 		// Do Nothing
 	}
-	*/
-  //---------------------------------------
+  //
+  */
+  // New Position- ierr = DMPlexVecRestoreClosure(cdm, NULL, coordinatesLocal, p, &Nv, &coords);CHKERRQ(ierr);	// New Placement when using TODO Check
   /* Put coordinates for new vertex in result[] */
-  ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);
+  ierr = EG_evaluate(obj, params, result);CHKERRQ(ierr);		// Comment out when using TODO Check
   for (d = 0; d < dE; ++d) gcoords[d] = result[d];
 #else
   for (d = 0; d < dE; ++d) gcoords[d] = mcoords[d];
@@ -331,35 +275,6 @@ PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModel(DM dm)
 	//ierr = PetscPrintf(PETSC_COMM_SELF, "  dmMeah Coordinates Updated \n");CHKERRQ(ierr);
 	ierr = VecDestroy(&inflateCoords); CHKERRQ(ierr);
 	ierr = PetscPrintf(PETSC_COMM_SELF, "  inflateCoords Destroyed \n");CHKERRQ(ierr);
-#else
-	// Do Nothing
-#endif  
-	PetscFunctionReturn(0);
-}
-
-PETSC_EXTERN PetscErrorCode DMPlexGeomParameterCorrect(DM dm)
-{
-	/* Variables for Function */
-	PetscErrorCode  	ierr;
-	DMLabel         	bodyLabel, faceLabel, edgeLabel, vertexLabel;
-	PetscContainer  	modelObj;
-	PetscInt        	cdim, bodyID, faceID, edgeID, vertexID;
-	PetscInt        	vecSize, vStart, vEnd, p;
-	ego             	model, geom, body, face, edge;
-	ego				   *bodies;
-	int             	Nb, oclass, mtype, *senses, pntCntr;
-	PetscInt        	ix[3];
-	double          	xyz[3];
-	PetscScalar         result[3];
-	Vec             	vCoords, inflateCoords;
-
-	PetscFunctionBegin;
-	/* Get Coordinate Dimension of DMPlex */
-	ierr = DMGetCoordinateDim(dm, &cdim);CHKERRQ(ierr);
-	
-	ierr = PetscPrintf(PETSC_COMM_SELF, "\n Start DMPlexInflateToGeomModel \n");CHKERRQ(ierr);
-#ifdef PETSC_HAVE_EGADS
-
 #else
 	// Do Nothing
 #endif  

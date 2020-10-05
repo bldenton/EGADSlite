@@ -14,8 +14,17 @@ make testNozzle
 #  Mulitsolid Mesh Creation
 #./testNozzle -filename ../examples/multisolids_v2.egadslite -dm_view hdf5:mesh_multisolids.h5 -dm_view2 hdf5:mesh_vol_multisolids.h5 -dm_view3 hdf5:mesh_vol_pMultisolids.h5 -dm_view4 hdf5:mesh_vol_r1_Multisolids.h5 -dm_view5 hdf5:mesh_vol_r2_Multisolids.h5 -dm_view6 hdf5:mesh_vol_r3_Multisolids.h5 -dm_view7 hdf5:mesh_vol_r4_Multisolids.h5 -dm_view8 hdf5:mesh_vol_r5_Multisolids.h5 -dm_refine 1
 
+#  Sphere Mesh Creation
+#./testNozzle -filename ../examples/unit_sphere.egadslite -dm_view hdf5:mesh_Sphere.h5 -dm_view2 hdf5:mesh_vol_Sphere.h5 -dm_view3 hdf5:mesh_vol_pSphere.h5 -dm_view4 hdf5:mesh_vol_r1_Sphere.h5 -dm_view5 hdf5:mesh_vol_r2_Sphere.h5 -dm_view6 hdf5:mesh_vol_r3_Sphere.h5 -dm_view7 hdf5:mesh_vol_r4_Sphere.h5 -dm_view8 hdf5:mesh_vol_r5_Sphere.h5 -dm_refine 1
+
+#  Cylinder Mesh Creation
+#./testNozzle -filename ../examples/cylinder_example.egadslite -dm_view hdf5:mesh_Cylinder.h5 -dm_view2 hdf5:mesh_vol_Cylinder.h5 -dm_view3 hdf5:mesh_vol_pCylinder.h5 -dm_view4 hdf5:mesh_vol_r1_Cylinder.h5 -dm_view5 hdf5:mesh_vol_r2_Cylinder.h5 -dm_view6 hdf5:mesh_vol_r3_Cylinder.h5 -dm_view7 hdf5:mesh_vol_r4_Cylinder.h5 -dm_view8 hdf5:mesh_vol_r5_Cylinder.h5 -dm_refine 1
+
+#  Cone Mesh Creation
+./testNozzle -filename ../examples/cone_example.egadslite -dm_view hdf5:mesh_Cone.h5 -dm_view2 hdf5:mesh_vol_Cone.h5 -dm_view3 hdf5:mesh_vol_pCone.h5 -dm_view4 hdf5:mesh_vol_r1_Cone.h5 -dm_view5 hdf5:mesh_vol_r2_Cone.h5 -dm_view6 hdf5:mesh_vol_r3_Cone.h5 -dm_view7 hdf5:mesh_vol_r4_Cone.h5 -dm_view8 hdf5:mesh_vol_r5_Cone.h5 -dm_refine 1
+
 # Complex Development Files
-./testNozzle -filename ../examples/complex.egadslite -dm_view hdf5:mesh_complex.h5 -dm_view2 hdf5:mesh_vol_complex.h5 -dm_view3 hdf5:mesh_vol_complex.h5 -dm_view4 hdf5:mesh_vol_complex_r1.h5 -dm_view5 hdf5:mesh_vol_complex_r2.h5 -dm_view6 hdf5:mesh_vol_complex_r3.h5 -dm_view7 hdf5:mesh_vol_complex_r4.h5 -dm_view8 hdf5:mesh_vol_complex_r5.h5 -dm_refine 1
+#./testNozzle -filename ../examples/complex.egadslite -dm_view hdf5:mesh_complex.h5 -dm_view2 hdf5:mesh_vol_complex.h5 -dm_view3 hdf5:mesh_vol_complex.h5 -dm_view4 hdf5:mesh_vol_complex_r1.h5 -dm_view5 hdf5:mesh_vol_complex_r2.h5 -dm_view6 hdf5:mesh_vol_complex_r3.h5 -dm_view7 hdf5:mesh_vol_complex_r4.h5 -dm_view8 hdf5:mesh_vol_complex_r5.h5 -dm_refine 1
 
 # Nozzle Development Files
 #./testNozzle -filename ../examples/Nozzle_fromStep.egadslite -dm_view hdf5:mesh_nozzle.h5 -dm_view2 hdf5:mesh_vol_SM.h5

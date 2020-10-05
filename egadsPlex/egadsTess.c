@@ -5,6 +5,8 @@ static const char help[] = "Test of EGADSLite CAD functionality";
 #include <egads.h>
 #include <petsc.h>
 
+void surfArea(DM dm);
+
 typedef struct {
   char filename[PETSC_MAX_PATH_LEN];
 } AppCtx;
@@ -391,6 +393,10 @@ int main(int argc, char *argv[])
   /* Output Pre-refinement Volumetric Mesh */
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
   
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
+  
   /* Refine Volumetric Mesh (dmMesh) */
   // Petsc Refinement
   // 1st time
@@ -398,15 +404,27 @@ int main(int argc, char *argv[])
   ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view4");CHKERRQ(ierr);
   
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
+  
   // 2nd Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 2nd Refinement \n");CHKERRQ(ierr);
   ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view5");CHKERRQ(ierr);
   
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
+  
   // 3rd Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 3rd Refinement \n");CHKERRQ(ierr);
   ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view6");CHKERRQ(ierr);
+  
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
   
   /* Destry DMPlexes to free memory */
   //ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
@@ -425,3 +443,58 @@ int main(int argc, char *argv[])
     args: -filename ${wPETSC_DIR}/share/petsc/datafiles/meshes/unit_sphere.egadslite -dm_view ::ascii_info_detail
 
 TEST*/
+
+
+void surfArea(DM dm) {
+  DMLabel        bodyLabel, faceLabel;
+  double         surfaceArea = 0., volume = 0.;
+  PetscReal      vol, centroid[3], normal[3];
+  PetscInt       dim, cStart, cEnd, fStart, fEnd;
+  PetscInt       bodyID, faceID;
+  PetscErrorCode ierr;
+  
+  ierr = DMGetDimension(dm, &dim); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "    dim = %d \n", dim);CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Body ID",   &bodyLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Face ID",   &faceLabel);CHKERRQ(ierr);
+  
+  if ( dim == 2 ) {
+    ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+    for (int ii = cStart; ii < cEnd; ++ii) {
+		ierr = DMLabelGetValue(faceLabel, ii, &faceID);CHKERRQ(ierr);
+		if ( faceID >= 0) {
+	      ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+	      surfaceArea += vol;
+		}
+	}
+  }
+
+  if ( dim == 3 ) {
+	  ierr = DMPlexGetHeightStratum(dm, 1, &fStart, &fEnd);CHKERRQ(ierr);
+	  for (int ii = fStart; ii < fEnd; ++ii) {
+		ierr = DMLabelGetValue(faceLabel, ii, &faceID);CHKERRQ(ierr);
+		if ( faceID >= 0 ) {
+		  ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+		  surfaceArea += vol;
+		}
+	  }
+	  
+	  ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+	  for (int ii = cStart; ii < cEnd; ++ii) {
+		ierr = DMLabelGetValue(bodyLabel, ii, &bodyID);CHKERRQ(ierr);
+		if ( bodyID >= 0 ) {
+		  ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+		  volume += vol;
+		}
+	  }
+  }
+  
+  if ( dim == 2 ) {
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Surface Area = %.6e \n", surfaceArea);CHKERRQ(ierr);
+  } else if ( dim == 3 ) {
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Volume = %.6e \n", volume);CHKERRQ(ierr);
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Surface Area = %.6e \n", surfaceArea);CHKERRQ(ierr);  
+  } else {
+	  // Do Nothing
+  }	
+}

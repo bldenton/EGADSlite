@@ -5,6 +5,8 @@ static const char help[] = "Test of EGADSLite CAD functionality";
 #include <egads.h>
 #include <petsc.h>
 
+void surfArea(DM dm); 
+
 typedef struct {
   char filename[PETSC_MAX_PATH_LEN];
 } AppCtx;
@@ -36,7 +38,7 @@ int main(int argc, char *argv[])
   PetscInt       dim = -1, cdim = -1, numCorners = 0, numVertices = 0, numCells = 0, depth = 0;
   PetscInt       numFaces = 0, numEdges = 0, numPoints = 0;
   PetscInt      *cells  = NULL, *coneOrient = NULL, *cones = NULL, *coneSize = NULL;
-  PetscReal     *coords = NULL;
+  PetscReal     *coords = NULL, PARAMACC = 1.0e-4;
   MPI_Comm       comm;
   PetscMPIInt    rank;
   AppCtx         ctx;
@@ -116,7 +118,7 @@ int main(int argc, char *argv[])
     
             for (e = 0; e < Ne; ++e) {
               ego edge = objs[e];
-  			      int esense = esenses[e];
+  			  int esense = esenses[e];
     
               id = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
               ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d :: sense = %d\n", id, esense);CHKERRQ(ierr);
@@ -125,7 +127,7 @@ int main(int argc, char *argv[])
               int    peri;
     
               ierr = EG_getRange(objs[e], range, &peri);
-              ierr = PetscPrintf(PETSC_COMM_SELF, "              Range = %lf, %lf, %lf, %lf \n", range[0], range[1], range[2], range[3]);
+              ierr = PetscPrintf(PETSC_COMM_SELF, "              Peri = %d :: Range = %lf, %lf, %lf, %lf \n", peri, range[0], range[1], range[2], range[3]);
     
               /* Get NODE info which associated with the current EDGE */
               ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
@@ -148,11 +150,11 @@ int main(int argc, char *argv[])
   }
 	
 	/* Debug */
-	ierr = PetscPrintf(PETSC_COMM_SELF, "  maxNumEdges = %d \n", maxNumEdges);CHKERRQ(ierr);
+	//Bierr = PetscPrintf(PETSC_COMM_SELF, "  maxNumEdges = %d \n", maxNumEdges);CHKERRQ(ierr);
 	
 	/* Define Matrix edgeIDrelate[nbodies][edgeID] to hold postion in coords[] for cells[] declaration for DMPlex */
 	int edgeIDrelate[(const) nbodies][(const) maxNumEdges];
-	ierr = PetscPrintf(PETSC_COMM_SELF, "  edgeIDrelate[%d][%d] = %d \n", nbodies-1, maxNumEdges-1, edgeIDrelate[nbodies-1][maxNumEdges-1]);CHKERRQ(ierr);
+	//Bierr = PetscPrintf(PETSC_COMM_SELF, "  edgeIDrelate[%d][%d] = %d \n", nbodies-1, maxNumEdges-1, edgeIDrelate[nbodies-1][maxNumEdges-1]);CHKERRQ(ierr);
   
 	/* Caculate Total Number of Model Entities in the EGADS Model */
 	ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &bsenses);CHKERRQ(ierr);
@@ -181,23 +183,23 @@ int main(int argc, char *argv[])
 				++Netemp;
 				edgeIDrelate[b][id-1] = Netemp;	
 			}
-			ierr = PetscPrintf(PETSC_COMM_SELF, "  edgeIDrelate[%d][%d] = %d \n", b, id-1, edgeIDrelate[b][id-1]);CHKERRQ(ierr);
+	//B		ierr = PetscPrintf(PETSC_COMM_SELF, "  edgeIDrelate[%d][%d] = %d \n", b, id-1, edgeIDrelate[b][id-1]);CHKERRQ(ierr);
 		}
 		numFaces = numFaces + Nf;
 		numEdges = numEdges + Netemp;
 		numVertices = numVertices + Nv;
 		
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyIndexStart[%d] = %d \n", b, bodyIndexStart[b]);CHKERRQ(ierr);
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyVertexIndexStart[%d] = %d \n", b, bodyVertexIndexStart[b]);CHKERRQ(ierr);
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyEdgeIndexStart[%d] = %d \n", b, bodyEdgeIndexStart[b]);CHKERRQ(ierr);
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyFaceIndexStart[%d] = %d \n", b, bodyFaceIndexStart[b]);CHKERRQ(ierr);
+	//B	ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyIndexStart[%d] = %d \n", b, bodyIndexStart[b]);CHKERRQ(ierr);
+	//B	ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyVertexIndexStart[%d] = %d \n", b, bodyVertexIndexStart[b]);CHKERRQ(ierr);
+	//B	ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyEdgeIndexStart[%d] = %d \n", b, bodyEdgeIndexStart[b]);CHKERRQ(ierr);
+	//B	ierr = PetscPrintf(PETSC_COMM_SELF, "  bodyFaceIndexStart[%d] = %d \n", b, bodyFaceIndexStart[b]);CHKERRQ(ierr);
 	}
     
     int Nftotal = numFaces;
     int Netotal = numEdges;
     int Nvtotal = numVertices;
 	
-	ierr = PetscPrintf(PETSC_COMM_SELF, "(Nftotal, Netotal, Nvtotal) = (%d, %d, %d) \n", Nftotal, Netotal, Nvtotal);CHKERRQ(ierr);
+	//Bierr = PetscPrintf(PETSC_COMM_SELF, "(Nftotal, Netotal, Nvtotal) = (%d, %d, %d) \n", Nftotal, Netotal, Nvtotal);CHKERRQ(ierr);
 
     // -------------------------------------------------------------------------------
     // Start to setup DMPlex
@@ -232,7 +234,7 @@ int main(int argc, char *argv[])
     }
 	
 	/* Debug */
-    ierr = PetscPrintf(PETSC_COMM_SELF, "(numCells) = (%d) \n", numCells); CHKERRQ(ierr);		// This is the right number
+    //Bierr = PetscPrintf(PETSC_COMM_SELF, "(numCells) = (%d) \n", numCells); CHKERRQ(ierr);		// This is the right number
 	
 	/* Allocate Memory for coords[] and cells[] */
     ierr = PetscMalloc2(numPoints*cdim, &coords, numCells*numCorners, &cells);CHKERRQ(ierr);
@@ -254,8 +256,8 @@ int main(int argc, char *argv[])
         coords[(bodyVertexIndexStart[b] + id-1)*cdim+0] = limits[0];
         coords[(bodyVertexIndexStart[b] + id-1)*cdim+1] = limits[1];
         coords[(bodyVertexIndexStart[b] + id-1)*cdim+2] = limits[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", bodyVertexIndexStart[b] + (id-1));
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(bodyVertexIndexStart[b] + id-1)*cdim+0], coords[(bodyVertexIndexStart[b] + id-1)*cdim+1],coords[(bodyVertexIndexStart[b] + id-1)*cdim+2]);
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", bodyVertexIndexStart[b] + (id-1));
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(bodyVertexIndexStart[b] + id-1)*cdim+0], coords[(bodyVertexIndexStart[b] + id-1)*cdim+1],coords[(bodyVertexIndexStart[b] + id-1)*cdim+2]);
       }
     }
     
@@ -283,7 +285,7 @@ int main(int argc, char *argv[])
         id   = EG_indexBodyTopo(body, edge);CHKERRQ(ierr);
 		locate = edgeIDrelate[b][id-1];
         ierr = EG_getRange(edge, &range, &periodic); CHKERRQ(ierr);
-        //ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d range = %lf, %lf \n", ii+1, range[0], range[1]);CHKERRQ(ierr);
+        //ierr = PetscPrintf(PETSC_COMM_SELF, "EDGE %d range = %lf, %lf \n", ii+1, range[0], range[1]); CHKERRQ(ierr);
         
         double avgt[1];
         avgt[0] = (range[0] + range[1]) / 2.;
@@ -309,11 +311,11 @@ int main(int argc, char *argv[])
 		coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+0] = cntrPnt[0];			// 3rd Attempt - better?
         coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+1] = cntrPnt[1];
         coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+2] = cntrPnt[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", (Nvtotal+bodyEdgeIndexStart[b]+locate-1));
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+0], 
-																					 coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+1],
-																					 coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+2]);
-      	  
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", (Nvtotal+bodyEdgeIndexStart[b]+locate-1));
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+0], 
+	//B																				 coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+1],
+	//B																				 coords[(Nvtotal+bodyEdgeIndexStart[b]+locate-1)*cdim+2]);   
+	
 	  }
     }
     
@@ -327,13 +329,13 @@ int main(int argc, char *argv[])
       for (int ii = 0; ii < Nf; ++ii){
         ego face = fobjs[ii];
         double range[4];
-        int    *periodic;
-        int     id;
+        int    peri;
+        int    id;
         
         id   = EG_indexBodyTopo(body, face);CHKERRQ(ierr);
-        ierr = EG_getRange(face, &range, &periodic); CHKERRQ(ierr);
-        //ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d range = %lf, %lf, %lf, %lf \n", ii+1, range[0], range[1], range[2], range[3]);CHKERRQ(ierr);
-        
+        ierr = EG_getRange(face, &range, &peri); CHKERRQ(ierr);
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "FACE %d peri = %d range = %lf, %lf, %lf, %lf \n", ii+1, peri, range[0], range[1], range[2], range[3]);CHKERRQ(ierr);
+		
         double avgUV[2];
         avgUV[0] = (range[0] + range[1]) / 2.;
         avgUV[1] = (range[2] + range[3]) / 2.;
@@ -345,10 +347,11 @@ int main(int argc, char *argv[])
         coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+0] = cntrPnt[0];
         coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+1] = cntrPnt[1];
         coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+2] = cntrPnt[2];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", (Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1));
-        ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+0],
-																					 coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+1],
-																					 coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+2]);
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "    Node ID = %d \n", (Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1));
+    //B    ierr = PetscPrintf(PETSC_COMM_SELF, "      (x,y,z) = (%lf, %lf, %lf) \n \n", coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+0],
+	//B																				 coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+1],
+	//B																				 coords[(Nvtotal+Netotal+bodyFaceIndexStart[b]+id-1)*cdim+2]);
+	//B	ierr = PetscPrintf(PETSC_COMM_SELF, "      (u, v) = (%lf, %lf) \n \n", avgUV[0], avgUV[1]);
       }
     }
     
@@ -454,8 +457,8 @@ int main(int argc, char *argv[])
  //   }
  // }
   
-  
-  /* Get Number of DAG Nodes at each level */
+  /* MAY NOT NEED THIS SECTION */
+  /* Get Number of DAG Nodes at each level */ 
   int fDAGlevel, eDAGlevel, nDAGlevel;
   int fStart, fEnd, eStart, eEnd, nStart, nEnd;
   
@@ -588,10 +591,11 @@ int main(int argc, char *argv[])
   ierr = DMView(dmNozzle, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
   
-  /*ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  ///////
+  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);*/
+  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
   //ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
   //ierr = DMSetFromOptions(dmNozzle); CHKERRQ(ierr);
@@ -599,12 +603,12 @@ int main(int argc, char *argv[])
   
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n PRE-TETGEN \n");CHKERRQ(ierr);
   
-  // Remove when not using Tetgen
-  //Aierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
+  // Generate Volumetric Mesh using TETGEN - Remove when not using Tetgen
+  ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
   
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n POST-TETGEN \n");CHKERRQ(ierr);
   
-  /* Attached EGADS model to Volumetric Mesh DMPlex */
+  /* Attached EGADS model to Volumetric Mesh DMPlex - Don't need. Moved to TETGEN code */
 //{
 //  PetscContainer modelObj;
 //  ierr = PetscContainerCreate(PETSC_COMM_SELF, &modelObj);CHKERRQ(ierr);
@@ -619,83 +623,106 @@ int main(int argc, char *argv[])
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n Inflated dmMesh \n");CHKERRQ(ierr);
   
   /* Output State of DMLabels for dmMesh after Volumetric Mesh generated */
-  //Aierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
-  //Aierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
-  //Aierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
+  ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
   
   //ierr = DMCreateLabel(dmMesh, "EGADS Body ID");CHKERRQ(ierr);
-  //Aierr = DMGetLabel(dmMesh, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dmMesh, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
   //ierr = DMCreateLabel(dmMesh, "EGADS Face ID");CHKERRQ(ierr);
-  //Aierr = DMGetLabel(dmMesh, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dmMesh, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
   //ierr = DMCreateLabel(dmMesh, "EGADS Edge ID");CHKERRQ(ierr);
-  //Aierr = DMGetLabel(dmMesh, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dmMesh, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
   //ierr = DMCreateLabel(dmMesh, "EGADS Vertex ID");CHKERRQ(ierr);
-  //Aierr = DMGetLabel(dmMesh, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dmMesh, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
   //
-  /*ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
+  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);*/
+  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view3");CHKERRQ(ierr);
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view3");CHKERRQ(ierr);
+  
+  // Calculate 2D :: Surface Area;  3D :: Volume & Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
   
   /* Refine Volumetric Mesh (dmMesh) */
   // Petsc Refinement
   // 1st time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 1st Refinement \n");CHKERRQ(ierr);
-  //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view4");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view4");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view4");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view4");CHKERRQ(ierr);
+  
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
   
   // 2nd Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 2nd Refinement \n");CHKERRQ(ierr);
-  //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric 
-  ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view5");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view5");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric 
+  //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view5");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view5");CHKERRQ(ierr);
+  
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
   
   // 3rd Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 3rd Refinement \n");CHKERRQ(ierr);
-  //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view6");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view6");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view6");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view6");CHKERRQ(ierr);
+  
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
 
   // 4th Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 4th Refinement \n");CHKERRQ(ierr);
-  //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view7");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view7");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view7");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view7");CHKERRQ(ierr);
+  
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
   
   // 5th Time
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 5th Refinement \n");CHKERRQ(ierr);
-  //Aierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  ierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
-  //Aierr = DMViewFromOptions(dmMesh, NULL, "-dm_view8");CHKERRQ(ierr);
-  ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view8");CHKERRQ(ierr);
+  ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view8");CHKERRQ(ierr);
+  //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view8");CHKERRQ(ierr);
   
-  // Tetgen Refinement
+  // Calculate Surface Area
+  //BsurfArea(dmNozzle);
+  surfArea(dmMesh);
+  
+  // Tetgen Refinement - Do Not Use
   //DMRefine(dmMesh,PETSC_COMM_WORLD,&dm);
   
-    /* Inflate Mesh to EGADS Geometry */
+  /* Inflate Mesh to EGADS Geometry */
   //ierr = DMPlexInflateToGeomModel(dmMesh); CHKERRQ(ierr);
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n Inflated Refined dmMesh \n");CHKERRQ(ierr);
-  
-  
+   
   
   /* Print Out Start Location of Mesh Entities */
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    -- dmNozzle Entity Start IDs  -- \n");
-  ierr = DMPlexGetHeightStratum(dmNozzle, 0, &fStart, &fEnd);CHKERRQ(ierr);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    fStart = %d \n", fStart);
+  //Bierr = PetscPrintf(PETSC_COMM_SELF, "\n    -- dmNozzle Entity Start IDs  -- \n");
+  //Bierr = DMPlexGetHeightStratum(dmNozzle, 0, &fStart, &fEnd);CHKERRQ(ierr);
+  //Bierr = PetscPrintf(PETSC_COMM_SELF, "    fStart = %d \n", fStart);
   
-  ierr = DMPlexGetHeightStratum(dmNozzle, 1, &eStart, &eEnd);CHKERRQ(ierr);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    eStart = %d \n", eStart);
+  //Bierr = DMPlexGetHeightStratum(dmNozzle, 1, &eStart, &eEnd);CHKERRQ(ierr);
+  //Bierr = PetscPrintf(PETSC_COMM_SELF, "    eStart = %d \n", eStart);
   
-  ierr = DMPlexGetHeightStratum(dmNozzle, 2, &nStart, &nEnd);CHKERRQ(ierr);
-  ierr = PetscPrintf(PETSC_COMM_SELF, "    nStart = %d \n", nStart);
+  //Bierr = DMPlexGetHeightStratum(dmNozzle, 2, &nStart, &nEnd);CHKERRQ(ierr);
+  //Bierr = PetscPrintf(PETSC_COMM_SELF, "    nStart = %d \n", nStart);
 
   
   //Aierr = PetscPrintf(PETSC_COMM_SELF, "    -- dmMesh Entity Start IDs  -- \n");
@@ -737,8 +764,8 @@ int main(int argc, char *argv[])
   //ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view");CHKERRQ(ierr);
   
   //ierr = DMDestroy(&dm);CHKERRQ(ierr);
-  //Aierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
-  ierr = DMDestroy(&dmNozzle);CHKERRQ(ierr);		// Strange error
+  ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
+  //Bierr = DMDestroy(&dmNozzle);CHKERRQ(ierr);		// Strange error
 
   /* Close EGADSlite file */
   ierr = EG_close(context);CHKERRQ(ierr);
@@ -753,3 +780,57 @@ int main(int argc, char *argv[])
     args: -filename ${wPETSC_DIR}/share/petsc/datafiles/meshes/unit_sphere.egadslite -dm_view ::ascii_info_detail
 
 TEST*/
+
+void surfArea(DM dm) {
+  DMLabel        bodyLabel, faceLabel;
+  double         surfaceArea = 0., volume = 0.;
+  PetscReal      vol, centroid[3], normal[3];
+  PetscInt       dim, cStart, cEnd, fStart, fEnd;
+  PetscInt       bodyID, faceID;
+  PetscErrorCode ierr;
+  
+  ierr = DMGetDimension(dm, &dim); CHKERRQ(ierr);
+  ierr = PetscPrintf(PETSC_COMM_SELF, "    dim = %d \n", dim);CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Body ID",   &bodyLabel);CHKERRQ(ierr);
+  ierr = DMGetLabel(dm, "EGADS Face ID",   &faceLabel);CHKERRQ(ierr);
+  
+  if ( dim == 2 ) {
+    ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+    for (int ii = cStart; ii < cEnd; ++ii) {
+		ierr = DMLabelGetValue(faceLabel, ii, &faceID);CHKERRQ(ierr);
+		if ( faceID >= 0) {
+	      ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+	      surfaceArea += vol;
+		}
+	}
+  }
+
+  if ( dim == 3 ) {
+	  ierr = DMPlexGetHeightStratum(dm, 1, &fStart, &fEnd);CHKERRQ(ierr);
+	  for (int ii = fStart; ii < fEnd; ++ii) {
+		ierr = DMLabelGetValue(faceLabel, ii, &faceID);CHKERRQ(ierr);
+		if ( faceID >= 0 ) {
+		  ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+		  surfaceArea += vol;
+		}
+	  }
+	  
+	  ierr = DMPlexGetHeightStratum(dm, 0, &cStart, &cEnd);CHKERRQ(ierr);
+	  for (int ii = cStart; ii < cEnd; ++ii) {
+		ierr = DMLabelGetValue(bodyLabel, ii, &bodyID);CHKERRQ(ierr);
+		if ( bodyID >= 0 ) {
+		  ierr = DMPlexComputeCellGeometryFVM(dm, ii, &vol, &centroid, &normal); CHKERRQ(ierr);
+		  volume += vol;
+		}
+	  }
+  }
+  
+  if ( dim == 2 ) {
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Surface Area = %.6e \n", surfaceArea);CHKERRQ(ierr);
+  } else if ( dim == 3 ) {
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Volume = %.6e \n", volume);CHKERRQ(ierr);
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "    Surface Area = %.6e \n", surfaceArea);CHKERRQ(ierr);  
+  } else {
+	  // Do Nothing
+  }	
+}

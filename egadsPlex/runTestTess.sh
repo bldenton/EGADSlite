@@ -15,7 +15,7 @@ make testTess
 #./testTess -filename ../examples/multisolids_v2.egadslite -dm_view hdf5:mesh_multisolids.h5 -dm_view2 hdf5:mesh_vol_multisolids.h5 -dm_view3 hdf5:mesh_vol_pMultisolids.h5 -dm_view4 hdf5:mesh_vol_r1_Multisolids.h5 -dm_view5 hdf5:mesh_vol_r2_Multisolids.h5 -dm_view6 hdf5:mesh_vol_r3_Multisolids.h5 -dm_view7 hdf5:mesh_vol_r4_Multisolids.h5 -dm_view8 hdf5:mesh_vol_r5_Multisolids.h5 -dm_refine 1
 
 # Complex Development Files
-./testTess -filename ../examples/complex.egadslite -dm_view hdf5:mesh_complex.h5 -dm_view2 hdf5:mesh_vol_complex.h5 -dm_view3 hdf5:mesh_vol_complex.h5 -dm_view4 hdf5:mesh_vol_complex_r1.h5 -dm_view5 hdf5:mesh_vol_complex_r2.h5 -dm_view6 hdf5:mesh_vol_complex_r3.h5 -dm_view7 hdf5:mesh_vol_complex_r4.h5 -dm_view8 hdf5:mesh_vol_complex_r5.h5 -dm_refine 1
+./testTess -filename ../examples/complex.egadslite  -dm_refine 1 -dm_view hdf5:mesh_complex.h5 -dm_view2 hdf5:mesh_vol_complex.h5 -dm_view3 hdf5:mesh_vol_complex.h5 -dm_view4 hdf5:mesh_vol_complex_r1.h5 -dm_view5 hdf5:mesh_vol_complex_r2.h5 -dm_view6 hdf5:mesh_vol_complex_r3.h5 -dm_view7 hdf5:mesh_vol_complex_r4.h5 -dm_view8 hdf5:mesh_vol_complex_r5.h5
 
 # Nozzle Development Files
 #./testTess -filename ../examples/Nozzle_fromStep.egadslite -dm_view hdf5:mesh_nozzle.h5 -dm_view2 hdf5:mesh_vol_SM.h5 -dm_view3 hdf5:mesh_vol_pRR.h5 -dm_view4 hdf5:mesh_vol_r1_RR.h5 -dm_view5 hdf5:mesh_vol_r2_RR.h5 -dm_view6 hdf5:mesh_vol_r3_RR.h5 -dm_refine 1

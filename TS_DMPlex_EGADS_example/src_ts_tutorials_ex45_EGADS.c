@@ -695,7 +695,7 @@ static PetscErrorCode ReadCADGenerateDMPlex(MPI_Comm comm, DM* dmMesh, AppCtx* c
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n PRE-TETGEN \n");CHKERRQ(ierr);
   
   // Generate Volumetric Mesh using TETGEN - Remove when not using Tetgen
-  ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
+  ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, dmMesh); CHKERRQ(ierr);		// was &dmMesh
   
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n POST-TETGEN \n");CHKERRQ(ierr);
   
@@ -715,7 +715,7 @@ static PetscErrorCode ReadCADGenerateDMPlex(MPI_Comm comm, DM* dmMesh, AppCtx* c
   
   /* Output State of DMLabels for dmMesh after Volumetric Mesh generated */
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
-  ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
+  ierr = DMView(*dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
   
   //ierr = DMCreateLabel(dmMesh, "EGADS Body ID");CHKERRQ(ierr);
@@ -732,7 +732,7 @@ static PetscErrorCode ReadCADGenerateDMPlex(MPI_Comm comm, DM* dmMesh, AppCtx* c
   //E ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   //E ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
-  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
+  ierr = DMViewFromOptions(*dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
   //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view3");CHKERRQ(ierr);
   
   // Calculate 2D :: Surface Area;  3D :: Volume & Surface Area
@@ -878,9 +878,9 @@ static PetscErrorCode CreateMesh(MPI_Comm comm, DM *dm, AppCtx *ctx)
   PetscFunctionBeginUser;
   //E ierr = DMPlexCreateBoxMesh(comm, dim, ctx->simplex, NULL, NULL, NULL, NULL, PETSC_TRUE, dm);CHKERRQ(ierr);
   ierr = ReadCADGenerateDMPlex(comm, dm, ctx); CHKERRQ(ierr);  
-  ierr = DMGetCoordinateDim(dm, &dim);CHKERRQ(ierr);
+  ierr = DMGetCoordinateDim(*dm, &dim);CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, " ---- Have DM Dim = %d ----\n", dim);CHKERRQ(ierr);
-  ierr = PetscObjectSetName((PetscObject) *dm, "Mesh");CHKERRQ(ierr);
+  ierr = PetscObjectSetName((PetscObject) dm, "Mesh");CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, " ---- After PetscObjectSetName() ----\n");CHKERRQ(ierr);
   /* If no boundary marker exists, mark the whole boundary */
   ierr = DMHasLabel(*dm, "marker", &hasLabel);CHKERRQ(ierr);
@@ -891,7 +891,7 @@ static PetscErrorCode CreateMesh(MPI_Comm comm, DM *dm, AppCtx *ctx)
     ierr = DMDestroy(dm);CHKERRQ(ierr);
     *dm  = pdm;
   }
-  ierr = DMSetFromOptions(*dm);CHKERRQ(ierr);
+  //ierr = DMSetFromOptions(*dm);CHKERRQ(ierr);
   ierr = DMViewFromOptions(*dm, NULL, "-dm_view");CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, " ---- End of CreateMesh() ----\n");CHKERRQ(ierr);
   PetscFunctionReturn(0);
@@ -980,7 +980,7 @@ int main(int argc, char **argv)
   ierr = VecDestroy(&u);CHKERRQ(ierr);
   ierr = VecDestroy(&r);CHKERRQ(ierr);
   ierr = TSDestroy(&ts);CHKERRQ(ierr);
-  ierr = DMDestroy(&dm);CHKERRQ(ierr);
+  //ierr = DMDestroy(&dm);CHKERRQ(ierr);
   ierr = PetscFree(ctx.exactFuncs);CHKERRQ(ierr);
   ierr = PetscFinalize();
   return ierr;

@@ -742,8 +742,8 @@ static PetscErrorCode ReadCADGenerateDMPlex(MPI_Comm comm, DM* dmMesh, AppCtx* c
   /* Refine Volumetric Mesh (dmMesh) */
   // Petsc Refinement
   // 1st time
-  //E ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 1st Refinement \n");CHKERRQ(ierr);
-  //E ierr = DMSetFromOptions(dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
+   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh Created Trying 1st Refinement \n");CHKERRQ(ierr);
+   ierr = DMSetFromOptions(*dmMesh);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   //Bierr = DMSetFromOptions(dmNozzle);CHKERRQ(ierr);    // Check Snap_to_Geometry on Volumetric Mesh
   //E ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view4");CHKERRQ(ierr);
   //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view4");CHKERRQ(ierr);
@@ -892,7 +892,7 @@ static PetscErrorCode CreateMesh(MPI_Comm comm, DM *dm, AppCtx *ctx)
     *dm  = pdm;
   }
   //ierr = DMSetFromOptions(*dm);CHKERRQ(ierr);
-  ierr = DMViewFromOptions(*dm, NULL, "-dm_view");CHKERRQ(ierr);
+  ierr = DMViewFromOptions(*dm, NULL, "-dm_view9");CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, " ---- End of CreateMesh() ----\n");CHKERRQ(ierr);
   PetscFunctionReturn(0);
 }
@@ -976,6 +976,7 @@ int main(int argc, char **argv)
   if (L2error < 1.0e-11) {ierr = PetscPrintf(PETSC_COMM_WORLD, "L_2 Error: < 1.0e-11\n");CHKERRQ(ierr);}
   else                   {ierr = PetscPrintf(PETSC_COMM_WORLD, "L_2 Error: %g\n", (double)L2error);CHKERRQ(ierr);}
   ierr = VecViewFromOptions(u, NULL, "-sol_vec_view");CHKERRQ(ierr);
+  //ierr = VecView(u, PETSC_VIEWER_STDOUT_WORLD); CHKERRQ(ierr);
 
   ierr = VecDestroy(&u);CHKERRQ(ierr);
   ierr = VecDestroy(&r);CHKERRQ(ierr);

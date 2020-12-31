@@ -1,6 +1,7 @@
 #EGADS_LIBDIR = /PETSc3/cad/EGADSlite/src
 #EGADS_LIBDIR2= ../src
-#EGADS_LIBDIR2=$ESP_ROOT/lib
+EGADS_LIBDIR = $(ESP_ROOT)/lib
+#EGADS_INCLUDEDIR = $(ESP_ROOT)/include
 #CFLAGS = -I../include
 
 # Note: I replaced -legadslite with -legads
@@ -9,10 +10,10 @@ testPlex: egadsPlex.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
 
 testNozzle: egadsNozzle.o
-	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
+	${CLINKER} -o $@ $< -legads ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
 
 testNozzleNew: egadsNozzle_new.o
-	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)
+	${CLINKER} -o $@ $< -legads ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR}
 
 test_egads_examples: egads_example.o
 	${CLINKER} -o $@ $< -legadslite ${PETSC_LIB} ${CC_LINKER_SLFLAG}${EGADS_LIBDIR} -L${EGADS_LIBDIR} -L$(EGADS_LIBDIR2)

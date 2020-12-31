@@ -10,7 +10,7 @@ The reorganization provided in this repository is intended to allow for:
 	 - Resolution was achieved by:
 	   - Copying & Renaming shared files (EGADSlite files now have identified with _lite)
 	   - Renaming EGADSlite functions (Now start with EGlite_ prefix)
-  2. Allow integration with [Petsc] (https://www.mcs.anl.gov/petsc)
+  2. Allow integration with [Petsc](https://www.mcs.anl.gov/petsc)
      - Integration allows Petsc to:
        - Read STEP, IGES, EGADS and EGADSlite files
 	   - Generate 2D & 3D Meshes of the geometry
@@ -129,9 +129,9 @@ at [Petsc Documentation](https://www.mcs.anl.gov/petsc/documentation/index.html}
 
 # Credits
 
-Dr. Haimes, MIT EGADS/EGADSlite source code [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP)
-Dr. Matthew Kneply, University @ Buffalo, Petsc Integration assistance [Petsc] (https://www.mcs.anl.gov/petsc)
-[OpenCascade Project](https://dev.opencascade.org/)
+- Dr. Haimes, MIT EGADS/EGADSlite source code [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP)
+- Dr. Matthew Kneply, University @ Buffalo, Petsc Integration assistance [Petsc](https://www.mcs.anl.gov/petsc)
+- [OpenCascade Project](https://dev.opencascade.org/)
 
 
 

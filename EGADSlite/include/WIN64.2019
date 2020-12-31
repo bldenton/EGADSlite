@@ -1,0 +1,24 @@
+# WINDOWS x64 using MSVS 16.0 (2019):
+#
+
+DEFINE = /DWNT /DNDEBUG /D_CONSOLE /DWIN32 /DREVISION=$(CASREV) /D_OCC64
+COPTS  = /Ox /MD /D_CRT_SECURE_NO_DEPRECATE
+CPPOPT = /Ot /MD /EHsc /GR /D_CRT_SECURE_NO_DEPRECATE
+FOPTS  = /Ox /threads /recursive /libs:dll
+FLIBS  = legacy_stdio_definitions.lib
+OCOPT  = /Ox /MD /D_CRT_SECURE_NO_DEPRECATE
+LIBPTH = /link /LIBPATH:$(ESP_ROOT)\lib /LIBPATH:$(CASROOT)\$(CASARCH)\lib
+LNKPTH = /LIBPATH:$(CASROOT)\$(CASARCH)\lib
+INCS   = /I$(CASROOT)\inc
+!if "$(CASREV)" == "6.8"
+LIBS   = TKBool.lib TKernel.lib TKFeat.lib TKBO.lib TKGeomAlgo.lib TKMath.lib TKOffset.lib TKPrim.lib TKPShape.lib TKTopAlgo.lib TKBRep.lib TKG2d.lib TKG3d.lib TKGeomBase.lib TKShHealing.lib TKSTEP.lib TKSTEP209.lib TKSTEPBase.lib TKSTEPAttr.lib TKXSBase.lib TKIGES.lib TKFillet.lib PTKernel.lib
+!endif
+!if "$(CASREV)" == "7.3"
+LIBS   = TKBool.lib TKernel.lib TKFeat.lib TKBO.lib TKGeomAlgo.lib TKMath.lib TKOffset.lib TKPrim.lib TKTopAlgo.lib TKBRep.lib TKG2d.lib TKG3d.lib TKGeomBase.lib TKShHealing.lib TKSTEP.lib TKSTEP209.lib TKSTEPBase.lib TKSTEPAttr.lib TKXSBase.lib TKIGES.lib TKFillet.lib
+!endif
+!if "$(CASREV)" == "7.4"
+LIBS   = TKBool.lib TKernel.lib TKFeat.lib TKBO.lib TKGeomAlgo.lib TKMath.lib TKOffset.lib TKPrim.lib TKTopAlgo.lib TKBRep.lib TKG2d.lib TKG3d.lib TKGeomBase.lib TKShHealing.lib TKSTEP.lib TKSTEP209.lib TKSTEPBase.lib TKSTEPAttr.lib TKXSBase.lib TKIGES.lib TKFillet.lib
+!endif
+GLIBS  = gv.lib glu32.lib opengl32.lib user32.lib gdi32.lib
+MCOMP  = echo
+AFLREX = legacy_stdio_definitions.lib

@@ -53,17 +53,17 @@ Compilation & Installation of OpenCascade is required **only** if compiling EGAD
 
   - Unzip tarball
     - See OpenCascadev7.5.0.txt option on getting the tarball or cloning repository
-    - 'tar -zxf opencascade-7.5.0.tgz' or clone 'git clone https://github.com/bldenton/oce'
+    - `tar -zxf opencascade-7.5.0.tgz` or clone `git clone https://github.com/bldenton/oce`
   - Create build director (Out of source builds are highly recommended)
-    - 'mkdir build'
+    - `mkdir build`
   - Go to build directory & run cmake
-    - 'cd build'
-	- 'cmake ../opencascade-7.5.0 -DINSTALL_DIR=path/to/where/you/want/to/install'
+    - `cd build`
+	- `cmake ../opencascade-7.5.0 -DINSTALL_DIR=path/to/where/you/want/to/install`
   - Compile code with Make
-    - 'make'
+    - `make`
 	- Note: Supports parallel build. Can add -j#
   - Install Opencascade
-    - 'make install/strip'
+    - `make install/strip`
 
 OpenCascade is now installed. Take note of OpenCascade's installation directory. It will be needed for EGADS compilation.
 
@@ -73,50 +73,50 @@ Environment Variables used during compilation and use of EGADS/EGADSlite librari
 
   - Generate EGADS/EGADSlite environment
     - EGADSlite library Only
-	  - './makeEnv'
+	  - `./makeEnv`
 	- EGADS library Only
-	  - './makeEnv /path/to/opencascade/installation/top/folder/'
+	  - `./makeEnv /path/to/opencascade/installation/top/folder/`
 	- EGADS & EGADSlite
-	  - './makeEnv /path/to/opencascade/installation/top/folder/'
+	  - `./makeEnv /path/to/opencascade/installation/top/folder/`
 
 This scrip creates the config, include and lib folders that will store the relevant EGADS/EGADSlite files (/include) and libraries (/lib).
 It will also generate files iESPenv.csh (tcsh) and iESPenv.sh (bash) scripts in the /config folder. The appropriate script for your system must
 be sourced prior to compilation or use of the EGADS and/or EGADSlite libraries.
 
-  'source ./config/iESPenv.sh'
+  `source ./config/iESPenv.sh`
 
 ## EGADSlite Only
 
 Compilation of the EGADSlite library is achieved as follows:
 
   - Source appropriate ESP environment script
-    - 'source ./config/iESPenv.sh' or 'source ./config/iESPenv.csh'
+    - `source ./config/iESPenv.sh` or `source ./config/iESPenv.csh`
   - Run make
-    - 'make egadslite'
+    - `make egadslite`
 
-The required header files will be located in './include' and the libraries will be located in './lib'
+The required header files will be located in `./include` and the libraries will be located in `./lib`
 
 ## EGADS Only
 
 Compilation of the EGADS library is achieved as follows:
 
   - Source appropriate ESP environment script
-    - 'source ./config/iESPenv.sh' or 'source ./config/iESPenv.csh'
+    - `source ./config/iESPenv.sh` or `source ./config/iESPenv.csh`
   - Run make
-    - 'make egads'
+    - `make egads`
 
-The required header files will be located in './include' and the libraries will be located in './lib'
+The required header files will be located in `./include` and the libraries will be located in `./lib`
 
 ## EGADS & EGADSlite
 
 Compilation of the EGADS & EGADSlite libraries are achieved as follows:
 
   - Source appropriate ESP environment script
-    - 'source ./config/iESPenv.sh' or 'source ./config/iESPenv.csh'
+    - `source ./config/iESPenv.sh` or `source ./config/iESPenv.csh`
   - Run make
-    - 'make'
+    - `make`
 
-The required header files will be located in './include' and the libraries will be located in './lib'
+The required header files will be located in `./include` and the libraries will be located in `./lib`
 
 ## Petsc Integration
 

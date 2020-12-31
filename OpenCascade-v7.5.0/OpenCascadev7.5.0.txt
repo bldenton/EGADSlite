@@ -1,0 +1,9 @@
+There are two ways to get Opencascade7.5.0
+
+  1. Download OpenCascade-7.5.0.tgz from https://dev.opencascade.org/
+  2. Clone repository https://github.com/bldenton/oce
+     - This is a copy of https://github.com/tpaviot/oce from 12/2020. It is functionally similar to OpenCascade-7.5.0.tgz and
+	   can be installed using the same instructions as described in the README.md file.
+
+Note :: The tarball is not being supplied in this repository due to github's file size limits.
+

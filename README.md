@@ -52,7 +52,8 @@ Compiling of the EGADS/EGADSlite libraries are as follows
 Compilation & Installation of OpenCascade is required **only** if compiling EGADS library. The EGADSlite library does not use OpenCascade.
 
   - Unzip tarball
-    - 'tar -zxf opencascade-7.5.0.tgz'
+    - See OpenCascadev7.5.0.txt option on getting the tarball or cloning repository
+    - 'tar -zxf opencascade-7.5.0.tgz' or clone 'git clone https://github.com/bldenton/oce'
   - Create build director (Out of source builds are highly recommended)
     - 'mkdir build'
   - Go to build directory & run cmake

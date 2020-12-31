@@ -124,13 +124,13 @@ Petsc will automatically install and integrate the EGADSlite library when the --
   - Note: It is recommended that the --with-tetgen=true and --download-ctetgen=1 flags are also used for full meshing functionality
 
 Integration of the EGADS library is in work and will be online soon. For instructions on how to use Petsc with EGADSlite please review the Petsc documentation
-at [Petsc Documentation](https://www.mcs.anl.gov/petsc/documentation/index.html}
+at [Petsc Documentation](https://www.mcs.anl.gov/petsc/documentation/index.html)
 
 
 # Credits
 
 - Dr. Haimes, MIT EGADS/EGADSlite source code [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP)
-- Dr. Matthew Kneply, University @ Buffalo, Petsc Integration assistance [Petsc](https://www.mcs.anl.gov/petsc)
+- Dr. Matthew Kneply, University @ Buffalo, [Petsc](https://www.mcs.anl.gov/petsc) Integration assistance 
 - [OpenCascade Project](https://dev.opencascade.org/)
 
 

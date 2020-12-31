@@ -130,7 +130,7 @@ at [Petsc Documentation](https://www.mcs.anl.gov/petsc/documentation/index.html)
 # Credits
 
 - Dr. Haimes, MIT EGADS/EGADSlite source code [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP)
-- Dr. Matthew Kneply, University @ Buffalo, [Petsc](https://www.mcs.anl.gov/petsc) Integration assistance 
+- Dr. Matthew Knepley, University @ Buffalo, [Petsc](https://www.mcs.anl.gov/petsc) Integration assistance 
 - [OpenCascade Project](https://dev.opencascade.org/)
 
 

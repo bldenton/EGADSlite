@@ -31,7 +31,7 @@ Compiling of the EGADS/EGADSlite libraries are as follows
   - EGADS
     - Require Software
 	  - C Compiler
-      - OpenCascade v7.5.0  [OpenCascade](https://dev.opencascade.org/)
+      - [OpenCascade v7.5.0](https://dev.opencascade.org/)
 	    - tarball is available in OpenCascade-v7.5.0
 	    - OpenCascade compilation requires the following:
 	      - GNU gcc 4.3+ or LLVM CLang 3.6+

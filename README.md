@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 # EGADS/EGADSlite Libraries for Petsc
 
 Project consists of a reorganization of the EGADS/EGADSlite code developed by Dr. Haimes at MIT [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP).
@@ -159,4 +158,3 @@ Additional Capabilies include:
                                 Steiner points lie on the associated CAD surfaces.
      2) Print Model Topology :: Print Model Topology to screen
      
->>>>>>> master

@@ -1,0 +1,611 @@
+#!/bin/bash
+
+mkdir ./config
+mkdir ./include
+mkdir ./lib
+
+echo
+echo "ESP runtime AutoConfigurator"
+echo
+#
+# if arg1 is present set it to CASROOT, second is CASARCH (also optional)
+#
+if [ "$1" ]; then
+	CASROOT=$1
+	CASARCH=
+	CASREV=
+	if [ "$2" ]; then
+		CASARCH=$2
+	fi
+fi
+
+#
+# we must know where the OpenCASCADE distribution is!
+#
+if [ -z "$CASROOT" ]; then
+	echo "ERROR - CASROOT not defined - set or input as argument!"
+	exit 1
+fi
+
+#
+# is CASROOT pointing to a valid location?
+#
+if [ -d "$CASROOT" ]; then
+	echo "CASROOT =" $CASROOT " with contents:"
+	ls "$CASROOT"
+	echo 
+else
+	echo "ERROR - CASROOT does not point to a valid directory!"
+	exit 1
+fi
+
+ARCH=UNKNOWN
+MACOSX=UNKNOWN
+
+if [ -n "$EFCOMP" ]; then
+	if [ "$EFCOMP" != ifort ] && [ "$EFCOMP" != gfortran ]; then
+		echo "WARNING - ignoring EFCOMP (set to '$EFCOMP') not set to 'ifort' or 'gfortran'!"
+		EFCOMP=UNKNOWN
+	fi
+else
+	EFCOMP=UNKNOWN
+fi
+
+#
+# determine the machine type
+#
+if [ -f /bin/uname -o -f /usr/bin/uname \
+		-o -f /bin/uname.exe -o -f /usr/bin/uname.exe ]; then
+	if [ -f /bin/uname ]; then
+		os="`/bin/uname -s`"
+		rl="`/bin/uname -r`"
+	elif [ -f /usr/bin/uname ]; then
+		os="`/usr/bin/uname -s`"
+		rl="`/usr/bin/uname -r`"
+	elif [ -f /bin/uname.exe ]; then
+		os="`/bin/uname.exe -s`"
+		rl="`/bin/uname.exe -r`"
+	else
+		os="`/usr/bin/uname.exe -s`"
+		rl="`/usr/bin/uname.exe -r`"
+	fi
+
+	ARCH=$os
+fi
+if [ "$ARCH" = UNKNOWN ]; then
+	echo "ERROR - Cannot parse Machine type!"
+	exit 1
+fi
+
+#
+# determine the version of OSX
+#
+if [ "$ARCH" = Darwin ]; then
+	case "$rl" in
+	 9.*) MACOSX=10.5 ;;
+	10.*) MACOSX=10.6 ;;
+	11.*) MACOSX=10.7 ;;
+	12.*) MACOSX=10.8 ;;
+	13.*) MACOSX=10.9 ;;
+	14.*) MACOSX=10.10 ;;
+	15.*) MACOSX=10.11 ;;
+	16.*) MACOSX=10.12 ;;
+	17.*) MACOSX=10.13 ;;
+	18.*) MACOSX=10.14 ;;
+	19.*) MACOSX=10.15 ;;
+	esac
+fi
+
+#
+# determine CASARCH (if not aleardy set)
+#
+if [ -z "$CASARCH" ]; then
+  if [ -d "$CASROOT/$ARCH" ]; then
+    CASARCH=$ARCH
+  else
+    CASARCH=.
+  fi
+fi
+
+#
+# look at an so/dylib to determine the pointer size
+#
+BITS=UNKNOWN
+if [ "$ARCH" = Darwin ]; then
+	ft="`file -bL $CASROOT/$CASARCH/lib/libTKernel.dylib`"
+	case $ft in
+	*64*  ) BITS=64 ;;
+	*i386 ) BITS=32 ;;
+	esac
+else
+	ft="`file -bL $CASROOT/$CASARCH/lib/libTKernel.so`"
+	case $ft in
+	*64* ) BITS=64 ;;
+	*32* ) BITS=32 ;;
+	esac
+	if [ "$BITS" = UNKNOWN ]; then
+		ft="`file -bL /usr/lib/libTKernel.so`"
+		case $ft in
+		*64* ) BITS=64 ;;
+		*32* ) BITS=32 ;;
+		esac
+	fi
+fi
+if [ "$BITS" = UNKNOWN ]; then
+	echo "ERROR - Cannot parse OpenCASCADE library pointer size!"
+	exit 1
+fi
+if [ "$BITS" = 32 ]; then
+	echo "ERROR - 32 bit ESP is no longer supported!"
+	exit 1
+fi
+
+#
+# set our architecture
+#
+if [ "$ARCH" = Darwin ]; then
+	CARCH=DARWIN64
+else
+	CARCH=LINUX64
+fi
+
+#
+# determine the OCC rev
+#
+if [ -z "$CASREV" ]; then
+	incfl=UNKNOWN
+	if [ -f "$CASROOT/include/Standard_Version.hxx" ]; then
+		incfl=$CASROOT/include/Standard_Version.hxx
+	elif [ -f "$CASROOT/inc/Standard_Version.hxx" ]; then
+		incfl=$CASROOT/inc/Standard_Version.hxx
+	elif [ -f "$CASROOT/include/opencascade/Standard_Version.hxx" ]; then
+		incfl=$CASROOT/include/opencascade/Standard_Version.hxx
+	elif [ -f "$CASROOT/include/oce/Standard_Version.hxx" ]; then
+		incfl=$CASROOT/include/oce/Standard_Version.hxx
+	elif [ -f "$CASROOT/Standard_Version.hxx" ]; then
+		incfl=$CASROOT/Standard_Version.hxx
+	fi
+	if [ "$incfl" = UNKNOWN ]; then
+		echo "ERROR - Cannot find OpenCASCADE Version include!"
+		exit 1
+	fi
+	exec < "$incfl"
+	while read -a words
+	do
+		if [ "${words[1]}" = OCC_VERSION ]; then
+			CASREV=${words[2]}
+		fi
+	done
+	if [ -z "$CASREV" ]; then
+		echo "ERROR - Cannot parse OpenCASCADE Version!"
+		exit 1
+	fi
+fi
+
+#
+# do we have a fortran compiler?
+#
+if [ "$EFCOMP" == UNKNOWN ]; then
+	ift="`which ifort`"
+	gft="`which gfortran`"
+	if [ -n "$ift" ]; then
+		EFCOMP=ifort
+	elif [ -n "$gft" ]; then
+		EFCOMP=gfortran
+	fi
+fi
+
+#
+# do we have AFLR?
+#
+if [ -n "$AFLR" ]; then
+	if [ "$ARCH" = Darwin ] && [ "$MACOSX" != UNKNOWN ]; then
+		AFLR_ARCH=MacOSX-x86-64
+	else
+		AFLR_ARCH=Linux-x86-64
+	fi
+	if [ ! -d $AFLR/$AFLR_ARCH ]; then
+		echo "ERROR - \$AFLR/$AFLR_ARCH (e.g. $AFLR/$AFLR_ARCH) is not a directory!"
+		exit 1
+	fi
+else
+	AFLR=UNKNOWN
+fi
+
+#
+# do we have tetgen?
+#
+if [ -n "$TETGEN" ]; then
+	if [ ! -f $TETGEN/tetgen.cxx ]; then
+		echo "ERROR - \$TETGEN/tetgen.cxx (e.g. $TETGEN/tetgen.cxx) does not exist!"
+		exit 1
+	fi
+else
+	TETGEN=UNKNOWN
+fi
+
+#
+# do we have a python?
+#
+PYTH=UNKNOWN
+if [ ! -n "$PYTHONINC" ]; then
+	PYTHONINC=UNKNOWN
+fi
+if [ ! -n "$PYTHONLIB" ]; then
+	PYTHONLIB=UNKNOWN
+fi
+pyt="`which python`"
+if [ -n "$pyt" ]; then
+	PYTH=python
+fi
+
+echo
+if [ "$PYTH" != UNKNOWN ]; then
+	if [ "$PYTHONINC" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('INCLUDEPY'))\""
+		pcmd="python -c $pscr"
+		eval PYTHINC=\`$pcmd\`
+
+		if [ -f "$PYTHINC/Python.h" ]; then
+			PYTHONINC=$PYTHINC
+			echo "Info: Python header $PYTHONINC/Python.h found!"
+		fi
+	fi
+
+	if [ "$PYTHONINC" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_path('platinclude'))\""
+		pcmd="python -c $pscr"
+		eval PYTHINC=\`$pcmd\`
+		if [ -f "$PYTHINC/Python.h" ]; then
+			PYTHONINC=$PYTHINC
+			echo "Info: Python header $PYTHONINC/Python.h found!"
+		fi
+	fi
+
+	if [ "$PYTHONINC" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import sysconfig; print(sysconfig.get_path('platinclude'))\""
+		pcmd="python -c $pscr"
+		eval PYTHONINC=\`$pcmd\`
+		if [ -f "$PYTHONINC/Python.h" ]; then
+			PYTHONINC=$PYTHINC
+			echo "Info: Python header $PYTHONINC/Python.h found!"
+		fi
+	fi
+
+	if [ "$PYTHONINC" == UNKNOWN ]; then
+		echo "Error: Fix PYTHONINC -- cannot find Python.h!"
+		echo "       Has the Python Development package been installed?"
+		PYTH=ERROR
+	fi
+
+	pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBRARY'))\""
+	pcmd="python -c $pscr"
+	eval plb=\`$pcmd\`
+	pso=`echo $plb|sed -e 'sx.axx'`.so
+	pdy=`echo $plb|sed -e 'sx.axx'`.dylib
+
+	pllb=`echo $plb|sed -e 'sx.axx'|sed -e 'sxlibxx'`
+
+	if [ "$PYTHONLIB" == UNKNOWN ] && [ "$ARCH" = Darwin ]; then
+		pscr="\"from __future__ import print_function; import sys, os; print(os.path.exists(os.path.join(sys.prefix, 'conda-meta')))\""
+		pcmd="python -c $pscr"
+		eval conda=\`$pcmd\`
+
+		if [ "$conda" == True ]; then
+			PYTHONLIB="-undefined dynamic_lookup"
+			echo "Info: Python library not needed for Anaconda on OSX!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBPL'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_path('platstdlib'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import sysconfig; print(sysconfig.get_path('platstdlib'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import sys; import os; print(os.path.join(sys.exec_prefix, 'lib'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import sys; import os; print(os.path.join(os.path.dirname(os.path.dirname(sys.executable)), 'lib'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		pscr="\"from __future__ import print_function; import sysconfig; print(sysconfig.get_config_var('PYTHONFRAMEWORKPREFIX'))\""
+		pcmd="python -c $pscr"
+		eval plp=\`$pcmd\`
+		if [ -f "$plp/$pso" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pso found!"
+		elif [ -f "$plp/$pdy" ]; then
+			PYTHONLIB="-L$plp -l$pllb"
+			echo "Info: Python library $plp/$pdy found!"
+		#elif [ -f "$plp/$plb" ]; then
+		#	PYTHONLIB="-L$plp -l$pllb"
+		#	echo "Info: Python library $plb found!"
+		fi
+	fi
+
+	# Alternatively we could have just this one check that should work on all platforms
+	# https://github.com/JuliaPy/PyCall.jl/blob/master/deps/find_libpython.py
+	#if [ "$PYTHONLIB" == UNKNOWN ]; then
+		#plp=`python find_libpython.py`
+		#if [ -f "$plp" ]; then
+			#PYTHONLIB=$plp
+			#echo "Info: Python library $plp found!"
+		#fi
+	#fi
+
+	if [ "$PYTHONLIB" == UNKNOWN ]; then
+		echo "Error: Fix PYTHONLIB -- cannot find libpython!"
+		echo "       Has the Python Development package been installed?"
+		PYTH=ERROR
+	fi
+else
+	echo "Info: No Python found!"
+fi
+echo
+
+#
+# done.
+#
+BASE=`pwd | sed -e 'sx/configxx'`
+if [ "$MACOSX" != UNKNOWN ]; then
+	echo "MACOSX   =" $MACOSX
+fi
+echo "ESP_ARCH =" $CARCH
+echo "ESP_ROOT =" $BASE
+echo "EFCOMP   =" $EFCOMP
+echo
+echo "CARCH    =" $CARCH
+echo "CASROOT  =" $CASROOT
+echo "CASARCH  =" $CASARCH
+echo "CASREV   =" $CASREV
+echo
+if [ "$PYTH" != UNKNOWN ]; then
+	echo "PYTHONINC=" $PYTHONINC
+	echo "PYTHONLIB=" $PYTHONLIB 
+	echo
+fi
+
+#
+echo "#"                        > config/iESPenv.sh
+echo "export ESP_ARCH="$CARCH  >> config/iESPenv.sh
+echo "export ESP_ROOT="$BASE   >> config/iESPenv.sh
+echo "export CASROOT="$CASROOT >> config/iESPenv.sh
+echo "export CASARCH="$CASARCH >> config/iESPenv.sh
+echo "export CASREV="$CASREV   >> config/iESPenv.sh
+if [ -z "$PATH" ]; then
+	echo "export PATH=$BASE/bin" >> config/iESPenv.sh
+else
+	echo "export PATH=$BASE/bin":'$PATH' >> config/iESPenv.sh
+fi
+if [ "$PYTH" != UNKNOWN ]; then
+	if [ "$PYTH" != ERROR ]; then
+		echo "export PYTHONINC="$PYTHONINC             >> config/iESPenv.sh
+		echo "export PYTHONLIB=\""$PYTHONLIB\"         >> config/iESPenv.sh
+	else
+		echo "#export PYTHONINC="$PYTHONINC            >> config/iESPenv.sh
+		echo "#export PYTHONLIB=\""$PYTHONLIB\"        >> config/iESPenv.sh
+	fi
+	if [ -z "$PYTHONPATH" ]; then
+		echo "export PYTHONPATH=$BASE/lib"               >> config/iESPenv.sh
+	else
+		echo "export PYTHONPATH=$BASE/lib":'$PYTHONPATH' >> config/iESPenv.sh
+	fi
+fi
+if [ "$EFCOMP" != UNKNOWN ]; then
+	echo "export EFCOMP="$EFCOMP           >> config/iESPenv.sh
+fi
+if [ "$AFLR" != UNKNOWN ]; then
+	echo "export AFLR=$AFLR"  >> config/iESPenv.sh
+else
+	echo "#export AFLR=$HOME/Projects/AFLR"  >> config/iESPenv.sh
+fi
+if [ "$ARCH" = Darwin ]; then
+	if [ "$MACOSX" != UNKNOWN ]; then
+		echo "export AFLR_ARCH=MacOSX-x86-64"    >> config/iESPenv.sh
+		echo "export MACOSX="$MACOSX   >> config/iESPenv.sh
+		echo "export UDUNITS2_XML_PATH="$BASE/src/CAPS/udunits/udunits2.xml >> config/iESPenv.sh
+		echo "export CAPS_GLYPH="$BASE/src/CAPS/aim/pointwise/glyph >> config/iESPenv.sh
+	fi
+else
+	echo "export AFLR_ARCH=Linux-x86-64"            >> config/iESPenv.sh
+	if [ -z "$LD_LIBRARY_PATH" ]; then
+		echo "export LD_LIBRARY_PATH=$CASROOT/$CASARCH/lib:$BASE/lib" >> config/iESPenv.sh
+	else
+		echo "export LD_LIBRARY_PATH=$CASROOT/$CASARCH/lib:$BASE/lib":'$LD_LIBRARY_PATH' >> config/iESPenv.sh
+	fi
+	udu=UNKNOWN
+	if [ -f "/usr/include/udunits.h" ]; then
+		udu=/usr/include/udunits.h
+	elif [ -f "/usr/include/udunits2/udunits.h" ]; then
+		udu=/usr/include/udunits2/udunits.h
+	fi
+	if [ "$udu" = UNKNOWN ]; then
+		echo "export UDUNITS2_XML_PATH="$BASE/src/CAPS/udunits/udunits2.xml >> config/iESPenv.sh
+	fi
+	echo "export CAPS_GLYPH="$BASE/src/CAPS/aim/pointwise/glyph >> config/iESPenv.sh
+fi
+if [ "$TETGEN" != UNKNOWN ]; then
+	echo "export TETGEN=$TETGEN" >> config/iESPenv.sh
+else
+	echo "#export TETGEN=$HOME/Projects/TetGen/tetgen1.5.1" >> config/iESPenv.sh
+fi
+echo "#export AWAVE=$HOME/Projects/awave/awavemod.f"    >> config/iESPenv.sh
+if [ "$ARCH" = Darwin ]; then
+	echo "export SLUGS_START=\"open -a /Applications/Safari.app $BASE/SLUGS/Slugs.html\"" >> config/iESPenv.sh
+	echo "export CAPS_START=\"open -a /Applications/Safari.app $BASE/src/CAPS/pyCAPS/viewer/capsViewer.html\"" >> config/iESPenv.sh
+	echo "export ESP_START=\"open -a /Applications/Safari.app $BASE/ESP/ESP.html\""       >> config/iESPenv.sh
+	echo "export WV_START=\"open -a /Applications/Safari.app $BASE/wvClient/wv.html\""    >> config/iESPenv.sh
+else
+	echo "export SLUGS_START=\"firefox $BASE/SLUGS/Slugs.html\"" >> config/iESPenv.sh
+	echo "export CAPS_START=\"firefox $BASE/src/CAPS/pyCAPS/viewer/capsViewer.html\"" >> config/iESPenv.sh
+	echo "export ESP_START=\"firefox $BASE/ESP/ESP.html\""       >> config/iESPenv.sh
+	echo "export WV_START=\"firefox $BASE/wvClient/wv.html\""    >> config/iESPenv.sh
+fi
+
+#
+echo "#"                        > config/iESPenv.csh
+echo "setenv ESP_ARCH "$CARCH  >> config/iESPenv.csh
+echo "setenv ESP_ROOT "$BASE   >> config/iESPenv.csh
+echo "setenv CASROOT "$CASROOT >> config/iESPenv.csh
+echo "setenv CASARCH "$CASARCH >> config/iESPenv.csh
+echo "setenv CASREV "$CASREV   >> config/iESPenv.csh
+if [ -z "$PATH" ]; then
+	echo "setenv PATH $BASE/bin" >> config/iESPenv.csh
+else
+	echo "setenv PATH $BASE/bin":'$PATH' >> config/iESPenv.csh
+fi
+if [ "$PYTH" != UNKNOWN ]; then
+	if [ "$PYTH" != ERROR ]; then
+		echo "setenv PYTHONINC "$PYTHONINC             >> config/iESPenv.csh
+		echo "setenv PYTHONLIB \""$PYTHONLIB\"         >> config/iESPenv.csh
+	else
+		echo "#setenv PYTHONINC "$PYTHONINC            >> config/iESPenv.csh
+		echo "#setenv PYTHONLIB \""$PYTHONLIB\"        >> config/iESPenv.csh
+	fi
+	if [ -z "$PYTHONPATH" ]; then
+		echo "setenv PYTHONPATH $BASE/lib"               >> config/iESPenv.csh
+	else
+		echo "setenv PYTHONPATH $BASE/lib":'$PYTHONPATH' >> config/iESPenv.csh
+	fi
+fi
+if [ "$EFCOMP" != UNKNOWN ]; then
+	echo "setenv EFCOMP "$EFCOMP           >> config/iESPenv.csh
+fi
+if [ "$AFLR" != UNKNOWN ]; then
+	echo "setenv AFLR $AFLR"  >> config/iESPenv.csh
+else
+	echo "#setenv AFLR $HOME/Projects/AFLR"  >> config/iESPenv.csh
+fi
+if [ "$ARCH" = Darwin ]; then
+	if [ "$MACOSX" != UNKNOWN ]; then
+		echo "setenv AFLR_ARCH MacOSX-x86-64"    >> config/iESPenv.csh
+		echo "setenv MACOSX "$MACOSX   >> config/iESPenv.csh
+		echo "setenv UDUNITS2_XML_PATH "$BASE/src/CAPS/udunits/udunits2.xml >> config/iESPenv.csh
+		echo "setenv CAPS_GLYPH "$BASE/src/CAPS/aim/pointwise/glyph >> config/iESPenv.csh
+	fi
+else
+	echo "setenv AFLR_ARCH Linux-x86-64"     >> config/iESPenv.csh
+	if [ -z "$LD_LIBRARY_PATH" ]; then
+		echo "setenv LD_LIBRARY_PATH $CASROOT/$CASARCH/lib:$BASE/lib" >> config/iESPenv.csh
+	else
+		echo "setenv LD_LIBRARY_PATH $CASROOT/$CASARCH/lib:$BASE/lib":'$LD_LIBRARY_PATH' >> config/iESPenv.csh
+	fi
+	udu=UNKNOWN
+	if [ -f "/usr/include/udunits.h" ]; then
+		udu=/usr/include/udunits.h
+	elif [ -f "/usr/include/udunits2/udunits.h" ]; then
+		udu=/usr/include/udunits2/udunits.h
+	fi
+	if [ "$udu" = UNKNOWN ]; then
+		echo "setenv UDUNITS2_XML_PATH "$BASE/src/CAPS/udunits/udunits2.xml >> config/iESPenv.csh
+	fi
+	echo "setenv CAPS_GLYPH "$BASE/src/CAPS/aim/pointwise/glyph >> config/iESPenv.csh
+fi
+if [ "$TETGEN" != UNKNOWN ]; then
+	echo "setenv TETGEN $TETGEN" >> config/iESPenv.csh
+else
+	echo "#setenv TETGEN $HOME/Projects/TetGen/tetgen1.5.1" >> config/iESPenv.csh
+fi
+echo "#setenv AWAVE $HOME/Projects/awave/awavemod.f"    >> config/iESPenv.csh
+if [ "$ARCH" = Darwin ]; then
+	echo "setenv SLUGS_START \"open -a /Applications/Safari.app $BASE/SLUGS/Slugs.html\"" >> config/iESPenv.csh
+	echo "setenv CAPS_START \"open -a /Applications/Safari.app $BASE/src/CAPS/pyCAPS/viewer/capsViewer.html\"" >> config/iESPenv.csh
+	echo "setenv ESP_START \"open -a /Applications/Safari.app $BASE/ESP/ESP.html\""       >> config/iESPenv.csh
+	echo "setenv WV_START \"open -a /Applications/Safari.app $BASE/wvClient/wv.html\""    >> config/iESPenv.csh
+else
+	echo "setenv SLUGS_START \"firefox $BASE/SLUGS/Slugs.html\"" >> config/iESPenv.csh
+	echo "setenv CAPS_START \"firefox $BASE/src/CAPS/pyCAPS/viewer/capsViewer.html\"" >> config/iESPenv.csh
+	echo "setenv ESP_START \"firefox $BASE/ESP/ESP.html\""       >> config/iESPenv.csh
+	echo "setenv WV_START \"firefox $BASE/wvClient/wv.html\""    >> config/iESPenv.csh
+fi
+
+exit

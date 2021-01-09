@@ -1,0 +1,159 @@
+#
+!include ..\include\$(ESP_ARCH).$(MSVC)
+SDIR  = $(MAKEDIR)
+EDIR  = $(SDIR)\..\src
+INCD  = $(SDIR)\..\include
+IDIR  = $(ESP_ROOT)\include
+LDIR  = $(ESP_ROOT)\lib
+!IFDEF ESP_BLOC
+ODIR  = $(ESP_BLOC)\obj
+!ELSE
+ODIR  = .
+!ENDIF
+
+OBJS  = liteBase.obj liteMemory.obj liteGeom.obj liteTopo.obj liteAttrs.obj \
+	liteImport.obj liteString.obj
+
+!IFDEF ESP_BLOC
+default:	start $(LDIR)\egadslite.dll $(LDIR)\egadslitestatic.lib end
+!ELSE
+default:	$(LDIR)\egadslite.dll $(LDIR)\egadslitestatic.lib
+!ENDIF
+
+start:
+	cd $(ODIR)
+	xcopy $(SDIR)\*.c                   /Q /Y
+	xcopy $(SDIR)\*.h                   /Q /Y
+	xcopy $(SDIR)\*.rc                  /Q /Y
+	xcopy $(SDIR)\*.def                 /Q /Y
+	xcopy $(SDIR)\..\src\*.h            /Q /Y
+	xcopy $(SDIR)\..\src\egadsTess_lite.c    /Q /Y
+	xcopy $(SDIR)\..\src\egadsTris_lite.c    /Q /Y
+	xcopy $(SDIR)\..\src\egadsQuads_lite.c   /Q /Y
+	xcopy $(SDIR)\..\src\egadsTessInp_lite.c /Q /Y
+	xcopy $(SDIR)\..\src\egadsRobust_lite.c  /Q /Y
+	xcopy $(SDIR)\..\util\emp_lite.c         /Q /Y
+	xcopy $(SDIR)\..\util\evaluate_lite.c    /Q /Y
+	xcopy $(SDIR)\..\util\rational_lite.c    /Q /Y
+	xcopy $(SDIR)\..\util\regQuads_lite.c    /Q /Y
+	xcopy $(SDIR)\..\util\regQuads_lite.h    /Q /Y
+
+$(LDIR)\egadslite.dll:	$(OBJS) liteTess.obj liteTris.obj liteQuads.obj \
+			liteTessInp.obj emp.obj evaLite.obj ratLite.obj \
+			egadsRobust.obj liteRegQuads.obj egadslite.res
+	-del $(LDIR)\egadslite.dll $(LDIR)\egadslite.lib $(LDIR)\egadslite.exp
+	link /out:$(LDIR)\egadslite.dll /dll /def:egadslite.def $(OBJS) \
+		liteTess.obj liteTris.obj liteQuads.obj liteTessInp.obj \
+		emp.obj evaLite.obj ratLite.obj egadsRobust.obj \
+		liteRegQuads.obj egadslite.res
+        $(MCOMP) /manifest $(LDIR)\egadslite.dll.manifest \
+                /outputresource:$(LDIR)\egadslite.dll;2
+
+$(LDIR)/egadslitestatic.lib:	$(OBJS) liteTess.obj liteTris.obj \
+				liteQuads.obj liteTessInp.obj emp.obj \
+				evaLite.obj ratLite.obj liteRegQuads.obj 
+	-del $(LDIR)\egadslitestatic.lib
+	lib /out:$(LDIR)\egadslitestatic.lib $(OBJS) liteTess.obj liteTris.obj \
+		liteQuads.obj liteTessInp.obj egadsRobust.obj emp.obj \
+		evaLite.obj ratLite.obj liteRegQuads.obj
+
+egadslite.res:	egadslite.rc
+	rc egadslite
+
+$(OBJS):	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h liteDevice.h $(OBJS:.obj=.c)
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /I. /I$(INCD) /I$(EDIR) $*.c
+
+!IFDEF ESP_BLOC
+
+liteTess.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h egadsTess_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		egadsTess_lite.c /FoliteTess.obj
+
+liteTris.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h egadsTris_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		egadsTris_lite.c /FoliteTris.obj
+
+liteQuads.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h egadsQuads_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /I. /I$(INCD) /I$(EDIR) egadsQuads_lite.c \
+		/FoliteQuads.obj
+
+liteTessInp.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+			$(INCD)\egadsTypes_lite.h liteClasses.h egadsTessInp_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		egadsTessInp_lite.c /FoliteTessInp.obj
+
+emp.obj:	emp_lite.c
+	cl /c $(COPTS) $(DEFINE) /I$(INCD) emp_lite.c
+
+evaLite.obj:	evaluate_lite.c
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) evaluate_lite.c /FoevaLite.obj
+
+ratLite.obj:	rational_lite.c
+	cl /c $(COPTS) $(DEFINE) /DLITE rational_lite.c /ForatLite.obj
+
+liteRegQuads.obj:	regQuads_lite.c regQuads_lite.h
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I. regQuads_lite.c \
+		/FoliteRegQuads.obj
+
+egadsRobust.obj:	egadsRobust_lite.c
+	cl /c $(COPTS) $(DEFINE) egadsRobust_lite.c
+
+!ELSE
+
+liteTess.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h ..\src\egadsTess_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		..\src\egadsTess_lite.c /FoliteTess.obj
+
+liteTris.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h ..\src\egadsTris_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		..\src\egadsTris_lite.c /FoliteTris.obj
+
+liteQuads.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+		$(INCD)\egadsTypes_lite.h liteClasses.h ..\src\egadsQuads_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /I. /I$(INCD) /I$(EDIR) \
+		..\src\egadsQuads_lite.c /FoliteQuads.obj
+
+liteTessInp.obj:	$(INCD)\egadsErrors_lite.h $(EDIR)\egadsInternals_lite.h \
+			$(INCD)\egadsTypes_lite.h liteClasses.h ..\src\egadsTessInp_lite.c
+	cl /c $(COPTS) $(DEFINE) $(XDEF) /DLITE /I. /I$(INCD) /I$(EDIR) \
+		/I..\util ..\src\egadsTessInp_lite.c /FoliteTessInp.obj
+
+emp.obj:	..\util\emp_lite.c
+	cl /c $(COPTS) $(DEFINE) /I$(INCD) ..\util\emp_lite.c
+
+evaLite.obj:	..\util\evaluate_lite.c
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I$(EDIR) /I. \
+		..\util\evaluate_lite.c /FoevaLite.obj
+
+ratLite.obj:	..\util\rational_lite.c
+	cl /c $(COPTS) $(DEFINE) /DLITE ..\util\rational_lite.c /ForatLite.obj
+
+liteRegQuads.obj:	..\util\regQuads_lite.c ..\util\regQuads_lite.h
+	cl /c $(COPTS) $(DEFINE) /DLITE /I$(INCD) /I. ..\util\regQuads_lite.c \
+		/FoliteRegQuads.obj
+
+egadsRobust.obj:	..\src\egadsRobust_lite.c
+	cl /c $(COPTS) $(DEFINE) ..\src\egadsRobust_lite.c
+
+!ENDIF
+
+end:
+	-del *.c *.h *.rc *.def *.manifest
+	cd $(SDIR)
+
+clean:
+	cd $(ODIR)
+	-del $(OBJS) liteTess.obj liteTris.obj liteQuads.obj liteTessInp.obj \
+		liteRegQuads.obj
+	cd $(SDIR)
+
+cleanall:	clean
+	-del $(LDIR)\egadslite.dll $(LDIR)\egadslite.lib $(LDIR)\egadslite.exp
+	-del $(LDIR)\egadslite.res $(LDIR)\egadslite.dll.manifest
+	-del $(LDIR)\egadslitestatic.lib

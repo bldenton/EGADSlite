@@ -1,0 +1,27 @@
+1 VERSIONINFO
+FILEVERSION 0,1,00,18
+PRODUCTVERSION 0,1,00,18
+FILEOS 0x4
+FILETYPE 0x2
+{
+BLOCK "StringFileInfo"
+{
+	BLOCK "040904E4"
+	{
+		VALUE "FileDescription", "EGADS Dynamic Library"
+		VALUE "FileVersion", "1.18"
+		VALUE "InternalName", "EGADS"
+		VALUE "OriginalFilename", "egads.DLL"
+		VALUE "ProductName", "EGADS"
+		VALUE "ProductVersion", "1.18"
+		VALUE "LegalCopyright", "Copyright © 2011-2020 MIT. All Rights Reserved."
+		VALUE "Comment", "Copyright 2011-2020 MIT. All rights reserved."
+	}
+}
+
+BLOCK "VarFileInfo"
+{
+    VALUE "Translation", 0x0409, 1252
+}
+
+}

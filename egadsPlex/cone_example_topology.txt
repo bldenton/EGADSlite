@@ -1,0 +1,73 @@
+ Number of BODIES (nbodies): 1
+   Number of SHELLS: 1
+   Number of FACES: 3
+   Number of LOOPS: 3
+   Number of EDGES: 6
+   Number of NODES: 3
+
+   Body 0 Topology ::
+      SHELL ID: 1 :: sense = 1
+        FACE ID: 1
+          LOOP ID: 1 :: sense = 1
+            EDGE ID: 1 :: sense = -1
+              Peri = 0 :: Range = 0.000000, 0.035921, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+            EDGE ID: 2 :: sense = 1
+              EDGE 2 is DEGENERATE
+              Peri = 0 :: Range = 0.000000, 3.141593, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+            EDGE ID: 3 :: sense = 1
+              Peri = 0 :: Range = 0.000000, 0.035921, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)
+            EDGE ID: 4 :: sense = 1
+              Peri = 1 :: Range = 3.141593, 6.283185, 0.000000, 0.000000
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+        FACE ID: 2
+          LOOP ID: 2 :: sense = 1
+            EDGE ID: 5 :: sense = -1
+              Peri = 1 :: Range = 0.000000, 3.141593, 0.000000, 0.000000
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)
+            EDGE ID: 4 :: sense = -1
+              Peri = 1 :: Range = 3.141593, 6.283185, 0.000000, 0.000000
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+        FACE ID: 3
+          LOOP ID: 3 :: sense = 1
+            EDGE ID: 3 :: sense = -1
+              Peri = 0 :: Range = 0.000000, 0.035921, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)
+            EDGE ID: 6 :: sense = 1
+              EDGE 6 is DEGENERATE
+              Peri = 0 :: Range = 0.000000, 3.141593, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+            EDGE ID: 1 :: sense = 1
+              Peri = 0 :: Range = 0.000000, 0.035921, 0.000000, 0.000000
+              NODE ID: 1
+                 (x, y, z) = (0.000000, 0.050800, -0.012700)
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+            EDGE ID: 5 :: sense = 1
+              Peri = 1 :: Range = 0.000000, 3.141593, 0.000000, 0.000000
+              NODE ID: 2
+                 (x, y, z) = (0.025400, 0.050800, 0.012700)
+              NODE ID: 3
+                 (x, y, z) = (-0.025400, 0.050800, 0.012700)

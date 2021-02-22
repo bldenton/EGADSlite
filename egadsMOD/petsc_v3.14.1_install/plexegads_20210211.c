@@ -216,7 +216,7 @@ static PetscErrorCode DMPlexEGADSPrintModel(ego model)
 
 		    id   = EG_indexBodyTopo(body, edge); //CHKERRQ(ierr);
 			ierr = EG_getInfo(edge, &oclass, &mtype, &topRef, &prev, &next); CHKERRQ(ierr);
-            ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d :: sense = %d\n", id, esense);CHKERRQ(ierr);
+            ierr = PetscPrintf(PETSC_COMM_SELF, "            EDGE ID: %d :: sense = %d\n", id, esense); CHKERRQ(ierr);
                   
 			if (mtype == DEGENERATE) { ierr = PetscPrintf(PETSC_COMM_SELF, "              EDGE %d is DEGENERATE \n", id);CHKERRQ(ierr); }
             ierr = EG_getRange(edge, range, &peri);CHKERRQ(ierr);
@@ -239,10 +239,6 @@ static PetscErrorCode DMPlexEGADSPrintModel(ego model)
 		}
 	  }
     }
-	EG_free(shobjs);
-	EG_free(fobjs);
-	EG_free(lobjs);
-	EG_free(eobjs);
   }
   PetscFunctionReturn(0);
 }
@@ -257,8 +253,8 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 {
   DMLabel        bodyLabel, faceLabel, edgeLabel, vertexLabel;
   /* EGADSLite variables */
-  ego            geom, *bodies, *nobjs, *mobjs, *eobjs, *fobjs, *lobjs;
-  int            oclass, mtype, nbodies, *senses, *eSenses, *lSenses;
+  ego            geom, *bodies, *mobjs, *objs, *fobjs, *eobjs, *nobjs;
+  int            oclass, mtype, nbodies, *senses;
   int            b;
   /* PETSc variables */
   DM             dm;
@@ -272,8 +268,7 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 
   PetscFunctionBegin;
   ierr = MPI_Comm_rank(comm, &rank);CHKERRQ(ierr);
-  if (!rank) {
-	  
+  if (!rank) { 
     /* ---------------------------------------------------------------------------------------------------
     Generate Petsc Plex
       Get all Nodes in model, record coordinates in a correctly formatted array
@@ -282,9 +277,9 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
     */
 	
 	/* Caluculate cell and vertex sizes */
-	ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &senses);CHKERRQ(ierr);
+	ierr = EG_getTopology(model, &geom, &oclass, &mtype, NULL, &nbodies, &bodies, &senses); CHKERRQ(ierr);
 	
-    ierr = PetscHMapICreate(&edgeMap);CHKERRQ(ierr);	
+    ierr = PetscHMapICreate(&edgeMap); CHKERRQ(ierr);	
 	ierr = PetscHMapICreate(&bodyIndexMap); CHKERRQ(ierr);
 	ierr = PetscHMapICreate(&bodyVertexMap); CHKERRQ(ierr);
 	ierr = PetscHMapICreate(&bodyEdgeMap); CHKERRQ(ierr);
@@ -293,7 +288,7 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	
 	for (b = 0; b < nbodies; ++b) {
       ego           body = bodies[b];
-	  int           Nv, Ne, Nf;
+	  int           Nf, Ne, Nv;
 	  PetscHashIter BIiter, BViter, BEiter, BEGiter, BFiter, EMiter;
 	  PetscBool     BIfound, BVfound, BEfound, BEGfound, BFfound, EMfound;
 	  
@@ -310,25 +305,17 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	  if (!BFfound)  {ierr = PetscHMapISet(bodyFaceMap, b, numFaces); CHKERRQ(ierr);}
 	  
 	  
-	  ierr = EG_getBodyTopos(body, NULL, FACE, &Nf, &fobjs); //CHKERRQ(ierr);	  
-	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); //CHKERRQ(ierr);
-	  ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs); //CHKERRQ(ierr);
+	  ierr = EG_getBodyTopos(body, NULL, FACE, &Nf, &fobjs); CHKERRQ(ierr);	  
+	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
+	  ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs); CHKERRQ(ierr);
+	  EG_free(fobjs);
 	  EG_free(eobjs);
 	  EG_free(nobjs);
 	  
-	  // Loop to check out how data is pulled by EG_getBodyTopos() ??
-	  for (int f = 0; f < Nf; ++f) {
-	    ego face = fobjs[f];
-        ierr = PetscPrintf(PETSC_COMM_SELF, "[ f = %d ]\n", f); CHKERRQ(ierr);
-	  	//ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs);	// Suppected issue
-	  	ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &senses);CHKERRQ(ierr);
-	  	ierr = PetscPrintf(PETSC_COMM_SELF, "[ Ne = %d ]\n", Ne); CHKERRQ(ierr);
-	  }
-	  EG_free(fobjs);
-	  EG_free(eobjs);
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "[ Nf = %d :: Ne = %d :: Nv = %d]\n", Nf, Ne, Nv); CHKERRQ(ierr);
 	  
 	  /* Remove DEGENERATE EDGES from Edge count */
-	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); //CHKERRQ(ierr);
+	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
 	  int Netemp = 0;
 	  for (int e = 0; e < Ne; ++e) {
 		  ego     edge = eobjs[e];
@@ -348,16 +335,17 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 		  }
 	  }
 	  EG_free(eobjs);
+	  
 	  ierr = PetscPrintf(PETSC_COMM_SELF, "[ line 336 ]\n"); CHKERRQ(ierr);
 	  
 	  /* Determine Number of Cells */
 	  ierr = EG_getBodyTopos(body, NULL, FACE, &Nf, &fobjs); CHKERRQ(ierr);
-	  ierr = PetscPrintf(PETSC_COMM_SELF, "  Nf = %d \n", Nf);CHKERRQ(ierr);
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "  Nf = %d \n", Nf); CHKERRQ(ierr);
 	  for (int f = 0; f < Nf; ++f) {
         ego face = fobjs[f];
 	  	
 	  	ierr = PetscPrintf(PETSC_COMM_SELF, "  f = %d \n", f); CHKERRQ(ierr);		
-	  	ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs); //CHKERRQ(ierr);	
+	  	ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs); CHKERRQ(ierr);	
         //ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &senses);CHKERRQ(ierr);		
         ierr = PetscPrintf(PETSC_COMM_SELF, "  Ne = %d \n", Ne); CHKERRQ(ierr);
 	  
@@ -367,8 +355,7 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	  	  ego   topRef, prev, next;
 	  	  
 	  	  ierr = PetscPrintf(PETSC_COMM_SELF, "  e = %d \n", e); CHKERRQ(ierr);
-	  	  //if (eobjs[e] == NULL) {ierr = PetscPrintf(PETSC_COMM_SELF, "[ eobjs[e] = NULL ]\n"); CHKERRQ(ierr);}
-	  	  ierr = EG_getInfo(edge, &oclass, &mtype, &topRef, &prev, &next); //CHKERRQ(ierr);
+	  	  ierr = EG_getInfo(edge, &oclass, &mtype, &topRef, &prev, &next); CHKERRQ(ierr);
 	  	  if (mtype != DEGENERATE) {++edgeTemp;}
 	  	}
 	  	numCells += (2 * edgeTemp);
@@ -398,13 +385,13 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	/* Get Vertex Coordinates and Set up Cells */
 	for (b = 0; b < nbodies; ++b) {
 	  ego           body = bodies[b];
-	  int           id, Nv, Ne, Nf; 
+	  int           Nf, Ne, Nv; 
 	  PetscInt      bodyVertexIndexStart, bodyEdgeIndexStart, bodyEdgeGlobalIndexStart, bodyFaceIndexStart;
 	  PetscHashIter BViter, BEiter, BEGiter, BFiter, EMiter;
 	  PetscBool     BVfound, BEfound, BEGfound, BFfound, EMfound;
 	  
 	  /* Vertices on Current Body */
-	  ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs); CHKERRQ(ierr);
+	  ierr = EG_getBodyTopos(body, NULL, NODE, &Nv, &nobjs); //CHKERRQ(ierr);
 	  
 	  ierr = PetscHMapIFind(bodyVertexMap, b, &BViter, &BVfound); CHKERRQ(ierr);
 	  if (!BVfound) {SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_SUP, "Body %d not found in bodyVertexMap", b);}	  
@@ -413,22 +400,22 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	  for (int v = 0; v < Nv; ++v) {
 	    ego    vertex = nobjs[v];
 		double limits[4];
-		int    dummy;
+		int    id, dummy;
 		
 		ierr = EG_getTopology(vertex, &geom, &oclass, &mtype, limits, &dummy, &mobjs, &senses); CHKERRQ(ierr);
 		id = EG_indexBodyTopo(body, vertex); //CHKERRQ(ierr);
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  coords(%d) filled \n", bodyVertexIndexStart + id - 1);CHKERRQ(ierr);
+		ierr = PetscPrintf(PETSC_COMM_SELF, "  coords(%d) filled \n", bodyVertexIndexStart + id - 1); CHKERRQ(ierr);
 		coords[(bodyVertexIndexStart + id - 1)*cdim + 0] = limits[0];
 		coords[(bodyVertexIndexStart + id - 1)*cdim + 1] = limits[1];
 		coords[(bodyVertexIndexStart + id - 1)*cdim + 2] = limits[2];
 	  }
-	  ierr = PetscPrintf(PETSC_COMM_SELF, "[AFTER EG_free(nobjs) line 413\n");CHKERRQ(ierr);
+	  ierr = PetscPrintf(PETSC_COMM_SELF, "[AFTER EG_free(nobjs) line 413\n"); CHKERRQ(ierr);
 	  EG_free(nobjs);
-	  EG_free(mobjs);
-	  EG_free(senses);
+	  //EG_free(mobjs);
+	  //EG_free(senses);
 	  
 	  /* Edge Midpoint Vertices on Current Body */
-	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); //CHKERRQ(ierr);
+	  ierr = EG_getBodyTopos(body, NULL, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
 	  
 	  ierr = PetscHMapIFind(bodyEdgeMap, b, &BEiter, &BEfound); CHKERRQ(ierr);
 	  if (!BEfound) {SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_SUP, "Body %d not found in bodyEdgeMap", b);}	  
@@ -485,7 +472,8 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 		avgUV[0] = (range[0] + range[1]) / 2.;
 		avgUV[1] = (range[2] + range[3]) / 2.;
 		ierr = EG_evaluate(face, avgUV, cntrPnt); CHKERRQ(ierr);
-		ierr = PetscPrintf(PETSC_COMM_SELF, "  coords(%d) filled \n", numVertices + numEdges + bodyFaceIndexStart + id - 1);CHKERRQ(ierr);
+		ierr = PetscPrintf(PETSC_COMM_SELF, "  coords(%d) filled \n", numVertices + numEdges + bodyFaceIndexStart + id - 1); CHKERRQ(ierr);
+		ierr = PetscPrintf(PETSC_COMM_SELF, "     [x, y, z) = [%lf, %lf, %lf] \n", cntrPnt[0], cntrPnt[1], cntrPnt[2]); CHKERRQ(ierr);
 		coords[(numVertices + numEdges + bodyFaceIndexStart + id - 1)*cdim + 0] = cntrPnt[0];
 		coords[(numVertices + numEdges + bodyFaceIndexStart + id - 1)*cdim + 1] = cntrPnt[1];
 		coords[(numVertices + numEdges + bodyFaceIndexStart + id - 1)*cdim + 2] = cntrPnt[2];
@@ -493,13 +481,12 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	  EG_free(fobjs);
 	  
 	  /* Define Cells :: Note - This could be incorporated in the Face Midpoint Vertices Loop but was kept separate for clarity */
-	  ierr = EG_getBodyTopos(body, NULL, FACE, &Nf, &fobjs); //CHKERRQ(ierr);
-	  
+	  ierr = EG_getBodyTopos(body, NULL, FACE, &Nf, &fobjs); 
 	  for (int f = 0; f < Nf; ++f) {
 		ego           face = fobjs[f];
 		//ego          *lobjs;
 		int           fID, midFaceID, midPntID, startID, endID, Nl;
-		//int          *eSenses, *lSenses;
+		int          *lSenses;
 		
 		fID = EG_indexBodyTopo(body, face); //CHKERRQ(ierr);
 		midFaceID = numVertices + numEdges + bodyFaceIndexStart + fID - 1;
@@ -512,17 +499,18 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 		/*            2) Create the initial surface mesh via a 2D mesher :: Currently not availble (?future?)  */
 		/*               May I suggest the XXXX as a starting point?                                           */
 		
-		ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Nl, &lobjs, &lSenses); //CHKERRQ(ierr);
-		//ierr = EG_getBodyTopos(body, face, LOOP, &Nl, &lobjs); //CHKERRQ(ierr);
+		ierr = EG_getTopology(face, &geom, &oclass, &mtype, NULL, &Nl, &objs, &lSenses); //CHKERRQ(ierr);
+		//ierr = EG_getBodyTopos(body, face, LOOP, &Nl, &objs); //CHKERRQ(ierr);
 		
-		if (Nl > 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Face has %d Loops. Can only handle Faces with 1 Loop. Please use --dm_plex_egads_with_tess = 1 Option", Nl);
+	    if (Nl > 1) SETERRQ1(PETSC_COMM_SELF, PETSC_ERR_PLIB, "Face has %d Loops. Can only handle Faces with 1 Loop. Please use --dm_plex_egads_with_tess = 1 Option", Nl);
 		ierr = PetscPrintf(PETSC_COMM_SELF, "  Nl = %d \n", Nl);CHKERRQ(ierr);
 		for (int l = 0; l < Nl; ++l) {
-          ego      loop = lobjs[l];
-		  int      lid;
+          ego      loop = objs[l];
+		  int      lid, *eSenses;
 		  lid = EG_indexBodyTopo(body, loop);
 		  
           ierr = EG_getTopology(loop, &geom, &oclass, &mtype, NULL, &Ne, &eobjs, &eSenses); //CHKERRQ(ierr);
+		  //ierr = EG_getBodyTopos(body, loop, EDGE, &Ne, &eobjs);
 		  
 		  ierr = PetscPrintf(PETSC_COMM_SELF, "  l = %d \n", l); //CHKERRQ(ierr);
 		  ierr = PetscPrintf(PETSC_COMM_SELF, "  lid = %d \n", lid); //CHKERRQ(ierr);
@@ -530,8 +518,11 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 		  for (int e = 0; e < Ne; ++e) {
 		    ego   edge = eobjs[e];
 		    ego   topRef, prev, next;
+			ego   *nobjs;
 		    int   eid, eOffset;
-		  
+		    
+			ierr = PetscPrintf(PETSC_COMM_SELF, "    e = %d \n", e); //CHKERRQ(ierr);
+			
 		    ierr = EG_getInfo(edge, &oclass, &mtype, &topRef, &prev, &next); //CHKERRQ(ierr);
 			eid = EG_indexBodyTopo(body, edge);	// WHY IS THIS GIVING A NEGATIVE NUMBER ON THE 3rd LOOP??????
 		    if (mtype == DEGENERATE) {
@@ -539,17 +530,21 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 				continue;
 			}
 		    //eid = EG_indexBodyTopo(body, edge);
-		  
+			ierr = PetscPrintf(PETSC_COMM_SELF, "    eid = %d \n", eid); //CHKERRQ(ierr);
+			
 		    /* get relative offset from globalEdgeID Vector */
 		    ierr = PetscHMapIFind(edgeMap, bodyEdgeGlobalIndexStart + eid - 1, &EMiter, &EMfound); CHKERRQ(ierr);
 	        if (!EMfound) {SETERRQ3(PETSC_COMM_SELF, PETSC_ERR_SUP, "Edge %d of Body %d not found in edgeMap. Global Edge ID :: %d", eid, b, bodyEdgeGlobalIndexStart + eid - 1);}	  
 	        ierr = PetscHMapIGet(edgeMap, bodyEdgeGlobalIndexStart + eid - 1, &eOffset); CHKERRQ(ierr);
 			
 			ierr = PetscPrintf(PETSC_COMM_SELF, "    bodyEdgeGlobalIndexStart = %d \n", bodyEdgeGlobalIndexStart); CHKERRQ(ierr);
+			ierr = PetscPrintf(PETSC_COMM_SELF, "    eOffset = %d \n", eOffset); //CHKERRQ(ierr);
+			ierr = PetscPrintf(PETSC_COMM_SELF, "    eSenses = %d \n", eSenses[e]); //CHKERRQ(ierr);
 			
 			midPntID = numVertices + bodyEdgeIndexStart + eOffset - 1;
 		  
-		    ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses);CHKERRQ(ierr);
+		    ierr = EG_getTopology(edge, &geom, &oclass, &mtype, NULL, &Nv, &nobjs, &senses); CHKERRQ(ierr);
+			
 		    if (eSenses[e] > 0) { startID = EG_indexBodyTopo(body, nobjs[0]); endID = EG_indexBodyTopo(body, nobjs[1]); }
 		    else { startID = EG_indexBodyTopo(body, nobjs[1]); endID = EG_indexBodyTopo(body, nobjs[0]); }
 			
@@ -576,13 +571,12 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 			
 			ierr = PetscPrintf(PETSC_COMM_SELF, "[AFTER EG_free(nobjs) line 532\n");CHKERRQ(ierr);
 			//EG_free(nobjs);
+			//EG_free(lobjs);
 		  }
 		  ierr = PetscPrintf(PETSC_COMM_SELF, "[AFTER EG_free(eobjs) line 535\n");CHKERRQ(ierr);
 		  EG_free(eobjs);
-		  EG_free(eSenses);
 		}
-		EG_free(lobjs);
-		EG_free(lSenses);
+		EG_free(objs);
 	  }
 	  ierr = PetscPrintf(PETSC_COMM_SELF, "[AFTER EG_free(fobjs) line 538\n");CHKERRQ(ierr);
 	  EG_free(fobjs);
@@ -635,6 +629,7 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
   cellCntr = 0;
   for (b = 0; b < nbodies; ++b) {
     ego           body = bodies[b];
+	ego          *fobjs;
 	PetscInt      Nv, Ne, Nf, bodyVertexIndexStart, bodyEdgeIndexStart, bodyEdgeGlobalIndexStart, bodyFaceIndexStart;
 	PetscHashIter BViter, BEiter, BEGiter, BFiter, EMiter;
 	PetscBool     BVfound, BEfound, BEGfound, BFfound, EMfound;
@@ -658,12 +653,14 @@ static PetscErrorCode DMPlexCreateEGADS(MPI_Comm comm, ego context, ego model, D
 	ierr = EG_getBodyTopos(body, NULL, FACE,  &Nf, &fobjs); CHKERRQ(ierr);
 	for (int f = 0; f < Nf; ++f) {
 	  ego   face = fobjs[f];
+	  ego  *eobjs;
       int   fID;
 	  
 	  fID  = EG_indexBodyTopo(body, face); CHKERRQ(ierr);
       ierr = EG_getBodyTopos(body, face, EDGE, &Ne, &eobjs); CHKERRQ(ierr);
 	  for (int e = 0; e < Ne; ++e) {
         ego           edge = eobjs[e];
+        ego          *nobjs;
 		ego           topRef, prev, next;
         int           eid, eOffset;
 		

@@ -50,62 +50,44 @@ int main(int argc, char *argv[])
   ierr = MPI_Comm_rank(comm, &rank);CHKERRQ(ierr);
   if (!rank) {
     ierr = DMPlexCreateEGADSFromFile(comm, ctx.filename, &dmNozzle); CHKERRQ(ierr);
-  }	// Move this??
+  }
 
   /* View Current State of Plex */
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmNozzle \n");CHKERRQ(ierr);
   ierr = DMView(dmNozzle, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
   
-  ///////
-//  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-//  ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-//  ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-//  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  
-  //ierr = DMSetFromOptions(dm);CHKERRQ(ierr);
+  // Refines Surface Mesh per option -dm_refine
   ierr = DMSetFromOptions(dmNozzle); CHKERRQ(ierr);
   ierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view");CHKERRQ(ierr);
   
-  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n PRE-TETGEN \n");CHKERRQ(ierr);
-  
   // Generate Volumetric Mesh using TETGEN - Remove when not using Tetgen
-  ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);
-  
-  //ierr = PetscPrintf(PETSC_COMM_SELF, "\n POST-TETGEN \n");CHKERRQ(ierr);
-  
+  ierr = DMPlexGenerate(dmNozzle, "tetgen", PETSC_TRUE, &dmMesh); CHKERRQ(ierr);  
   
   /* Inflate Mesh to EGADS Geometry */
   //ierr = DMPlexInflateToGeomModel(dmMesh); CHKERRQ(ierr);
   //ierr = PetscPrintf(PETSC_COMM_SELF, "\n Inflated dmMesh \n");CHKERRQ(ierr);
  
   /* Output State of DMLabels for dmMesh after Volumetric Mesh generated */
-
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n dmMesh \n");CHKERRQ(ierr);
   ierr = DMView(dmMesh, PETSC_VIEWER_STDOUT_SELF); CHKERRQ(ierr);
   ierr = PetscPrintf(PETSC_COMM_SELF, "\n");CHKERRQ(ierr);
-/* ---  
-  ierr = DMGetLabel(dmMesh, "EGADS Body ID", &bodyLabel);CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Face ID", &faceLabel);CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Edge ID", &edgeLabel);CHKERRQ(ierr);
-  ierr = DMGetLabel(dmMesh, "EGADS Vertex ID", &vertexLabel);CHKERRQ(ierr);
-  //
-  ierr = DMLabelView(bodyLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(faceLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(edgeLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
-  ierr = DMLabelView(vertexLabel, PETSC_VIEWER_STDOUT_WORLD);CHKERRQ(ierr);
   
-  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr);
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view2");CHKERRQ(ierr);
   //Bierr = DMViewFromOptions(dmNozzle, NULL, "-dm_view3");CHKERRQ(ierr);
+  
+  // Refine Volumetric Mesh per option -dm_refine
+  ierr = DMSetFromOptions(dmMesh); CHKERRQ(ierr);
+  ierr = DMViewFromOptions(dmMesh, NULL, "-dm_view3");CHKERRQ(ierr); 
   
   // Calculate 2D :: Surface Area;  3D :: Volume & Surface Area
   //BsurfArea(dmNozzle);
-  surfArea(dmMesh);
+  //surfArea(dmMesh);
  
   //ierr = DMDestroy(&dm);CHKERRQ(ierr);
-  ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
+  //ierr = DMDestroy(&dmMesh);CHKERRQ(ierr);
   //Bierr = DMDestroy(&dmNozzle);CHKERRQ(ierr);		// Strange error
---- */
+
   /* Close EGADSlite file */
   //ierr = EG_close(context);CHKERRQ(ierr);
   ierr = PetscFinalize();

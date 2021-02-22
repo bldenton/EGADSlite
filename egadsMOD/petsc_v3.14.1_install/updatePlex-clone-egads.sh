@@ -3,8 +3,8 @@
 
 echo "[Updating plexegads.c in Petsc v3.14.1]"
 # Copy plexegads.c to correct location
-ORIG_DIR=/mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMOD
-cp $ORIG_DIR/petsc_v3.14.1_install/plexegads_20201114.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.14.1-clone/src/dm/impls/plex/plexegads.c
+ORIG_DIR=/mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADS-dev/egadsMOD
+cp $ORIG_DIR/petsc_v3.14.1_install/plexegads_20210219.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.14.1-clone/src/dm/impls/plex/plexegads.c
 #cp $ORIG_DIR/petsc_v3.14.1_install/plexegads_20201114.c $UBCESLAB_SWENV_PREFIX/sourcesdir/petsc/petsc/src/dm/impls/plex/plexegads.c
 #cp /mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMOD/plexegads.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.12.4/src/dm/impls/plex/plexegads.c
 #cp /mnt/c/Users/Brandon/Documents/School/Dissertation/Software/EGADSlite/egadsMOD/plexegads_old_20200607.c $UBCESLAB_SWENV_PREFIX/builddir/petsc-3.12.4/src/dm/impls/plex/plexegads.c

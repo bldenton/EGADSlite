@@ -20,7 +20,7 @@ The reorganization provided in this repository is intended to allow for:
 
 # Installation
 
-Compiling of the EGADS/EGADSlite libraries are as follows
+Compiling of the EGADS/EGADSlite libraries are as follow
 
 ## Requirements
 
@@ -30,10 +30,10 @@ Compiling of the EGADS/EGADSlite libraries are as follows
 	- Optional Software
 	  - Python
   - EGADS
-    - Require Software
+    - Required Software
 	  - C Compiler
       - [OpenCascade v7.5.0](https://dev.opencascade.org/)
-	    - Acquistions options outlined in `./OpenCascade-v7.5.0/OpenCascadev7.5.0.txt` of this repository
+	    - Acquistion options are outlined in `./OpenCascade-v7.5.0/OpenCascadev7.5.0.txt` of this repository
 	    - OpenCascade compilation requires the following:
 	      - GNU gcc 4.3+ or LLVM CLang 3.6+
 		  - OpenGL 3.3+ or OpenGL ES 2.0+
@@ -41,7 +41,7 @@ Compiling of the EGADS/EGADSlite libraries are as follows
 		  - Tcl/Tk 8.6.3+ or ActiveTcl 8.6
 		  - Doxygen 1.8.5+
 		  - CMake
-		  - Note: For optional additional 3rd Party libraries and tools see [here](https://old.opencascade.com/doc/occt-7.5.0/overview/html/index.html)
+		  - Note: For optional additional 3rd Party libraries and tools, see [here](https://old.opencascade.com/doc/occt-7.5.0/overview/html/index.html)
 	- Optional Software
 	  - Python
   - Petsc Integration
@@ -50,12 +50,12 @@ Compiling of the EGADS/EGADSlite libraries are as follows
 
 ## OpenCascade
 
-Compilation & Installation of OpenCascade is required **only** if compiling EGADS library. The EGADSlite library does not use OpenCascade.
+Compilation & Installation of OpenCascade is required **only** if compiling the EGADS library. The EGADSlite library does not use OpenCascade.
 
   - Unzip tarball
     - See `./OpenCascade-v7.5.0/OpenCascadev7.5.0.txt` for options on getting the tarball or cloning repository
     - `tar -zxf opencascade-7.5.0.tgz` or clone `git clone https://github.com/bldenton/oce`
-  - Create build director (Out of source builds are highly recommended)
+  - Create build directory (Out of source builds are highly recommended)
     - `mkdir build`
   - Go to build directory & run cmake
     - `cd build`

@@ -1,0 +1,47 @@
+#LINUX 64 bit:
+#
+
+INCS    = -I$(CASROOT)/inc -I$(CASROOT)/include/opencascade -I$(CASROOT) -I../include
+LIBPATH = -L$(CASROOT)/$(CASARCH)/lib -L$(ESP_ROOT)/lib
+ifeq ($(CASREV),6.8)
+LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKPShape -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet -lPTKernel
+endif
+ifeq ($(CASREV),7.3)
+CPDS    = -std=c++11
+LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet 
+endif
+ifeq ($(CASREV),7.4)
+CPDS    = -std=c++11
+LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet 
+endif
+ifeq ($(CASREV),7.5)
+CPDS    = -std=c++11
+LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet 
+endif
+
+LIBS    += -pthread -lm
+WARNINGS = -Wall -Wno-dangling-else -Wno-parentheses -Wno-unused-result -Wno-format-truncation
+DEFINE   = -DREVISION=$(CASREV)
+CXX      = g++ -m64 -g $(ESPFLAGS)
+CPPOPT   = -O -fPIC -DLIN -DLININTEL -DCSFDB -DOCC_CONVERT_SIGNALS -D_GNU_SOURCE=1 -D_OCC64 -DNDEBUG -DNo_Exception -DHAVE_CONFIG_H $(WARNINGS) $(CPDS)
+CC       = gcc -m64 -g $(ESPFLAGS)
+COPTS    = -O -fno-unit-at-a-time -fPIC $(WARNINGS)
+OCOPT    = -O -fno-unit-at-a-time -fPIC $(WARNINGS)
+ifeq ($(EFCOMP),gfortran)
+FCOMP    = gfortran -m64 -g $(ESPFFLAGS)
+FOPTS    = -O -fPIC -frecursive -fcray-pointer
+endif
+ifeq ($(EFCOMP),ifort)
+FCOMP    = ifort -m64 -g -traceback
+FOPTS    = -O -fPIC -recursive
+endif
+LOPTS  = rs
+RANLB  =
+SHLIB  = libegads.so
+OSHLIB = libocsm.so
+CSHLIB = libcaps.so
+SOFLGS = -shared -Wl,-no-undefined 
+FSOFLG = -shared -Wl,-no-undefined 
+RPATH  = -lrt
+CPPSLB = -lstdc++
+LINT   = splint -usedef -realcompare +relaxtypes -compdef -nullassign -retvalint -usereleased -mustfreeonly -branchstate -temptrans -nullstate -compmempass -onlytrans -globstate -statictrans -initsize -type -fixedformalarray -shiftnegative -compdestroy -unqualifiedtrans -warnposix -predboolint -Dstrcasecmp=strcmp -Dstrncasecmp=strncmp -Dstrtok_r=strtok

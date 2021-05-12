@@ -1,0 +1,5 @@
+#!/bin/sh
+
+main_dir=${main_dir}/main
+main_program_base_name=uvmap
+exe_base_name=uvmap

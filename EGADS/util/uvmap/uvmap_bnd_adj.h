@@ -1,0 +1,17 @@
+void uvmap_bnd_adj (
+  INT_ icc,
+  INT_ nbedge,
+  INT_ nnodei,
+  INT_2D *ibeibe,
+  INT_ *ibfibe,
+  INT_ *ibfin,
+  INT_ *iccibe,
+  INT_2D *inibe,
+  INT_3D *inibf,
+  INT_ *libfin,
+  INT_ *mben_disc,
+  double *dumax,
+  double urelaxb,
+  double urelaxb_i,
+  double w_ortho_i,
+  DOUBLE_2D *u);

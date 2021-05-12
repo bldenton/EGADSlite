@@ -1,0 +1,57 @@
+SimSys Software Open License
+
+Copyright © 1994-2020, David L. Marcum
+All rights reserved.
+
+This License applies to the following Software:
+
+     bsurf2, sgr, sm, ugc, uvmap, xplt2, and grid_tools (checkgrid, extract, 
+     gridmerge, scalegrid, sgridmerge, surftool, and voltool) in executable 
+     form along with their documentation.
+
+     bl1, bsurf2, egads_aflr4, mesh_ug_io, sgr, ug, ug2, ug3, ug_cpp, ug_gq, 
+     ug_io, ug_mp, ug_mpi, ug_sd, uvmap, xplt2, XW, and grid_tools (checkgrid, 
+     extract, gridmerge, scalegrid, sgridmerge, surftool, and voltool) in 
+     library form or source code form.
+
+Third party software used by the SimSys Software are covered under separate 
+individual open licenses that apply to cgns, libmeshb, and tetgen in library 
+form or source code form.
+
+Free use of the Software is permitted, provided that the following conditions 
+are met:
+
+1. Redistributions of the Software, with or without modification, in whole or 
+   in part, in any form, must retain this License with the above copyright 
+   notice, this list of conditions and the following disclaimers in the 
+   documentation and/or other materials provided with the distribution.
+
+2. Redistributions of the Software, with or without modification, in whole or 
+   in part, in any form, must be freely available and licensed under this 
+   original License. The Government may add additional restrictions to their 
+   modified and redistributed software as required by Law. However, those 
+   restrictions do not apply to the original software distribution.
+
+3. Redistribution of the Software in source code form, including any 
+   modifications, may not be intentionally obfuscated.
+
+4. Other code may make use of the Software, in whole or in part provided that 
+   it does not apply any restriction to the Software other than outlined above.
+
+THIS SOFTWARE IS PROVIDED BY MISSISSIPPI STATE UNIVERSITY, THE AUTHORS, AND 
+CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT 
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL MISSISSIPPI STATE 
+UNIVERSITY, THE AUTHORS, OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, 
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT 
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR 
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF 
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE 
+OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF 
+ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+
+
+
+
+                                                                 31 October 2020

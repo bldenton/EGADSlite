@@ -1,0 +1,58 @@
+
+================================================================
+uvmap RELEASE NOTES: 02/18/21 RELEASE VERSION 1.6.1
+================================================================
+
+Enhancements/ Additions:
+------------------------
+
+* Added new xyz scaling for uv solver.
+
+Bugs Fixed:
+-----------
+
+* 
+
+================================================================
+uvmap RELEASE NOTES: 10/21/20 RELEASE VERSION 1.5.2
+================================================================
+
+Enhancements/ Additions:
+------------------------
+
+* Minor changes to remove compiler warnings.
+
+Bugs Fixed:
+-----------
+
+* 
+
+================================================================
+uvmap RELEASE NOTES: 07/04/20 RELEASE VERSION 1.4.4
+================================================================
+
+Enhancements/ Additions:
+------------------------
+
+* Replace sprintf with Bob's snprintf.
+
+Bugs Fixed:
+-----------
+
+* Correct EG_uvmap_find_uv call to uvmap_find_uv.
+
+================================================================
+uvmap RELEASE NOTES: 06/16/20 RELEASE VERSION 1.3.24
+================================================================
+
+Enhancements/ Additions:
+------------------------
+
+* Create separate UVMAP library for uv mapping generation from
+  AFLR4 and UG2 library routines.
+
+Bugs Fixed:
+-----------
+
+* 
+

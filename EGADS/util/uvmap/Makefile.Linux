@@ -1,0 +1,22 @@
+#Makefile
+
+ARCH_TYPE = Linux-x86-64
+DEBUG_FLAGS = -g -W -Wall
+CC_FLAGS = -m64 -fPIC
+CPP_FLAGS = -m64 -fPIC
+LD_CC_FLAGS = $(CC_FLAGS)
+LD_CPP_FLAGS = $(CPP_FLAGS)
+CC_OPT_0 = -O0
+CC_OPT_2 = -O3
+CPP_OPT_0 = -O0
+CPP_OPT_2 = -O3
+CC = gcc
+CPP = g++
+LD_CC = $(CC)
+LD_CPP = $(CPP)
+LIB_PREFIX = lib
+LIB_SUFFIX = .a
+
+include Makefile.common
+
+# DO NOT DELETE

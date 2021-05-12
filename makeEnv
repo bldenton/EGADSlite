@@ -227,6 +227,7 @@ fi
 #
 # do we have a python?
 #
+echo
 PYTH=UNKNOWN
 if [ ! -n "$PYTHONINC" ]; then
 	PYTHONINC=UNKNOWN
@@ -237,25 +238,15 @@ fi
 pyt="`which python`"
 if [ -n "$pyt" ]; then
 	PYTH=python
+	echo "Info: Python exec $pyt found!"
 fi
 
-echo
 if [ "$PYTH" != UNKNOWN ]; then
 	if [ "$PYTHONINC" == UNKNOWN ]; then
 		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('INCLUDEPY'))\""
 		pcmd="python -c $pscr"
 		eval PYTHINC=\`$pcmd\`
 
-		if [ -f "$PYTHINC/Python.h" ]; then
-			PYTHONINC=$PYTHINC
-			echo "Info: Python header $PYTHONINC/Python.h found!"
-		fi
-	fi
-
-	if [ "$PYTHONINC" == UNKNOWN ]; then
-		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_path('platinclude'))\""
-		pcmd="python -c $pscr"
-		eval PYTHINC=\`$pcmd\`
 		if [ -f "$PYTHINC/Python.h" ]; then
 			PYTHONINC=$PYTHINC
 			echo "Info: Python header $PYTHONINC/Python.h found!"
@@ -316,23 +307,6 @@ if [ "$PYTH" != UNKNOWN ]; then
 
 	if [ "$PYTHONLIB" == UNKNOWN ]; then
 		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_config_var('LIBDIR'))\""
-		pcmd="python -c $pscr"
-		eval plp=\`$pcmd\`
-
-		if [ -f "$plp/$pso" ]; then
-			PYTHONLIB="-L$plp -l$pllb"
-			echo "Info: Python library $plp/$pso found!"
-		elif [ -f "$plp/$pdy" ]; then
-			PYTHONLIB="-L$plp -l$pllb"
-			echo "Info: Python library $plp/$pdy found!"
-		#elif [ -f "$plp/$plb" ]; then
-		#	PYTHONLIB="-L$plp -l$pllb"
-		#	echo "Info: Python library $plb found!"
-		fi
-	fi
-
-	if [ "$PYTHONLIB" == UNKNOWN ]; then
-		pscr="\"from __future__ import print_function; import distutils.sysconfig as sysconfig; print(sysconfig.get_path('platstdlib'))\""
 		pcmd="python -c $pscr"
 		eval plp=\`$pcmd\`
 
@@ -468,16 +442,16 @@ else
 fi
 if [ "$PYTH" != UNKNOWN ]; then
 	if [ "$PYTH" != ERROR ]; then
-		echo "export PYTHONINC="$PYTHONINC             >> config/iESPenv.sh
+		echo "export PYTHONINC=\""$PYTHONINC\"         >> config/iESPenv.sh
 		echo "export PYTHONLIB=\""$PYTHONLIB\"         >> config/iESPenv.sh
 	else
-		echo "#export PYTHONINC="$PYTHONINC            >> config/iESPenv.sh
+		echo "#export PYTHONINC=\""$PYTHONINC\"        >> config/iESPenv.sh
 		echo "#export PYTHONLIB=\""$PYTHONLIB\"        >> config/iESPenv.sh
 	fi
-	if [ -z "$PYTHONPATH" ]; then
-		echo "export PYTHONPATH=$BASE/lib"               >> config/iESPenv.sh
+        if [ -z "$PYTHONPATH" ]; then
+		echo "export PYTHONPATH=$BASE/pyESP"           >> config/iESPenv.sh
 	else
-		echo "export PYTHONPATH=$BASE/lib":'$PYTHONPATH' >> config/iESPenv.sh
+		echo "export PYTHONPATH=$BASE/pyESP":'$PYTHONPATH' >> config/iESPenv.sh
 	fi
 fi
 if [ "$EFCOMP" != UNKNOWN ]; then
@@ -516,7 +490,7 @@ fi
 if [ "$TETGEN" != UNKNOWN ]; then
 	echo "export TETGEN=$TETGEN" >> config/iESPenv.sh
 else
-	echo "#export TETGEN=$HOME/Projects/TetGen/tetgen1.5.1" >> config/iESPenv.sh
+	echo "#export TETGEN=$HOME/Projects/TetGen/tetgen1.6.0" >> config/iESPenv.sh
 fi
 echo "#export AWAVE=$HOME/Projects/awave/awavemod.f"    >> config/iESPenv.sh
 if [ "$ARCH" = Darwin ]; then
@@ -545,16 +519,16 @@ else
 fi
 if [ "$PYTH" != UNKNOWN ]; then
 	if [ "$PYTH" != ERROR ]; then
-		echo "setenv PYTHONINC "$PYTHONINC             >> config/iESPenv.csh
+		echo "setenv PYTHONINC \""$PYTHONINC\"         >> config/iESPenv.csh
 		echo "setenv PYTHONLIB \""$PYTHONLIB\"         >> config/iESPenv.csh
 	else
-		echo "#setenv PYTHONINC "$PYTHONINC            >> config/iESPenv.csh
+		echo "#setenv PYTHONINC \""$PYTHONINC\"        >> config/iESPenv.csh
 		echo "#setenv PYTHONLIB \""$PYTHONLIB\"        >> config/iESPenv.csh
 	fi
 	if [ -z "$PYTHONPATH" ]; then
-		echo "setenv PYTHONPATH $BASE/lib"               >> config/iESPenv.csh
+		echo "setenv PYTHONPATH $BASE/pyESP"           >> config/iESPenv.csh
 	else
-		echo "setenv PYTHONPATH $BASE/lib":'$PYTHONPATH' >> config/iESPenv.csh
+		echo "setenv PYTHONPATH $BASE/pyESP":'$PYTHONPATH' >> config/iESPenv.csh
 	fi
 fi
 if [ "$EFCOMP" != UNKNOWN ]; then
@@ -593,7 +567,7 @@ fi
 if [ "$TETGEN" != UNKNOWN ]; then
 	echo "setenv TETGEN $TETGEN" >> config/iESPenv.csh
 else
-	echo "#setenv TETGEN $HOME/Projects/TetGen/tetgen1.5.1" >> config/iESPenv.csh
+	echo "#setenv TETGEN $HOME/Projects/TetGen/tetgen1.6.0" >> config/iESPenv.csh
 fi
 echo "#setenv AWAVE $HOME/Projects/awave/awavemod.f"    >> config/iESPenv.csh
 if [ "$ARCH" = Darwin ]; then

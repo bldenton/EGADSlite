@@ -28,34 +28,34 @@ default:	$(LDIR)/libegadslite.so    $(LDIR)/libegadslitestatic.a
 endif
 
 $(LDIR)/libegadslite.so:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
-				liteTessInp.o egadsRobust_lite.o emp_lite.o evaLite.o \
+				liteTessInp.o egadsRobust.o emp.o evaLite.o \
 				ratLite.o liteRegQuads.o
 	touch $(LDIR)/libegadslite.so
 	rm $(LDIR)/libegadslite.so
 	(cd $(ODIR); $(CC) -shared -Wl,-no-undefined \
 		-o $(LDIR)/libegadslite.so $(OBJS) liteTess.o liteTris.o \
-		liteQuads.o liteTessInp.o egadsRobust_lite.o emp_lite.o evaLite.o \
+		liteQuads.o liteTessInp.o egadsRobust.o emp.o evaLite.o \
 		ratLite.o liteRegQuads.o -lpthread -lm )
 
 $(LDIR)/libegadslite.dylib:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
-				liteTessInp.o egadsRobust_lite.o emp_lite.o evaLite.o \
+				liteTessInp.o egadsRobust.o emp.o evaLite.o \
 				ratLite.o liteRegQuads.o
 	touch $(LDIR)/libegadslite.dylib
 	rm $(LDIR)/libegadslite.dylib
 	(cd $(ODIR); $(CC) -dynamiclib -o $(LDIR)/libegadslite.dylib \
                 $(OBJS) liteTess.o liteTris.o liteQuads.o liteTessInp.o \
-		egadsRobust_lite.o emp_lite.o evaLite.o ratLite.o liteRegQuads.o \
+		egadsRobust.o emp.o evaLite.o ratLite.o liteRegQuads.o \
 		-undefined error -install_name '@rpath/libegadslite.dylib' \
                 -current_version $(EGREV) )
 
 $(LDIR)/libegadslitestatic.a:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
-				liteTessInp.o egadsRobust_lite.o emp_lite.o evaLite.o \
+				liteTessInp.o egadsRobust.o emp.o evaLite.o \
 				ratLite.o liteRegQuads.o
 	touch $(LDIR)/libegadslitestatic.a
 	rm $(LDIR)/libegadslitestatic.a
 	(cd $(ODIR); ar $(LOPTS) $(LDIR)/libegadslitestatic.a $(OBJS) \
-                liteTess.o liteTris.o liteQuads.o liteTessInp.o egadsRobust_lite.o \
-		emp_lite.o evaLite.o ratLite.o liteRegQuads.o ; $(RANLB) )
+                liteTess.o liteTris.o liteQuads.o liteTessInp.o egadsRobust.o \
+		emp.o evaLite.o ratLite.o liteRegQuads.o ; $(RANLB) )
 
 $(OBJS): %.o:	%.c ../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
 		../include/egadsTypes_lite.h ../include/liteClasses.h ../include/liteDevice.h
@@ -82,9 +82,9 @@ liteTessInp.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
                 -I../src ../src/egadsTessInp_lite.c -o $(ODIR)/liteTessInp.o
 
-emp_lite.o:		../src/emp_lite.c
+emp.o:		../src/emp_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -D$(ESP_ARCH) -I../include ../src/emp_lite.c \
-		-o $(ODIR)/emp_lite.o
+		-o $(ODIR)/emp.o
 
 evaLite.o:	../src/evaluate_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
@@ -98,9 +98,9 @@ liteRegQuads.o:	../src/regQuads_lite.c ../include/regQuads_lite.h
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I../src \
 		../src/regQuads_lite.c -o $(ODIR)/liteRegQuads.o
 
-egadsRobust_lite.o:	../src/egadsRobust_lite.c
+egadsRobust.o:	../src/egadsRobust_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) ../src/egadsRobust_lite.c \
-		-o $(ODIR)/egadsRobust_lite.o
+		-o $(ODIR)/egadsRobust.o
 
 # Static analysis
 SCANDIR=/tmp/scanEGADSlite
@@ -108,7 +108,7 @@ SCANEXCLUDE=
 include ../include/STANALYZER.make
 
 lint:
-	$(LINT) -I$(IDIR) -DLITE -I../src -I. liteAttrs.c liteGeom.c liteMemory.c liteBase.c liteImport.c liteString.c liteTest.c liteTopo.c evaluate_lite.c rational_lite.c regQuads_lite.c -evalorder -exportlocal -shiftimplementation -aliasunique -retvalother -uniondef -formatcode
+	$(LINT) -I$(IDIR) -DLITE -I../src -I. liteAttrs.c liteGeom.c liteMemory.c liteBase.c liteImport.c liteString.c liteTest.c liteTopo.c ../src/evaluate_lite.c ../src/rational_lite.c ../src/regQuads_lite.c -evalorder -exportlocal -shiftimplementation -aliasunique -retvalother -uniondef -formatcode
 
 clean:
 	-(cd $(ODIR); rm $(OBJS) liteTess.o liteTris.o liteQuads.o liteTessInp.o evaLite.o ratLite.o liteRegQuads.o )

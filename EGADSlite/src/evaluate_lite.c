@@ -2899,7 +2899,8 @@ EGlite_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
     } else {
 
       if ((geom->mtype == BEZIER) ||
-          (geom->mtype == OFFSET)) {
+          (geom->mtype == OFFSET) ||
+          (geom->mtype == TOROIDAL)) {
         urats = xfinrt;
         ulen = 20;
         vrats = xfinrt;
@@ -2914,8 +2915,7 @@ EGlite_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
         ulen = 1;
         vrats = ratios;
         vlen = 1;
-      } else if ((geom->mtype == SPHERICAL) ||
-                 (geom->mtype == TOROIDAL)) {
+      } else if (geom->mtype == SPHERICAL) {
         urats = percrv;
         ulen = 11;
         vrats = percrv;

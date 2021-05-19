@@ -23,9 +23,12 @@ LIBS = $(LIBRARY) -lm
 
 OBJS_0 = 
 OBJS_2 = \
-$(LIBRARY)(EG_uvmap_FindUV.o) \
+$(LIBRARY)(EG_uvmapFindUV.o) \
 $(LIBRARY)(EG_uvmapGen.o) \
+$(LIBRARY)(EG_uvmapRead.o) \
 $(LIBRARY)(EG_uvmapStructFree.o) \
+$(LIBRARY)(EG_uvmapTest.o) \
+$(LIBRARY)(EG_uvmapWrite.o) \
 $(LIBRARY)(uvmap_add.o) \
 $(LIBRARY)(uvmap_bnd_adj.o) \
 $(LIBRARY)(uvmap_chk_area_uv.o) \
@@ -47,10 +50,12 @@ $(LIBRARY)(uvmap_malloc.o) \
 $(LIBRARY)(uvmap_mben_disc.o) \
 $(LIBRARY)(uvmap_message.o) \
 $(LIBRARY)(uvmap_norm_uv.o) \
+$(LIBRARY)(uvmap_read.o) \
 $(LIBRARY)(uvmap_solve.o) \
 $(LIBRARY)(uvmap_struct_tasks.o) \
 $(LIBRARY)(uvmap_to_egads.o) \
-$(LIBRARY)(uvmap_version.o)
+$(LIBRARY)(uvmap_test.o) \
+$(LIBRARY)(uvmap_version.o) \
 $(LIBRARY)(uvmap_write.o)
 
 UVMAP_LIB_INC_FILES = \
@@ -78,9 +83,11 @@ uvmap_malloc.h \
 uvmap_mben_disc.h \
 uvmap_message.h \
 uvmap_norm_uv.h \
+uvmap_read.h \
 uvmap_solve.h \
 uvmap_struct.h \
 uvmap_struct_tasks.h \
+uvmap_test.h \
 uvmap_to_egads.h \
 uvmap_version.h \
 uvmap_write.h

@@ -811,6 +811,8 @@ EG_deleteObject(egObject *object)
   int      i, *senses, locked = 0;
   egObject *context, *obj, *next, *pobj, **bodies;
   egCntxt  *cntx;
+  egTessel *tess;
+  egEBody  *ebody;
 
   if  (object == NULL)               return EGADS_NULLOBJ;
   if  (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
@@ -840,11 +842,33 @@ EG_deleteObject(egObject *object)
     
     /* special check for body references in models */
     if (object->oclass == MODEL) {
-      stat = EG_getTopology(object, &next, &oclass, &mtype, NULL, 
+      stat = EG_getTopology(object, &next, &oclass, &mtype, NULL,
                             &nbody, &bodies, &senses);
       if (stat != EGADS_SUCCESS) return stat;
       if (mtype > nbody) nbody = mtype;
-      for (cnt = i = 0; i < nbody; i++) {
+      cnt = 0;
+      obj = context->next;
+      while (obj != NULL) {
+        next = obj->next;
+        if (obj->oclass == TESSELLATION) {
+          tess = (egTessel *) obj->blind;
+          if ((tess != NULL) && (obj->topObj == context)) {
+            for (i = 0; i < nbody; i++)
+              if (tess->src == bodies[i]) break;
+            if (i != nbody) cnt++;
+          }
+        } else if (obj->oclass == EBODY) {
+          ebody = (egEBody *) obj->blind;
+          if ((ebody != NULL) && (obj->topObj == context)) {
+            for (i = 0; i < nbody; i++)
+              if (ebody->ref == bodies[i]) break;
+            if (i != nbody) cnt++;
+          }
+        }
+        obj = next;
+      }
+      /* is this necessary or correct? */
+      for (i = 0; i < nbody; i++) {
         if (bodies[i]->tref == NULL) continue;
         next = bodies[i]->tref;
         pobj = NULL;

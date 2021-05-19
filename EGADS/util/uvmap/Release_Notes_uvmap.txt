@@ -1,6 +1,6 @@
 
 ================================================================
-uvmap RELEASE NOTES: 02/18/21 RELEASE VERSION 1.6.1
+uvmap RELEASE NOTES: 04/30/21 RELEASE VERSION 1.6.3
 ================================================================
 
 Enhancements/ Additions:

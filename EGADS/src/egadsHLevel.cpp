@@ -3490,7 +3490,8 @@ EG_imprintBody(const egObject *src, int nedge, const egObject **facEdg,
 
   /* use OpenCASCADE */
   if (outLevel > 0)
-    printf(" EGADS Info: splitBody = %d\n", stat);
+    printf(" EGADS Info: splitBody = %d -- using OpenCASCADE (EG_imprintBody)!\n",
+           stat);
   if (result != NULL) {
     EG_deleteObject(*result);
     *result = NULL;

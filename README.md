@@ -1,7 +1,7 @@
 # EGADS/EGADSlite Libraries for Petsc
 
 Project consists of a reorganization of the EGADS/EGADSlite code developed by Robert Haimes at MIT [ESP: Engineering Sketch Pad](https://acdl.mit.edu/ESP).
-The current EGADS/EGADSlite version is v1.18
+The current EGADS/EGADSlite version is v1.19
 
 The reorganization provided in this repository is intended to allow for:
 

@@ -80,7 +80,7 @@ liteQuads.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
 liteTessInp.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
                 ../include/egadsTypes_lite.h ../include/liteClasses.h ../src/egadsTessInp_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
-                -I../src ../src/egadsTessInp_lite.c -o $(ODIR)/liteTessInp.o
+                -I../util ../src/egadsTessInp_lite.c -o $(ODIR)/liteTessInp.o
 
 emp.o:		../src/emp_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -D$(ESP_ARCH) -I../include ../src/emp_lite.c \
@@ -95,7 +95,7 @@ ratLite.o:	../src/rational_lite.c
 		-o $(ODIR)/ratLite.o
 
 liteRegQuads.o:	../src/regQuads_lite.c ../include/regQuads_lite.h
-	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I../src \
+	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I../util \
 		../src/regQuads_lite.c -o $(ODIR)/liteRegQuads.o
 
 egadsRobust.o:	../src/egadsRobust_lite.c
@@ -108,7 +108,7 @@ SCANEXCLUDE=
 include ../include/STANALYZER.make
 
 lint:
-	$(LINT) -I$(IDIR) -DLITE -I../src -I. liteAttrs.c liteGeom.c liteMemory.c liteBase.c liteImport.c liteString.c liteTest.c liteTopo.c ../src/evaluate_lite.c ../src/rational_lite.c ../src/regQuads_lite.c -evalorder -exportlocal -shiftimplementation -aliasunique -retvalother -uniondef -formatcode
+	$(LINT) -I$(IDIR) -DLITE -I../src -I. liteAttrs.c liteGeom.c liteMemory.c liteBase.c liteImport.c liteString.c liteTest.c liteTopo.c ../util/evaluate_lite.c ../util/rational_lite.c ../util/regQuads_lite.c -evalorder -exportlocal -shiftimplementation -aliasunique -retvalother -uniondef -formatcode
 
 clean:
 	-(cd $(ODIR); rm $(OBJS) liteTess.o liteTris.o liteQuads.o liteTessInp.o evaLite.o ratLite.o liteRegQuads.o )

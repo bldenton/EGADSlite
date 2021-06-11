@@ -1315,6 +1315,7 @@ EG_copyObject(const egObject *object, /*@null@*/ void *ptr, egObject **copy)
       ctess->nGlobal    = 1;
       return EGADS_SUCCESS;
     }
+    EG_attributeDup(object, *copy);
     if ((btess->done != 2) && (xform == NULL)) return EGADS_SUCCESS;
 
     /* deal with displaced tessellation */

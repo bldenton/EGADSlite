@@ -1,0 +1,5 @@
+#!/bin/sh
+
+lib_names_1=
+lib_names_2="uvmap"
+lib_names_3=

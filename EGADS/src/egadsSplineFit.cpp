@@ -3,7 +3,7 @@
  *
  *             Spline Fitting Functions w/ Derivatives
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -794,7 +794,7 @@ EG_spline1dFit(int endx, int imaxx, const T *xyz, const T *kn,
 }
 
 // Create explicit instantiations of the function
-template int
+template DllExport int
 EG_spline1dFit(int, int, const double *,
                const double *, double, int *,
                double **);
@@ -3979,14 +3979,16 @@ cleanup:
 
 extern "C"
 int
-EG_spline2dRaw(int endc, /*@null@*/ const double **drnd, int imax, int jmax,
+EG_spline2dRaw(int endc, /*@null@*/ const double **drnd, int imaxx, int jmaxx,
                const double *xyz, double tol, int *header, double **rdata)
 {
-  int          i, j, k, stat;
+  int          i, j, k, imax, jmax, stat;
   double       dist, dy, *norT, *souT, *easT, *wesT;
   double       x0[3], x1[3], nnor[3], snor[3], enor[3], wnor[3], *rot;
   const double *north, *south, *east, *west;
 
+  imax = abs(imaxx);
+  jmax = abs(jmaxx);
   if ((imax < 2) || (jmax < 2)) return EGADS_DEGEN;
   if ((endc < 0) || (endc > 2)) return EGADS_RANGERR;
 
@@ -4162,7 +4164,7 @@ EG_spline2dRaw(int endc, /*@null@*/ const double **drnd, int imax, int jmax,
 
   /* call approx as is */
   if ((east == NULL) && (west == NULL))
-    return EG_spline2dAppr(endc, imax, jmax, xyz, (double *) NULL,
+    return EG_spline2dAppr(endc, imaxx, jmaxx, xyz, (double *) NULL,
                            (double *) NULL, NULL, west, east,
                            south, souT, north, norT, tol, header, rdata);
 
@@ -4179,7 +4181,7 @@ EG_spline2dRaw(int endc, /*@null@*/ const double **drnd, int imax, int jmax,
 #ifdef DEBUG
   printf(" spline2d: rotate -- south=west, north=east!\n");
 #endif
-  stat = EG_spline2dAppr(endc, jmax, imax, rot, (double *) NULL,
+  stat = EG_spline2dAppr(endc, jmaxx, imaxx, rot, (double *) NULL,
                          (double *) NULL, NULL, south, north,
                          west, wesT, east, easT, tol, header, rdata);
 
@@ -4366,9 +4368,121 @@ cleanup:
 
 template<class T>
 int
-EG_subSpline(const int *fheader, const T *fdata,
-             const int i1, const int iN,
-             const int j1, const int jN, int *sheader, T **sdata)
+EG_subSpline1d(const int *fheader, const T *fdata,
+               const int i1, const int iN,
+               int *sheader, T **sdata)
+{
+  int ideg, i;
+  int ficp, fiknot;
+  int sicp, siknot;
+  const T *fknotu, *fcp;
+  T *sknotu, *scp;
+
+  if (sdata == NULL) {
+    printf(" EG_isoCurve: NULL data!\n");
+    return EGADS_NODATA;
+  }
+  *sdata = NULL;
+
+  ideg   = fheader[1];
+  ficp   = fheader[2];
+  fiknot = fheader[3];
+
+  if (i1 >= iN) {
+    printf(" EG_subSpline1d: i1 => iN (i1 = %d, iN = %d)!\n", i1, iN);
+    return EGADS_RANGERR;
+  }
+
+  if (i1 < 0) {
+    printf(" EG_subSpline1d: i1 = %d, min = 0!\n", i1);
+    return EGADS_RANGERR;
+  }
+
+  if (iN > ficp) {
+    printf(" EG_subSpline1d: iN = %d, max = %d!\n", iN, ficp);
+    return EGADS_RANGERR;
+  }
+
+  if (fheader[0] != 0) {
+    printf(" EG_isoCurve: bad mask header2d[0] = %x!\n", fheader[0]);
+    return EGADS_GEOMERR;
+  }
+
+  if (fheader[1] != 3) {
+    printf(" EG_subSpline1d: not cubic header2d[1] = %d header2d[4] = %d!\n",
+           fheader[1], fheader[4]);
+    return EGADS_GEOMERR;
+  }
+
+  fknotu =  fdata;
+  fcp    = &fdata[fiknot];
+
+  sicp   = iN-i1 + 2;
+  siknot = sicp + 2*(ideg-1);
+
+  sheader[0] = fheader[0];
+  sheader[1] = ideg;
+  sheader[2] = sicp;
+  sheader[3] = siknot;
+
+  *sdata = (T *) EG_alloc( (siknot+3*sicp)*sizeof(T) );
+  if (*sdata == NULL) {
+    return EGADS_MALLOC;
+  }
+
+  sknotu =  (*sdata);
+  scp    = &(*sdata)[siknot];
+
+  // repeated initial u-knots
+  for (i = 0; i < ideg; i++)
+    sknotu[i] = fknotu[i1-1+ideg];
+
+  // extract interior u-knots
+  for (i = 0; i < siknot-2*ideg; i++)
+    sknotu[i+ideg] = fknotu[i+i1-1+ideg];
+
+  // repeated end u-knots
+  for (i = siknot-ideg; i < siknot; i++)
+    sknotu[i] = fknotu[iN-1+ideg];
+
+  // normalize
+  for (i = siknot-1; i >= 0; i--) sknotu[i] -= sknotu[0];
+  for (i = 0; i < siknot; i++)    sknotu[i] /= sknotu[siknot-1];
+
+  // extract control points
+  for (i = 0; i < sicp; i++) {
+    scp[3*i  ] = fcp[3*(i+i1-1)  ];
+    scp[3*i+1] = fcp[3*(i+i1-1)+1];
+    scp[3*i+2] = fcp[3*(i+i1-1)+2];
+  }
+
+  return EGADS_SUCCESS;
+}
+
+template int
+EG_subSpline1d(const int *fheader, const double *fdata,
+               const int i1, const int iN,
+               int *sheader, double **sdata);
+
+template int
+EG_subSpline1d(const int *fheader, const SurrealS<1> *fdata,
+               const int i1, const int iN,
+               int *sheader, SurrealS<1> **sdata);
+
+extern "C" int
+EG_subSpline1d(const int *fheader, const double *fdata,
+               const int i1, const int iN,
+               int *sheader, double **sdata)
+{
+  return EG_subSpline1d<double>(fheader, fdata, i1,iN, sheader, sdata);
+}
+
+
+template<class T>
+int
+EG_subSpline2d(const int *fheader, const T *fdata,
+               const int i1, const int iN,
+               const int j1, const int jN, int *sheader, T **sdata)
 {
   int ideg, jdeg, i, j;
   int ficp, fiknot, fjcp, fjknot;
@@ -4390,32 +4504,32 @@ EG_subSpline(const int *fheader, const T *fdata,
   fjknot = fheader[6];
 
   if (i1 >= iN) {
-    printf(" EG_subSpline: i1 => iN (i1 = %d, iN = %d)!\n", i1, iN);
+    printf(" EG_subSpline2d: i1 => iN (i1 = %d, iN = %d)!\n", i1, iN);
     return EGADS_RANGERR;
   }
 
   if (j1 >= jN) {
-    printf(" EG_subSpline: j1 => iN (j1 = %d, jN = %d)!\n", j1, iN);
+    printf(" EG_subSpline2d: j1 => iN (j1 = %d, jN = %d)!\n", j1, iN);
     return EGADS_RANGERR;
   }
 
   if (i1 < 0) {
-    printf(" EG_subSpline: i1 = %d, min = 0!\n", i1);
+    printf(" EG_subSpline2d: i1 = %d, min = 0!\n", i1);
     return EGADS_RANGERR;
   }
 
   if (iN > ficp) {
-    printf(" EG_subSpline: iN = %d, max = %d!\n", iN, ficp);
+    printf(" EG_subSpline2d: iN = %d, max = %d!\n", iN, ficp);
     return EGADS_RANGERR;
   }
 
   if (j1 < 0) {
-    printf(" EG_subSpline: j1 = %d, min = 0!\n", j1);
+    printf(" EG_subSpline2d: j1 = %d, min = 0!\n", j1);
     return EGADS_RANGERR;
   }
 
   if (jN > fjcp) {
-    printf(" EG_subSpline: jN = %d, max = %d!\n", jN, fjcp);
+    printf(" EG_subSpline2d: jN = %d, max = %d!\n", jN, fjcp);
     return EGADS_RANGERR;
   }
 
@@ -4425,7 +4539,7 @@ EG_subSpline(const int *fheader, const T *fdata,
   }
 
   if (fheader[1] != 3 || fheader[4] != 3) {
-    printf(" EG_subSpline: not cubic header2d[1] = %d header2d[4] = %d!\n",
+    printf(" EG_subSpline2d: not cubic header2d[1] = %d header2d[4] = %d!\n",
            fheader[1], fheader[4]);
     return EGADS_GEOMERR;
   }
@@ -4502,19 +4616,19 @@ EG_subSpline(const int *fheader, const T *fdata,
 }
 
 template int
-EG_subSpline(const int *fheader, const double *fdata,
-             const int i1, const int iN,
-             const int j1, const int jN, int *sheader, double **sdata);
+EG_subSpline2d(const int *fheader, const double *fdata,
+               const int i1, const int iN,
+               const int j1, const int jN, int *sheader, double **sdata);
 
 template int
-EG_subSpline(const int *fheader, const SurrealS<1> *fdata,
-             const int i1, const int iN,
-             const int j1, const int jN, int *sheader, SurrealS<1> **sdata);
+EG_subSpline2d(const int *fheader, const SurrealS<1> *fdata,
+               const int i1, const int iN,
+               const int j1, const int jN, int *sheader, SurrealS<1> **sdata);
 
 extern "C" int
-EG_subSpline(const int *fheader, const double *fdata,
-             const int i1, const int iN,
-             const int j1, const int jN, int *sheader, double **sdata)
+EG_subSpline2d(const int *fheader, const double *fdata,
+               const int i1, const int iN,
+               const int j1, const int jN, int *sheader, double **sdata)
 {
-  return EG_subSpline<double>(fheader, fdata, i1,iN, j1, jN, sheader, sdata);
+  return EG_subSpline2d<double>(fheader, fdata, i1,iN, j1, jN, sheader, sdata);
 }

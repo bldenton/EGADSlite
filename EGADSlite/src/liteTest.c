@@ -3,7 +3,7 @@
  *
  *             EGADS Lite Read & Tester
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -332,7 +332,7 @@ parseOut(int level, ego object, /*@null@*/ ego body, int sense)
 int main(int argc, char *argv[])
 {
   int i, j, k, n, nn, stat, oclass, mtype, nbodies, *senses;
-  ego context, model, geom, *bodies, *objs, *nobjs;
+  ego context, model, geom, obj, top, prev, next, *bodies, *objs, *nobjs;
   
   if (argc != 2) {
     printf(" Usage: liteTest liteFile\n\n");
@@ -420,6 +420,21 @@ int main(int argc, char *argv[])
   /* output the entire model structure */
   parseOut(0, model, NULL, 0);
   printf(" \n");
+  
+  /* scan through the objects */
+  obj = context;
+  nn  = n = 0;
+  while (obj != NULL) {
+    stat = EGlite_getInfo(obj, &oclass, &mtype, &top, &prev, &next);
+    if (stat != EGADS_SUCCESS) {
+      printf(" EGlite_getInfo %d = %d\n", n+1, stat);
+      break;
+    }
+    n++;
+    if (oclass >= NODE) nn++;
+    obj = next;
+  }
+  printf(" Object Scan      = %d %d\n", n, nn);
 
   printf(" EGlite_close         = %d\n", EGlite_close(context));
   return 0;

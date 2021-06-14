@@ -3,7 +3,7 @@
  *
  *             Tessellation Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -97,12 +97,22 @@ __PROTO_H_AND_D__ int  EGlite_invEvaluate( const egObject *geom, double *xyz,
 __PROTO_H_AND_D__ int  EGlite_arcLength( const egObject *geom, double t1, double t2,
                                      double *result );
 __PROTO_H_AND_D__ int  EGlite_isSame( const egObject *geo1, const egObject *geo2 );
-__PROTO_H_AND_D__ int  EGlite_attributeRet( const ego obj, const char *name,
+__PROTO_H_AND_D__ int  EGlite_attributeRet( const egObject *obj, const char *name,
                                         int *atype, int *len,
                                         /*@null@*/ const int    **ints,
                                         /*@null@*/ const double **reals,
                                         /*@null@*/ const char   **str );
+__PROTO_H_AND_D__ int  EGlite_attributeNumSeq( const egObject *obj,
+                                           const char *name, int *num );
+__PROTO_H_AND_D__ int  EGlite_attributeRetSeq( const egObject *obj, const char *nam,
+                                           int index, int *atype, int *len,
+                                           /*@null@*/ const int    **ints,
+                                           /*@null@*/ const double **reals,
+                                           /*@null@*/ const char   **str );
 #ifndef LITE
+           extern int  EGlite_fullAttrs( const egObject *obj );
+           extern int  EGlite_effectiveMap( egObject *EObject, double *eparam,
+                                        egObject **Object, double *param );
            extern int  EGlite_attributeDel( egObject *obj,
                                         /*@null@*/ const char *name );
            extern int  EGlite_attributeAdd( egObject *obj, const char *name,
@@ -129,6 +139,63 @@ __PROTO_H_AND_D__ int  EGlite_mapSequen( egObject *src, egObject *dst,
                                      egObject **result );
 #endif
 
+
+
+__HOST_AND_DEVICE__ static int
+EGlite_attrRet3R(const egObject *obj, const char *name, double *vals)
+{
+  int          i, stat, nSeq, atype, alen, hit = 0;
+  const char   *str;
+  const int    *ints;
+  const double *reals;
+  
+  vals[0] = vals[1] = vals[2] = 0.0;
+  stat = EGlite_attributeRet(obj, name, &atype, &alen, &ints, &reals, &str);
+  if ((stat != EGADS_SUCCESS) && (stat != EGADS_NOTFOUND)) return stat;
+  
+  /* single attribute found */
+  if (stat == EGADS_SUCCESS) {
+    if ((strcmp(name,".qParams") == 0) && (atype == ATTRSTRING)) {
+      vals[0] = -1.0;
+      return EGADS_SUCCESS;
+    }
+    if (alen  <  3)        return EGADS_ATTRERR;
+    if (atype != ATTRREAL) return EGADS_ATTRERR;
+    vals[0] = reals[0];
+    vals[1] = reals[1];
+    vals[2] = reals[2];
+    return EGADS_SUCCESS;
+  }
+  
+  /* do we need to merge? */
+  stat = EGlite_attributeNumSeq(obj, name, &nSeq);
+  if (stat != EGADS_SUCCESS) return stat;
+  if (nSeq == 0) return EGADS_NOTFOUND;
+  
+  for (i = 1; i <= nSeq; i++) {
+    stat = EGlite_attributeRetSeq(obj, name, i, &atype, &alen, &ints, &reals, &str);
+    if (stat != EGADS_SUCCESS) continue;
+    if ((strcmp(name,".qParams") == 0) && (atype == ATTRSTRING)) {
+      vals[0] = -1;
+      return EGADS_SUCCESS;
+    }
+    if (alen  <  3)            continue;
+    if (atype != ATTRREAL)     continue;
+    if (hit == 0) {
+      vals[0] = reals[0];
+      vals[1] = reals[1];
+      vals[2] = reals[2];
+    } else {
+      if (vals[0] > reals[0]) vals[0] = reals[0];
+      if (vals[1] > reals[1]) vals[1] = reals[1];
+      if (vals[2] > reals[2]) vals[2] = reals[2];
+    }
+    hit++;
+  }
+  if (hit == 0) return EGADS_NOTFOUND;
+    
+  return EGADS_SUCCESS;
+}
 
 
 __HOST_AND_DEVICE__ static int
@@ -1175,7 +1242,7 @@ EGlite_getTessEdge(const egObject *tess, int indx, int *len,
       printf(" EGADS Error: Source Not an Object (EGlite_getTessEdge)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_getTessEdge)!\n");
     return EGADS_NOTBODY;
@@ -1265,7 +1332,7 @@ EGlite_getTessFace(const egObject *tess, int indx, int *len, const double **xyz,
       printf(" EGADS Error: Source Not an Object (EGlite_getTessFace)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_getTessFace)!\n");
     return EGADS_NOTBODY;
@@ -1470,7 +1537,7 @@ EGlite_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
 {
   int      i, j, k, l, m, n, stat, nedge, nloop, oclass, mtype, ori, np, degen;
   int      *senses, *sns, *tris, *tmp, npts, ntot, ntri, sen, nfig8, nd, st;
-  int      outLevel, mm, mp, *lsenses, lor, atype, alen, iper, *fig8;
+  int      outLevel, mm, mp, *lsenses, lor, atype, alen, iper, geomtype, *fig8;
   double   range[4], srange[4], trange[2], uvm[2], uvp[2];
   double   smallu, smallv, bigu, bigv, d, *uvs, *intEdg;
   egObject *geom, **edges, **loops, **nds, *outer;
@@ -1491,8 +1558,18 @@ EGlite_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
   stat = EGlite_getTopology(face, &geom, &oclass, &ori, range, &nloop, &loops,
                         &lsenses);
   if (stat != EGADS_SUCCESS) return stat;
-  stat = EGlite_getRange(geom, srange, &iper);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (face->oclass == EFACE) {
+    iper = 0;
+    srange[0] = range[0];
+    srange[1] = range[1];
+    srange[2] = range[2];
+    srange[3] = range[3];
+    geomtype  = 0;
+  } else {
+    stat = EGlite_getRange(geom, srange, &iper);
+    if (stat != EGADS_SUCCESS) return stat;
+    geomtype = geom->mtype;
+  }
   if (nloop > 1) {
     stat = EGlite_attributeRet(face, ".innerLoops", &atype, &alen,
                            &aInts, &aReals, &aStr);
@@ -1545,7 +1622,7 @@ EGlite_fillTris(egObject *body, int iFace, egObject *face, egObject *tess,
   ts->range[2] = range[2];
   ts->range[3] = range[3];
   ts->uvs      = NULL;
-  if (geom->mtype == PLANE) ts->planar = 1;
+  if (geomtype == PLANE) ts->planar = 1;
 
   /* get the point count */
 
@@ -2206,6 +2283,8 @@ EGlite_surfInsert(egObject *face, double *uv, int sense, double d, double *dx)
   
   /* get normal at mid-point in UV */
   stat  = EGlite_evaluate(face, uv, result);
+  if (stat == EGADS_EXTRAPOL)
+    printf(" EGADS Info: surfInsert Extrapolate @ midpoint!\n");
   if (stat != EGADS_SUCCESS) return -2.0;
   x1[0] = result[3];
   x1[1] = result[4];
@@ -2280,14 +2359,15 @@ EGlite_surfInsert(egObject *face, double *uv, int sense, double d, double *dx)
     if (uv[1] < lims[2]) break;
     if (uv[1] > lims[3]) break;
     stat = EGlite_evaluate(face, uv, result);
-    if (stat != EGADS_SUCCESS) break;
+    if (stat == EGADS_EXTRAPOL) continue;
+    if (stat != EGADS_SUCCESS)  break;
   }
 
   if ((stat != EGADS_SUCCESS) || (count == 20)) {
     stat = EGlite_invEvaluate(face, x1, uv, x2);
     if (stat != EGADS_SUCCESS) return -2.0;
     stat = EGlite_evaluate(face, uv, result);
-    if (stat != EGADS_SUCCESS) return -2.0;
+    if ((stat != EGADS_SUCCESS) && (stat != EGADS_EXTRAPOL)) return -2.0;
   }
 
   dx[0] = result[0];
@@ -2317,6 +2397,7 @@ EGlite_surfDist2(egObject *face, const double *xyz0, const double *uv0,
              const double *xyz1, const double *uv1, const double *xyz2,
              const double *uv2)
 {
+  int    stat;
   double xyz[3], uv[2], data[18];
   
   uv[0]  = (uv0[0]  + uv1[0]  + uv2[0])  / 3.0;
@@ -2325,7 +2406,8 @@ EGlite_surfDist2(egObject *face, const double *xyz0, const double *uv0,
   xyz[1] = (xyz0[1] + xyz1[1] + xyz2[1]) / 3.0;
   xyz[2] = (xyz0[2] + xyz1[2] + xyz2[2]) / 3.0;
   
-  if (EGlite_evaluate(face, uv, data) != EGADS_SUCCESS) return 0.0;
+  stat = EGlite_evaluate(face, uv, data);
+  if ((stat != EGADS_SUCCESS) && (stat != EGADS_EXTRAPOL)) return 0.0;
 
   return (data[0]-xyz[0])*(data[0]-xyz[0]) + (data[1]-xyz[1])*(data[1]-xyz[1]) +
          (data[2]-xyz[2])*(data[2]-xyz[2]);
@@ -2333,7 +2415,7 @@ EGlite_surfDist2(egObject *face, const double *xyz0, const double *uv0,
 
 
 __HOST_AND_DEVICE__ static int
-EGlite_otherFaces(egTess1D tess1d, ego *faces, int facex, ego edge,
+EGlite_otherFaces(egTess1D tess1d, egObject **faces, int facex, egObject *edge,
               double t0, double th, double t1)
 {
   int    n, nf, face, sense, stat;
@@ -2363,6 +2445,54 @@ EGlite_otherFaces(egTess1D tess1d, ego *faces, int facex, ego edge,
   
   return EGADS_SUCCESS;
 }
+  
+  
+__HOST_AND_DEVICE__ static int
+EGlite_effectIndex(egObject *ebody, egObject *eedge, double t)
+{
+#ifdef LITE
+  return EGADS_SUCCESS;
+#else
+  int      stat, oclass, mtype, nobj, *senses;
+  double   torig;
+  egObject *edge, *body, **objs;
+  
+  if (ebody->oclass != EBODY) return EGADS_SUCCESS;
+  stat = EGlite_effectiveMap(eedge, &t, &edge, &torig);
+  if (stat != EGADS_SUCCESS) return stat;
+  stat = EGlite_getTopology(ebody, &body, &oclass, &mtype, NULL, &nobj, &objs,
+                        &senses);
+  if (stat != EGADS_SUCCESS) return stat;
+  return EGlite_indexBodyTopo(body, edge);
+#endif
+}
+  
+
+__HOST_AND_DEVICE__ static int
+EGlite_evalEffect(egObject *eobj, double t, double *result)
+{
+  int      stat;
+#ifndef LITE
+  double   torig, xyz[3];
+  egObject *edge;
+#endif
+
+  stat = EGlite_evaluate(eobj, &t, result);
+#ifndef LITE
+  if (eobj->oclass == EEDGE) {
+    xyz[0] = result[0];
+    xyz[1] = result[1];
+    xyz[2] = result[2];
+    stat   = EGlite_effectiveMap(eobj, &t, &edge, &torig);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat      = EGlite_evaluate(edge, &torig, result);
+    result[0] = xyz[0];
+    result[1] = xyz[1];
+    result[2] = xyz[2];
+  }
+#endif
+  return stat;
+}
 
 
 __HOST_AND_DEVICE__ static int
@@ -2371,7 +2501,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
 {
   int      i, k, l, n, npts, stat, outLevel, oclass, mtype, nnode, btype, *info;
   int      nf, ntype, ndum, face, sense, *senses, aStat, aType, aLen, nobj;
-  int      f2e = 0;
+  int      geomtype, iobj[MAXELEN], f2e = 0;
   double   xyz[MAXELEN][3], t[MAXELEN], aux[MAXELEN][3], mindist, dist;
   double   d, dotnrm, dot, limits[2], mid[3], range[4], dx[3], result[18];
   double   sag, tol, toldist, dm[3], xyzm[3], params[3], uv[2], *prv;
@@ -2400,62 +2530,32 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   
   /* adjust the parameters? */
   if (ignore != 1) {
-    stat = EGlite_getBodyTopos(body, edge, FACE, &n, &dum);
+    if (body->oclass == EBODY) {
+      stat = EGlite_getBodyTopos(body, edge, EFACE, &n, &dum);
+    } else {
+      stat = EGlite_getBodyTopos(body, edge,  FACE, &n, &dum);
+    }
     if (stat == EGADS_SUCCESS) {
       for (i = 0; i < n; i++) {
-        aStat = EGlite_attributeRet(dum[i], ".tParams", &aType, &aLen, &aInts,
-                                &aReals, &aStr);
+        aStat = EGlite_attrRet3R(dum[i], ".tParams", dx);
         if (aStat == EGADS_SUCCESS)
-          if (aType != ATTRREAL) {
-            printf("%lX EGADS Warning: tParams NONReal Attribute (EGlite_tessEdges)!\n",
-                   tID);
-          } else {
-            for (k = 0; k < aLen; k++) {
-              if (k == 3) break;
-              if ((aReals[k] < params[k]) && (aReals[k] > 0.0))
-                params[k] = aReals[k];
-            }
-          }
-        aStat = EGlite_attributeRet(dum[i], ".tParam", &aType, &aLen, &aInts,
-                                &aReals, &aStr);
+          for (k = 0; k < 3; k++)
+            if ((dx[k] < params[k]) && (dx[k] > 0.0)) params[k] = dx[k];
+        aStat = EGlite_attrRet3R(dum[i], ".tParam",  dx);
         if (aStat == EGADS_SUCCESS)
-          if (aType != ATTRREAL) {
-            printf("%lX EGADS Warning: tParam NONReal Attribute (EGlite_tessEdges)!\n",
-                   tID);
-          } else {
-            for (k = 0; k < aLen; k++) {
-              if (k == 3) break;
-              if (aReals[k] > 0.0) params[k] = aReals[k];
-            }
-          }
+          for (k = 0; k < 3; k++)
+            if (dx[k] > 0.0) params[k] = dx[k];
       }
       EGlite_free(dum);
     }
-    aStat = EGlite_attributeRet(edge, ".tParams", &aType, &aLen, &aInts,
-                            &aReals, &aStr);
+    aStat = EGlite_attrRet3R(edge, ".tParams", dx);
     if (aStat == EGADS_SUCCESS)
-      if (aType != ATTRREAL) {
-        printf("%lX EGADS Warning: tParams NonReal Attribute (EGlite_tessEdges)!\n",
-               tID);
-      } else {
-        for (i = 0; i < aLen; i++) {
-          if (i == 3) break;
-          if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
-            params[i] = aReals[i];
-        }
-      }
-    aStat = EGlite_attributeRet(edge, ".tParam", &aType, &aLen, &aInts,
-                            &aReals, &aStr);
+      for (i = 0; i < 3; i++)
+        if ((dx[i] < params[i]) && (dx[i] > 0.0)) params[i] = dx[i];
+    aStat = EGlite_attrRet3R(edge, ".tParam",  dx);
     if (aStat == EGADS_SUCCESS)
-      if (aType != ATTRREAL) {
-        printf("%lX EGADS Warning: tParam NonReal Attribute (EGlite_tessEdges)!\n",
-               tID);
-      } else {
-        for (i = 0; i < aLen; i++) {
-          if (i == 3) break;
-          if (aReals[i] > 0.0) params[i] = aReals[i];
-        }
-      }
+      for (i = 0; i < 3; i++)
+        if (dx[i] > 0.0) params[i] = dx[i];
   }
   
   dist = fabs(params[2]);
@@ -2465,16 +2565,28 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   
   stat = EGlite_getTopology(edge, &geom, &oclass, &mtype, limits,
                         &nnode, &nodes, &senses);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf("%lX EGADS Warning: Edge %d EGlite_getTopology = %d (EGlite_tessEdge)!\n",
+             tID, j+1, stat);
+    return stat;
+  }
+  geomtype = 0;
+  if (geom != NULL) geomtype = geom->mtype;
 #ifdef DEBUG
   printf("%lX Edge %d: type = %d, geom type = %d, limits = %lf %lf, nnode = %d\n",
-         tID, j+1, mtype, geom->mtype, limits[0], limits[1], nnode);
+         tID, j+1, mtype, geomtype, limits[0], limits[1], nnode);
 #endif
   
   /* set end points */
   stat = EGlite_getTopology(nodes[0], &ref, &oclass, &ntype, xyz[0],
                         &ndum, &dum, &senses);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf("%lX EGADS Warning: Edge %d EGlite_getTopology0 = %d (EGlite_tessEdge)!\n",
+             tID, j+1, stat);
+    return stat;
+  }
   npts      = 2;
   t[0]      = limits[0];
   xyz[1][0] = xyz[0][0];
@@ -2486,24 +2598,40 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   if (mtype == TWONODE) {
     stat = EGlite_getTopology(nodes[1], &ref, &oclass, &ntype, xyz[1],
                           &ndum, &dum, &senses);
-    if (stat != EGADS_SUCCESS) return stat;
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf("%lX EGADS Warning: Edge %d EGlite_getTopology1 = %d (EGlite_tessEdge)!\n",
+               tID, j+1, stat);
+      return stat;
+    }
     btess->tess1d[j].nodes[1] = EGlite_indexBodyTopo(body, nodes[1]);
   }
   if (mtype == ONENODE) {
     stat = EGlite_tolerance(edge, &dist);
-    if (stat != EGADS_SUCCESS) return stat;
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf("%lX EGADS Warning: Edge %d EGlite_tolerance = %d (EGlite_tessEdge)!\n",
+                 tID, j+1, stat);
+      return stat;
+    }
+    if (dist < 1.e-7) dist = 1.e-7;
     stat = EGlite_arcLength(edge, limits[0], limits[1], &d);
-    if (stat != EGADS_SUCCESS) return stat;
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf("%lX EGADS Warning: Edge %d EGlite_arcLength = %d (EGlite_tessEdge)!\n",
+               tID, j+1, stat);
+      return stat;
+    }
     /* we have an Edge with a single Node and no length -- ignore */
     if (d < dist) {
       if (outLevel > 0)
-        printf("%lX EGADS Warning: Edge %d Tol = %le aLen = %le (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: Edge %d Tol = %le aLen = %le (EGlite_tessEdge)!\n",
                tID, j+1, dist, d);
       npts = 1;
       btess->tess1d[j].xyz = (double *) EGlite_alloc(3*npts*sizeof(double));
       if (btess->tess1d[j].xyz == NULL) {
         if (outLevel > 0)
-          printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdge)!\n",
                  tID, npts, j+1);
         return EGADS_MALLOC;
       }
@@ -2512,7 +2640,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         EGlite_free(btess->tess1d[j].xyz);
         btess->tess1d[j].xyz = NULL;
         if (outLevel > 0)
-          printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdge)!\n",
                  tID, npts, j+1);
         return EGADS_MALLOC;
       }
@@ -2532,7 +2660,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
     btess->tess1d[j].xyz = (double *) EGlite_alloc(3*npts*sizeof(double));
     if (btess->tess1d[j].xyz == NULL) {
       if (outLevel > 0)
-        printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdge)!\n",
                tID, npts, j+1);
       return EGADS_MALLOC;
     }
@@ -2541,7 +2669,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       EGlite_free(btess->tess1d[j].xyz);
       btess->tess1d[j].xyz = NULL;
       if (outLevel > 0)
-        printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdge)!\n",
                tID, npts, j+1);
       return EGADS_MALLOC;
     }
@@ -2557,31 +2685,32 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   
   /* should we use the point distribution given us? */
   if (ignore != 1) {
-    aStat = EGlite_attributeRet(edge, ".tPos", &aType, &aLen, &aInts, &aReals, &aStr);
+    aStat = EGlite_attributeRet(edge, ".tPos", &aType, &aLen, &aInts, &aReals,
+                            &aStr);
     if (aStat == EGADS_SUCCESS)
       if ((aType == ATTRSTRING) || (aType == ATTRCSYS) || (aType == ATTRPTR)) {
-        printf("%lX EGADS Warning: tPos NonReal Attribute (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: tPos NonReal Attribute (EGlite_tessEdge)!\n",
                tID);
       } else if (aType == ATTRINT) {
         if ((aLen == 1) && (aInts[0] == 0)) goto fill1D;
-        printf("%lX EGADS Warning: tPos NonReal Attribute (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: tPos NonReal Attribute (EGlite_tessEdge)!\n",
                tID);
       } else {
         for (k = i = 0; i < aLen; i++)
           if ((aReals[i] <= t[0]) || (aReals[i] >= t[1])) {
-            printf("%lX EGADS Error: %d tPos[%d] = %lf [%lf-%lf] (EGlite_tessEdges)!\n",
+            printf("%lX EGADS Error: %d tPos[%d] = %lf [%lf-%lf] (EGlite_tessEdge)!\n",
                    tID, j+1, i, aReals[i], t[0], t[1]);
             k++;
           }
         if (k == 0)
           for (i = 0; i < aLen-1; i++)
             if (aReals[i] >= aReals[i+1]) {
-              printf("%lX EGADS Error: %d tPos[%d] = %lf %lf NotMono (EGlite_tessEdges)!\n",
+              printf("%lX EGADS Error: %d tPos[%d] = %lf %lf NotMono (EGlite_tessEdge)!\n",
                      tID, j+1, i, aReals[i], aReals[i+1]);
               k++;
             }
         if (aLen+2 > MAXELEN) {
-          printf("%lX EGADS Error: Edge %d Attr len %d > %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: Edge %d Attr len %d > %d (EGlite_tessEdge)!\n",
                  tID, j+1, aLen, MAXELEN-2);
           k++;
         }
@@ -2593,7 +2722,12 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
           for (i = 0; i < aLen; i++) {
             t[i+1] = aReals[i];
             stat   = EGlite_evaluate(edge, &t[i+1], result);
-            if (stat != EGADS_SUCCESS) return stat;
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf("%lX EGADS Warning: Edge %d EGlite_eval = %d (EGlite_tessEdge)!\n",
+                       tID, j+1, stat);
+              return stat;
+            }
             xyz[i+1][0] = result[0];
             xyz[i+1][1] = result[1];
             xyz[i+1][2] = result[2];
@@ -2602,31 +2736,32 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
           goto fill1D;
         }
       }
-    aStat = EGlite_attributeRet(edge, ".rPos", &aType, &aLen, &aInts, &aReals, &aStr);
+    aStat = EGlite_attributeRet(edge, ".rPos", &aType, &aLen, &aInts, &aReals,
+                            &aStr);
     if (aStat == EGADS_SUCCESS)
       if ((aType == ATTRSTRING) || (aType == ATTRCSYS) || (aType == ATTRPTR)) {
-        printf("%lX EGADS Warning: rPos NonReal Attribute (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: rPos NonReal Attribute (EGlite_tessEdge)!\n",
                tID);
       } else if (aType == ATTRINT) {
         if ((aLen == 1) && (aInts[0] == 0)) goto fill1D;
-        printf("%lX EGADS Warning: rPos NonReal Attribute (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: rPos NonReal Attribute (EGlite_tessEdge)!\n",
                tID);
       } else {
         for (k = i = 0; i < aLen; i++)
           if ((aReals[i] <= 0.0) || (aReals[i] >= 1.0)) {
-            printf("%lX EGADS Error: %d rPos[%d] = %lf [0 - 1] (EGlite_tessEdges)!\n",
+            printf("%lX EGADS Error: %d rPos[%d] = %lf [0 - 1] (EGlite_tessEdge)!\n",
                    tID, j+1, i, aReals[i]);
             k++;
           }
         if (k == 0)
           for (i = 0; i < aLen-1; i++)
             if (aReals[i] >= aReals[i+1]) {
-              printf("%lX EGADS Error: %d rPos[%d] = %lf %lf NotMono (EGlite_tessEdges)!\n",
+              printf("%lX EGADS Error: %d rPos[%d] = %lf %lf NotMono (EGlite_tessEdge)!\n",
                      tID, j+1, i, aReals[i], aReals[i+1]);
               k++;
             }
         if (aLen+2 > MAXELEN) {
-          printf("%lX EGADS Error: Edge %d Attr Len %d > %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: Edge %d Attr Len %d > %d (EGlite_tessEdge)!\n",
                  tID, j+1, aLen, MAXELEN-2);
           k++;
         }
@@ -2640,18 +2775,19 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
             npts = aLen+2;
             goto fill1D;
           }
-          printf("%lX EGADS Error: EGlite_relPosTs = %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: EGlite_relPosTs = %d (EGlite_tessEdge)!\n",
                  tID, stat);
         }
       }
-    aStat = EGlite_attributeRet(edge, ".nPos", &aType, &aLen, &aInts, &aReals, &aStr);
+    aStat = EGlite_attributeRet(edge, ".nPos", &aType, &aLen, &aInts, &aReals,
+                            &aStr);
     if (aStat == EGADS_SUCCESS)
       if ((aType == ATTRSTRING) || (aType == ATTRCSYS) || (aType == ATTRPTR)) {
-        printf("%lX EGADS Warning: nPos NonNumeric Attribute (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Warning: nPos NonNumeric Attribute (EGlite_tessEdge)!\n",
                tID);
       } else {
         if (aLen != 1) {
-          printf("%lX EGADS Warning: nPos length not 1 (EGlite_tessEdges)!\n", tID);
+          printf("%lX EGADS Warning: nPos length not 1 (EGlite_tessEdge)!\n", tID);
         }
         if (aType == ATTRREAL) {
           k = aReals[0] + 0.0001;
@@ -2660,7 +2796,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         }
         if (k < 0) k = 0;
         if (k+2 > MAXELEN) {
-          printf("%lX EGADS Error: Edge %d Attr Len %d > %d (EGlite_tessEdges)!\n",
+          printf("%lX EGADS Error: Edge %d Attr Len %d > %d (EGlite_tessEdge)!\n",
                  tID, j+1, k, MAXELEN-2);
         }
         if (k == 0) {
@@ -2676,19 +2812,34 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
           npts = k+2;
           goto fill1D;
         }
-        printf("%lX EGADS Error: EGlite_relPosTs = %d (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Error: EGlite_relPosTs = %d (EGlite_tessEdge)!\n",
                tID, stat);
       }
   }
   
   /* get minimum distance */
   stat = EGlite_evaluate(edge, &t[0], result);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf("%lX EGADS Warning: Edge %d EGlite_evaluateM0 = %d (EGlite_tessEdge)!\n",
+             tID, j+1, stat);
+    EGlite_getRange(edge, range, &i);
+    printf(" t = %lf  range = %lf %lf\n", t[0], range[0], range[1]);
+    return stat;
+  }
   mindist = (xyz[0][0]-result[0])*(xyz[0][0]-result[0]) +
             (xyz[0][1]-result[1])*(xyz[0][1]-result[1]) +
             (xyz[0][2]-result[2])*(xyz[0][2]-result[2]);
   stat = EGlite_evaluate(edge, &t[1], result);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf("%lX EGADS Warning: Edge %d EGlite_evaluateM1 = %d (EGlite_tessEdge)!\n",
+             tID, j+1, stat);
+    EGlite_getRange(edge, range, &i);
+    printf(" t = %lf/%lf  range = %lf %lf\n", t[1], limits[1],
+           range[0], range[1]);
+    return stat;
+  }
   dist = (xyz[1][0]-result[0])*(xyz[1][0]-result[0]) +
          (xyz[1][1]-result[1])*(xyz[1][1]-result[1]) +
          (xyz[1][2]-result[2])*(xyz[1][2]-result[2]);
@@ -2702,12 +2853,43 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   printf("%lX     minDist = %le\n", tID, mindist);
 #endif
   
+  /* add any internal Nodes
+  if (body->oclass == EBODY) {
+    egEEdge  *eedge;
+   
+    eedge = (egEEdge *) edge->blind;
+    for (i = 1; i < eedge->nsegs-1; i++) {
+      xyz[npts][0] = xyz[npts-1][0];
+      xyz[npts][1] = xyz[npts-1][1];
+      xyz[npts][2] = xyz[npts-1][2];
+      t[npts]      = t[npts-1];
+      t[npts-1]    = eedge->segs[i].tstart;
+      stat         = EGlite_getTopology(eedge->segs[i].nstart, &ref, &oclass,
+                                    &ntype, xyz[npts-1], &ndum, &dum, &senses);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf("%lX EGADS Warning: Edge %d EGlite_getTopologyE = %d (EGlite_tessEdge)!\n",
+                 tID, j+1, stat);
+        return stat;
+      }
+      npts++;
+    }
+  }  */
+  
   /* is our Edge in a Face w/ 2 Edges? */
   if (mtype != ONENODE) {
-    stat = EGlite_getBodyTopos(body, edge, FACE, &k, &facs);
+    if (body->oclass == EBODY) {
+      stat = EGlite_getBodyTopos(body, edge, EFACE, &k, &facs);
+    } else {
+      stat = EGlite_getBodyTopos(body, edge,  FACE, &k, &facs);
+    }
     if ((stat == EGADS_SUCCESS) && (k != 0)) {
       for (i = 0; i < k; i++) {
-        stat = EGlite_getBodyTopos(body, facs[i], EDGE, &aLen, &edges);
+        if (body->oclass == EBODY) {
+          stat = EGlite_getBodyTopos(body, facs[i], EEDGE, &aLen, &edges);
+        } else {
+          stat = EGlite_getBodyTopos(body, facs[i],  EDGE, &aLen, &edges);
+        }
         if (stat != EGADS_SUCCESS) continue;
         if (aLen == 2) {
 #ifdef DEBUG
@@ -2735,9 +2917,11 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
 #ifdef SPLITC0
   C0[0] = C0[1] = 0;
 #endif
+  iobj[0] = EGlite_effectIndex(body, edge, t[0]);
+  iobj[1] = EGlite_effectIndex(body, edge, t[1]);
   
   /* non-linear curve types */
-  if (geom->mtype != LINE) {
+  if (geomtype != LINE) {
     
     /* add a vertex or three */
     
@@ -2746,13 +2930,20 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       xyz[4][1] = xyz[1][1];
       xyz[4][2] = xyz[1][2];
       t[4]      = t[1];
+      iobj[4]   = iobj[1];
       for (i = 1; i <= 3; i++) {
         t[i]      = t[0] + i*(t[4]-t[0])/4.0;
         stat      = EGlite_evaluate(edge, &t[i], result);
-        if (stat != EGADS_SUCCESS) return stat;
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf("%lX EGADS Warning: Edge %d ONENODE = %d (EGlite_tessEdge)!\n",
+                   tID, j+1, stat);
+          return stat;
+        }
         xyz[i][0] = result[0];
         xyz[i][1] = result[1];
         xyz[i][2] = result[2];
+        iobj[i]   = EGlite_effectIndex(body, edge, t[i]);
       }
       npts = 5;
     } else if (f2e != 0) {
@@ -2760,12 +2951,19 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       xyz[2][1] = xyz[1][1];
       xyz[2][2] = xyz[1][2];
       t[2]      = t[1];
+      iobj[2]   = iobj[1];
       t[1]      = 0.5*(t[0]+t[2]);
       stat      = EGlite_evaluate(edge, &t[1], result);
-      if (stat != EGADS_SUCCESS) return stat;
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf("%lX EGADS Warning: Edge %d TWONODE = %d (EGlite_tessEdge)!\n",
+                 tID, j+1, stat);
+        return stat;
+      }
       xyz[1][0] = result[0];
       xyz[1][1] = result[1];
       xyz[1][2] = result[2];
+      iobj[1]   = EGlite_effectIndex(body, edge, t[1]);
       npts      = 3;
     }
 
@@ -2773,7 +2971,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
     for (i = 2; i < npts; i++) C0[i] = 0;
     
     /* put vertex at C0 */
-    if (geom->mtype == BSPLINE) {
+    if (geomtype == BSPLINE) {
       stat = EGlite_getGeometry(geom, &oclass, &btype, &rref, &info, &prv);
       if (stat == EGADS_SUCCESS) {
         for (i = info[1]; i < info[3]-info[1]-1; i++) {
@@ -2841,11 +3039,19 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       for (i = 0; i < npts-1; i++) {
         d    = 0.5*(t[i]+t[i+1]);
         stat = EGlite_evaluate(edge, &d, result);
-        if (stat != EGADS_SUCCESS) return stat;
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf("%lX EGADS Warning: Edge %d SAG = %d (EGlite_tessEdge)!\n",
+                   tID, j+1, stat);
+          return stat;
+        }
         aux[i][0] = result[0];
         aux[i][1] = result[1];
         aux[i][2] = result[2];
       }
+      aux[npts-1][0] = 0.0;
+      aux[npts-1][1] = 0.0;
+      aux[npts-1][2] = 0.0;
       
       while (npts < MAXELEN) {
         /* find the biggest deviation */
@@ -2877,6 +3083,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
           aux[i+1][1] = aux[i][1];
           aux[i+1][2] = aux[i][2];
           t[i+1]      = t[i];
+          iobj[i+1]   = iobj[i];
 #ifdef SPLITC0
           C0[i+1]     = C0[i];
 #endif
@@ -2885,6 +3092,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         xyz[k+1][0] = aux[k][0];
         xyz[k+1][1] = aux[k][1];
         xyz[k+1][2] = aux[k][2];
+        iobj[k+1]   = EGlite_effectIndex(body, edge, t[k+1]);
 #ifdef SPLITC0
         C0[k+1]     = 0;
 #endif
@@ -2950,6 +3158,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         xyz[i+1][2] = xyz[i][2];
         aux[i+1][0] = aux[i][0];
         t[i+1]      = t[i];
+        iobj[i+1]   = iobj[i];
 #ifdef SPLITC0
         C0[i+1]     = C0[i];
 #endif
@@ -2960,6 +3169,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       xyz[k+1][0] = result[0];
       xyz[k+1][1] = result[1];
       xyz[k+1][2] = result[2];
+      iobj[k+1]   = EGlite_effectIndex(body, edge, t[k+1]);
 #ifdef SPLITC0
       C0[k+1]     = 0;
 #endif
@@ -2983,13 +3193,13 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
 #endif
   
   /* non-linear curve types */
-  if (geom->mtype != LINE) {
+  if (geomtype != LINE) {
 
     /* angle criteria - aux is normalized tangent */
     if (params[2] != 0.0) {
 
       for (i = 0; i < npts; i++) {
-        stat = EGlite_evaluate(edge, &t[i], result);
+        stat = EGlite_evalEffect(edge, t[i], result);
         if (stat != EGADS_SUCCESS) return stat;
         dist = sqrt(result[3]*result[3] + result[4]*result[4] +
                     result[5]*result[5]);
@@ -3004,6 +3214,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         k   = -1;
         dot =  1.0;
         for (i = 0; i < npts-1; i++) {
+          if (iobj[i] != iobj[i+1]) continue;
 #ifdef SPLITC0
           if ((C0[i] == 1) || (C0[i+1] == 1)) continue;
 #endif
@@ -3034,12 +3245,13 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
           aux[i+1][1] = aux[i][1];
           aux[i+1][2] = aux[i][2];
           t[i+1]      = t[i];
+          iobj[i+1]   = iobj[i];
 #ifdef SPLITC0
           C0[i+1]     = C0[i];
 #endif
         }
         t[k+1] = 0.5*(t[k]+t[k+2]);
-        stat   = EGlite_evaluate(edge, &t[k+1], result);
+        stat   = EGlite_evalEffect(edge, t[k+1], result);
         if (stat != EGADS_SUCCESS) return stat;
         dist   = sqrt(result[3]*result[3] + result[4]*result[4] +
                       result[5]*result[5]);
@@ -3047,6 +3259,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         xyz[k+1][0] = result[0];
         xyz[k+1][1] = result[1];
         xyz[k+1][2] = result[2];
+        iobj[k+1]   = EGlite_effectIndex(body, edge, t[k+1]);
 #ifdef SPLITC0
         C0[k+1]     = 0;
 #endif
@@ -3078,11 +3291,12 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         stat = EGlite_getTopology(faces[face-1], &ref, &oclass, &ntype, range,
                               &ndum, &dum, &senses);
         if (stat != EGADS_SUCCESS) continue;
-        if (ref == NULL) continue;
-        if (ref->mtype == PLANE) continue;
+        if (ref != NULL)
+          if (ref->mtype == PLANE) continue;
         stat = EGlite_tolerance(faces[face-1], &tol);
         if (stat != EGADS_SUCCESS) continue;
         if (params[1] > tol) tol = params[1];
+        if (tol < 1.e-7) tol  = 1.e-7;
         result[0] = result[2] =  1.e10;
         result[1] = result[3] = -1.e10;
         for (i = 0; i < npts; i++) {
@@ -3099,8 +3313,8 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
         }
         
         /* an iso-cline on a BSPline surface with multiplicity of Knots? */
-        if ((fabs(result[1]-result[0]) < UVTOL) ||
-            (fabs(result[3]-result[2]) < UVTOL)) {
+        if ((ref != NULL) && ((fabs(result[1]-result[0]) < UVTOL) ||
+                              (fabs(result[3]-result[2]) < UVTOL))) {
           stat = EGlite_getGeometry(ref, &oclass, &btype, &rref, &info, &prv);
           if (stat == EGADS_SUCCESS) {
             if (btype == BSPLINE) {
@@ -3300,15 +3514,17 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       stat = EGlite_getTopology(faces[face-1], &ref, &oclass, &ntype, range,
                             &ndum, &dum, &senses);
       if (stat != EGADS_SUCCESS) continue;
-      if (ref == NULL) continue;
-      if (ref->mtype == PLANE) continue;
+      if (faces[face-1]->oclass == FACE) {
+        if (ref == NULL) continue;
+        if (ref->mtype == PLANE) continue;
+      }
       
       /* look at beginning of Edge */
       if (be[0] < 2) {
         stat = EGlite_getEdgeUV(faces[face-1], edge, sense, t[0], aux[0]);
         if (stat == EGADS_SUCCESS) {
           stat = EGlite_evaluate(faces[face-1], aux[0], result);
-          if (stat == EGADS_SUCCESS) {
+          if ((stat == EGADS_SUCCESS) || (stat == EGADS_EXTRAPOL)) {
             if ((sqrt(result[3]*result[3] + result[4]*result[4] +
                       result[5]*result[5]) < DEGENUV) ||
                 (sqrt(result[6]*result[6] + result[7]*result[7] +
@@ -3344,7 +3560,7 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       stat = EGlite_getEdgeUV(faces[face-1], edge, sense, t[npts-1], aux[1]);
       if (stat != EGADS_SUCCESS) continue;
       stat = EGlite_evaluate(faces[face-1], aux[1], result);
-      if (stat != EGADS_SUCCESS) continue;
+      if ((stat != EGADS_SUCCESS) && (stat != EGADS_EXTRAPOL)) continue;
       if ((sqrt(result[3]*result[3] + result[4]*result[4] +
                 result[5]*result[5]) < DEGENUV) ||
           (sqrt(result[6]*result[6] + result[7]*result[7] +
@@ -3376,14 +3592,18 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
   
   /* proximity insertions */
   
-  if (geom->mtype == LINE) goto fill1D;
+  if (geomtype == LINE) goto fill1D;
   for (aLen = n = 0; n < 2; n++) {
     for (nf = 0; nf < btess->tess1d[j].faces[n].nface; nf++) {
       face = btess->tess1d[j].faces[n].index;
       if (btess->tess1d[j].faces[n].nface > 1)
         face = btess->tess1d[j].faces[n].faces[nf];
       if (face <= 0) continue;
-      stat = EGlite_getBodyTopos(body, faces[face-1], EDGE, &ndum, NULL);
+      if (body->oclass == EBODY) {
+        stat = EGlite_getBodyTopos(body, faces[face-1], EEDGE, &ndum, NULL);
+      } else {
+        stat = EGlite_getBodyTopos(body, faces[face-1],  EDGE, &ndum, NULL);
+      }
       if (stat != EGADS_SUCCESS) continue;
       aLen += ndum;
     }
@@ -3405,7 +3625,11 @@ EGlite_tessEdge(egTessel *btess, egObject **faces, int j, egObject *edge,
       stat = EGlite_tolerance(faces[face-1], &tol);
       if (stat == EGADS_SUCCESS)
         if (tol > toldist) toldist = tol;
-      stat = EGlite_getBodyTopos(body, faces[face-1], EDGE, &ndum, &dum);
+      if (body->oclass == EBODY) {
+        stat = EGlite_getBodyTopos(body, faces[face-1], EEDGE, &ndum, &dum);
+      } else {
+        stat = EGlite_getBodyTopos(body, faces[face-1],  EDGE, &ndum, &dum);
+      }
       if (stat != EGADS_SUCCESS) continue;
       for (i = 0; i < ndum; i++) {
         if (dum[i]        == NULL)       continue;
@@ -3639,7 +3863,7 @@ fill1D:
   btess->tess1d[j].xyz = (double *) EGlite_alloc(3*npts*sizeof(double));
   if (btess->tess1d[j].xyz == NULL) {
     if (outLevel > 0)
-      printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdges)!\n",
+      printf("%lX EGADS Error: Alloc %d Pts Edge %d (EGlite_tessEdge)!\n",
              tID, npts, j+1);
     return EGADS_MALLOC;
   }
@@ -3648,7 +3872,7 @@ fill1D:
     EGlite_free(btess->tess1d[j].xyz);
     btess->tess1d[j].xyz = NULL;
     if (outLevel > 0)
-      printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdges)!\n",
+      printf("%lX EGADS Error: Alloc %d Ts Edge %d (EGlite_tessEdge)!\n",
              tID, npts, j+1);
     return EGADS_MALLOC;
   }
@@ -3661,7 +3885,7 @@ fill1D:
       EGlite_free(btess->tess1d[j].xyz);
       btess->tess1d[j].xyz = NULL;
       if (outLevel > 0)
-        printf("%lX EGADS Error: Alloc %d Tric- Edge %d (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Error: Alloc %d Tric- Edge %d (EGlite_tessEdge)!\n",
                tID, npts, j+1);
       return EGADS_MALLOC;
     }
@@ -3678,7 +3902,7 @@ fill1D:
       EGlite_free(btess->tess1d[j].xyz);
       btess->tess1d[j].xyz = NULL;
       if (outLevel > 0)
-        printf("%lX EGADS Error: Alloc %d Tric+ Edge %d (EGlite_tessEdges)!\n",
+        printf("%lX EGADS Error: Alloc %d Tric+ Edge %d (EGlite_tessEdge)!\n",
                tID, npts, j+1);
       return EGADS_MALLOC;
     }
@@ -3776,10 +4000,17 @@ EGlite_tessEdges(egTessel *btess, int ignore, /*@null@*/ int *retess)
   body     = btess->src;
   outLevel = EGlite_outLevel(body);
   
-  stat = EGlite_getBodyTopos(body, NULL, EDGE, &nedge, &edges);
-  if (stat != EGADS_SUCCESS) return stat;
-  stat = EGlite_getBodyTopos(body, NULL, FACE, &nface, &faces);
-  if (stat != EGADS_SUCCESS) return stat;
+  if (body->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(body, NULL, EEDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat = EGlite_getBodyTopos(body, NULL, EFACE, &nface, &faces);
+    if (stat != EGADS_SUCCESS) return stat;
+  } else {
+    stat = EGlite_getBodyTopos(body, NULL,  EDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat = EGlite_getBodyTopos(body, NULL,  FACE, &nface, &faces);
+    if (stat != EGADS_SUCCESS) return stat;
+  }
   
   if (retess == NULL) {
     if (btess->tess1d == NULL) {
@@ -4137,12 +4368,14 @@ EGlite_makeTessGeom(egObject *obj, double *params, int *sizes, egObject **tess)
       for (k = j = 0; j < jknot-1; j++) {
         for (jj = (j == 0 ? 0 : 1); jj <= jdeg+1; jj++) {
 
-          uv[1] = knotv[j]*(1.-jj/(double)(jdeg+1.)) + knotv[j+1]*(jj/(double)(jdeg+1.));
+          uv[1] = knotv[j  ]*(1.-jj/(double)(jdeg+1.)) +
+                  knotv[j+1]*(   jj/(double)(jdeg+1.));
 
           for (i = 0; i < iknot-1; i++) {
             for (ii = (i == 0 ? 0 : 1); ii <= ideg+1; ii++, k++) {
 
-              uv[0] = knotu[i]*(1.-ii/(double)(ideg+1.)) + knotu[i+1]*(ii/(double)(ideg+1.));
+              uv[0] = knotu[i  ]*(1.-ii/(double)(ideg+1.)) +
+                      knotu[i+1]*(   ii/(double)(ideg+1.));
 
               stat  = EGlite_evaluate(obj, uv, result);
               dtess[3*k  ] = result[0];
@@ -4150,7 +4383,7 @@ EGlite_makeTessGeom(egObject *obj, double *params, int *sizes, egObject **tess)
               dtess[3*k+2] = result[2];
               if (stat == EGADS_SUCCESS) continue;
               if (outLevel > 0)
-                printf(" EGADS Warning: %d/%d, %d/%d eval ret = %d  (EGlite_makeTessGeom)!\n",
+                printf(" EGADS Warning: %d/%d, %d/%d eval ret = %d (EGlite_makeTessGeom)!\n",
                        i+ii+1, nv, j+jj+1, nv, stat);
             }
           }
@@ -4179,7 +4412,7 @@ EGlite_makeTessGeom(egObject *obj, double *params, int *sizes, egObject **tess)
           dtess[3*k+2] = result[2];
           if (stat == EGADS_SUCCESS) continue;
           if (outLevel > 0)
-            printf(" EGADS Warning: %d/%d, %d/%d eval ret = %d  (EGlite_makeTessGeom)!\n",
+            printf(" EGADS Warning: %d/%d, %d/%d eval ret = %d (EGlite_makeTessGeom)!\n",
                    i+1, nu, j+1, nv, stat);
         }
       }
@@ -4194,7 +4427,8 @@ EGlite_makeTessGeom(egObject *obj, double *params, int *sizes, egObject **tess)
       for (k = i = 0; i < iknot-1; i++) {
         for (ii = (i == 0 ? 0 : 1); ii <= ideg+1; ii++, k++) {
 
-          uv[0] = knotu[i]*(1.-ii/(double)(ideg+1.)) + knotu[i+1]*(ii/(double)(ideg+1.));
+          uv[0] = knotu[i  ]*(1.-ii/(double)(ideg+1.)) +
+                  knotu[i+1]*(   ii/(double)(ideg+1.));
 
           stat  = EGlite_evaluate(obj, uv, result);
           dtess[3*k  ] = result[0];
@@ -4356,7 +4590,7 @@ EGlite_moveEdgeVert(egObject *tess, int eIndex, int vIndex, double t)
       printf(" EGADS Error: Source Not an Object (EGlite_moveEdgeVert)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_moveEdgeVert)!\n");
     return EGADS_NOTBODY;
@@ -4391,9 +4625,15 @@ EGlite_moveEdgeVert(egObject *tess, int eIndex, int vIndex, double t)
                 btess->tess1d[eIndex-1].t[vIndex]);
     return EGADS_RANGERR;
   }
-  stat = EGlite_getBodyTopos(btess->src, NULL, EDGE, &nedge, &edges);
-  if (stat != EGADS_SUCCESS) return stat;
-  stat = EGlite_getBodyTopos(btess->src, NULL, FACE, &nface, &faces);
+  if (obj->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(obj, NULL, EEDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat = EGlite_getBodyTopos(obj, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(obj, NULL,  EDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) return stat;
+    stat = EGlite_getBodyTopos(obj, NULL,  FACE, &nface, &faces);
+  }
   if (stat != EGADS_SUCCESS) {
     EGlite_free(edges);
     return stat;
@@ -4546,12 +4786,7 @@ EGlite_deleteEdgeVert(egObject *tess, int eIndex, int vIndex, int dir)
       printf(" EGADS Error: Source Not an Object (EGlite_deleteEdgeVert)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Source Not Body (EGlite_deleteEdgeVert)!\n");
-    return EGADS_NOTBODY;
-  }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_deleteEdgeVert)!\n");
     return EGADS_NOTBODY;
@@ -4754,25 +4989,25 @@ EGlite_deleteEdgeVert(egObject *tess, int eIndex, int vIndex, int dir)
           btess->tess2d[iface-1].tric[3*i+2]--;
       }
       for (ie = 0; ie < btess->nEdge; ie++) {
-        nfr = btess->tess1d[ie-1].faces[0].nface;
+        nfr = btess->tess1d[ie].faces[0].nface;
         for (i = 0; i < nfr; i++) {
-          k = btess->tess1d[ie-1].faces[0].index;
-          if (nfr > 1) k = btess->tess1d[ie-1].faces[0].faces[i];
+          k = btess->tess1d[ie].faces[0].index;
+          if (nfr > 1) k = btess->tess1d[ie].faces[0].faces[i];
           if (iface != k) continue;
-          if (btess->tess1d[ie-1].faces[0].tric == NULL) continue;
-          for (k = 0; k < btess->tess1d[ie-1].npts-1; k++)
-            if (btess->tess1d[ie-1].faces[0].tric[nfr*k+i] > it)
-              btess->tess1d[ie-1].faces[0].tric[nfr*k+i]--;
+          if (btess->tess1d[ie].faces[0].tric == NULL) continue;
+          for (k = 0; k < btess->tess1d[ie].npts-1; k++)
+            if (btess->tess1d[ie].faces[0].tric[nfr*k+i] > it)
+              btess->tess1d[ie].faces[0].tric[nfr*k+i]--;
         }
-        nfr = btess->tess1d[ie-1].faces[1].nface;
+        nfr = btess->tess1d[ie].faces[1].nface;
         for (i = 0; i < nfr; i++) {
-          k = btess->tess1d[ie-1].faces[1].index;
-          if (nfr > 1) k = btess->tess1d[ie-1].faces[1].faces[i];
+          k = btess->tess1d[ie].faces[1].index;
+          if (nfr > 1) k = btess->tess1d[ie].faces[1].faces[i];
           if (iface != k) continue;
-          if (btess->tess1d[ie-1].faces[1].tric == NULL) continue;
-          for (k = 0; k < btess->tess1d[ie-1].npts-1; k++)
-            if (btess->tess1d[ie-1].faces[1].tric[nfr*k+i] > it)
-              btess->tess1d[ie-1].faces[1].tric[nfr*k+i]--;
+          if (btess->tess1d[ie].faces[1].tric == NULL) continue;
+          for (k = 0; k < btess->tess1d[ie].npts-1; k++)
+            if (btess->tess1d[ie].faces[1].tric[nfr*k+i] > it)
+              btess->tess1d[ie].faces[1].tric[nfr*k+i]--;
         }
       }
       btess->tess2d[iface-1].npts--;
@@ -4887,14 +5122,9 @@ EGlite_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, int npts,
       printf(" EGADS Error: Source Not an Object (EGlite_insertEdgeVerts)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_insertEdgeVerts)!\n");
-    return EGADS_NOTBODY;
-  }
-  if (obj->oclass != BODY) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Source Not Body (EGlite_insertEdgeVert)!\n");
     return EGADS_NOTBODY;
   }
   if (btess->tess1d == NULL) {
@@ -4991,12 +5221,21 @@ EGlite_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, int npts,
              npts, stripe);
     return EGADS_MALLOC;
   }
-  stat = EGlite_getBodyTopos(btess->src, NULL, EDGE, &nedge, &edges);
-  if (stat != EGADS_SUCCESS) {
-    EGlite_free(vals);
-    return stat;
+  if (obj->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(obj, NULL, EEDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) {
+      EGlite_free(vals);
+      return stat;
+    }
+    stat = EGlite_getBodyTopos(obj, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(obj, NULL,  EDGE, &nedge, &edges);
+    if (stat != EGADS_SUCCESS) {
+      EGlite_free(vals);
+      return stat;
+    }
+    stat = EGlite_getBodyTopos(obj, NULL,  FACE, &nface, &faces);
   }
-  stat = EGlite_getBodyTopos(btess->src, NULL, FACE, &nface, &faces);
   if (stat != EGADS_SUCCESS) {
     EGlite_free(edges);
     EGlite_free(vals);
@@ -5096,6 +5335,7 @@ EGlite_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, int npts,
     ts[j]       = btess->tess1d[eIndex-1].t[i];
     if (i != btess->tess1d[eIndex-1].npts-1)
       for (m = 0; m < 2; m++) {
+        if (etric[m] == NULL) continue;
         nf = btess->tess1d[eIndex-1].faces[m].nface;
         for (nx = 0; nx < nf; nx++)
           etric[m][j*nf+nx] = btess->tess1d[eIndex-1].faces[m].tric[i*nf+nx];
@@ -5108,6 +5348,7 @@ EGlite_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, int npts,
       xyzs[3*j+2] = vals[stripe*k+2];
       ts[j]       = t[k];
       for (m = 0; m < 2; m++) {
+        if (etric[m] == NULL) continue;
         nf = btess->tess1d[eIndex-1].faces[m].nface;
         for (nx = 0; nx < nf; nx++) etric[m][j*nf+nx] = 0;
       }
@@ -5391,18 +5632,15 @@ EGlite_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, int npts,
 __HOST_AND_DEVICE__ static void
 EGlite_tessThread(void *struc)
 {
-  int          i, index, stat, aStat, aType, aLen;
+  int       i, index, stat, aStat;
 #ifdef PROGRESS
-  int          outLevel;
+  int       outLevel;
 #endif
-  long         ID;
-  double       dist, params[3];
-  const int    *aInts;
-  const double *aReals;
-  const char   *aStr;
-  triStruct    tst;
-  fillArea     fast;
-  EMPtess      *tthread;
+  long      ID;
+  double    dist, params[3], aReals[3];
+  triStruct tst;
+  fillArea  fast;
+  EMPtess   *tthread;
   
   tthread = (EMPtess *) struc;
 #ifdef PROGRESS
@@ -5470,63 +5708,41 @@ EGlite_tessThread(void *struc)
     
     /* adjust the parameters? */
     if (tthread->ignore != 1) {
-      aStat = EGlite_attributeRet(tthread->faces[index], ".tParams", &aType, &aLen,
-                              &aInts, &aReals, &aStr);
-      if (aStat == EGADS_SUCCESS)
-        if (aType != ATTRREAL) {
-          printf(" EGADS Warning: tParams NonReal Attribute (EGlite_tessThread)!\n");
-        } else {
-          params[0] = tthread->params[0];
-          params[1] = tthread->params[1];
-          params[2] = tthread->params[2];
-          for (i = 0; i < aLen; i++) {
-            if (i == 3) break;
-            if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
-              params[i] = aReals[i];
-          }
-          dist = fabs(params[2]);
-          if (dist > 30.0) dist = 30.0;
-          if (dist <  0.5) dist =  0.5;
-          tst.maxlen = params[0];
-          tst.chord  = params[1];
-          tst.dotnrm = cos(PI*dist/180.0);
-        }
-      aStat = EGlite_attributeRet(tthread->faces[index], ".tParam", &aType, &aLen,
-                              &aInts, &aReals, &aStr);
-      if (aStat == EGADS_SUCCESS)
-        if (aType != ATTRREAL) {
-          printf(" EGADS Warning: tParam NonReal Attribute (EGlite_tessThread)!\n");
-        } else {
-          params[0] = tthread->params[0];
-          params[1] = tthread->params[1];
-          params[2] = tthread->params[2];
-          for (i = 0; i < aLen; i++) {
-            if (i == 3) break;
-            if (aReals[i] > 0.0) params[i] = aReals[i];
-          }
-          dist = fabs(params[2]);
-          if (dist > 30.0) dist = 30.0;
-          if (dist <  0.5) dist =  0.5;
-          tst.maxlen = params[0];
-          tst.chord  = params[1];
-          tst.dotnrm = cos(PI*dist/180.0);
-        }
+      aStat = EGlite_attrRet3R(tthread->faces[index], ".tParams", aReals);
+      if (aStat == EGADS_SUCCESS) {
+        params[0] = tthread->params[0];
+        params[1] = tthread->params[1];
+        params[2] = tthread->params[2];
+        for (i = 0; i < 3; i++)
+          if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
+            params[i] = aReals[i];
+        dist = fabs(params[2]);
+        if (dist > 30.0) dist = 30.0;
+        if (dist <  0.5) dist =  0.5;
+        tst.maxlen = params[0];
+        tst.chord  = params[1];
+        tst.dotnrm = cos(PI*dist/180.0);
+      }
+      aStat = EGlite_attrRet3R(tthread->faces[index], ".tParam", aReals);
+      if (aStat == EGADS_SUCCESS) {
+        params[0] = tthread->params[0];
+        params[1] = tthread->params[1];
+        params[2] = tthread->params[2];
+        for (i = 0; i < 3; i++)
+          if (aReals[i] > 0.0) params[i] = aReals[i];
+        dist = fabs(params[2]);
+        if (dist > 30.0) dist = 30.0;
+        if (dist <  0.5) dist =  0.5;
+        tst.maxlen = params[0];
+        tst.chord  = params[1];
+        tst.dotnrm = cos(PI*dist/180.0);
+      }
       tst.qparm[0] = tthread->qparam[0];
       tst.qparm[1] = tthread->qparam[1];
       tst.qparm[2] = tthread->qparam[2];
-      aStat = EGlite_attributeRet(tthread->faces[index], ".qParams", &aType, &aLen,
-                              &aInts, &aReals, &aStr);
+      aStat = EGlite_attrRet3R(tthread->faces[index], ".qParams", aReals);
       if (aStat == EGADS_SUCCESS)
-        if ((aType == ATTRINT) || (aType == ATTRCSYS)) {
-          printf(" EGADS Warning: qParam Integer/CSys Attribute (EGlite_tessThread)!\n");
-        } else if (aType == ATTRREAL) {
-          for (i = 0; i < aLen; i++) {
-            if (i == 3) break;
-            tst.qparm[i] = aReals[i];
-          }
-        } else {
-          tst.qparm[0] = -1.0;
-        }
+        for (i = 0; i < 3; i++) tst.qparm[i] = aReals[i];
     }
 
     /* do the work */
@@ -5564,26 +5780,33 @@ __HOST_AND_DEVICE__ int
 EGlite_makeTessBody(egObject *object, double *paramx, egObject **tess)
 {
   int      i, j, stat, outLevel, nface, np, aStat, aType, aLen, ignore;
-  double   params[3];
+  double   params[3], rparm[3];
   void     **threads = NULL;
   long     start;
   egTessel *btess;
   egObject *ttess, *context, **faces;
   egCntxt  *cntx;
+  egEBody  *ebody;
   EMPtess  tthread;
   const int    *aInts;
   const double *aReals;
   const char   *aStr;
 
   *tess = NULL;
-  if (object == NULL)               return EGADS_NULLOBJ;
-  if (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (object->oclass != BODY)       return EGADS_NOTBODY;
+  if  (object == NULL)               return EGADS_NULLOBJ;
+  if  (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if ((object->oclass != BODY) &&
+      (object->oclass != EBODY))     return EGADS_NOTBODY;
+  if  (object->blind == NULL)        return EGADS_NODATA;
   outLevel = EGlite_outLevel(object);
   context  = EGlite_context(object);
-  if (context == NULL)              return EGADS_NULLOBJ;
-  if (EGlite_sameThread(context))       return EGADS_CNTXTHRD;
+  if  (context == NULL)              return EGADS_NULLOBJ;
+  if  (EGlite_sameThread(context))       return EGADS_CNTXTHRD;
   cntx     = (egCntxt *) context->blind;
+  if  (object->oclass == EBODY) {
+    ebody  = (egEBody *) object->blind;
+    if (ebody->done == 0)            return EGADS_INDEXERR;
+  }
   
   /* get global settings */
   ignore = 0;
@@ -5592,23 +5815,14 @@ EGlite_makeTessBody(egObject *object, double *paramx, egObject **tess)
   params[1] = fabs(paramx[1]);
   params[2] =      paramx[2];
   if (ignore != 1) {
-    aStat     = EGlite_attributeRet(object, ".tParams", &aType, &aLen, &aInts,
-                                &aReals, &aStr);
+    aStat   = EGlite_attrRet3R(object, ".tParams", rparm);
     if (aStat == EGADS_SUCCESS)
-      if (aType != ATTRREAL) {
-        printf(" EGADS Warning: tParams NonReal Attribute (EGlite_makeTessBody)!\n");
-      } else {
-        for (i = 0; i < aLen; i++) {
-          if (i == 3) break;
-          if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
-            params[i] = aReals[i];
-      }
-    }
+      for (i = 0; i < 3; i++)
+        if ((rparm[i] < params[i]) && (rparm[i] > 0.0)) params[i] = rparm[i];
   }
   
   /* get quadding parameters, if any */
-  aStat = EGlite_attributeRet(object, ".qParams", &aType, &aLen, &aInts,
-                          &aReals, &aStr);
+  aStat = EGlite_attrRet3R(object, ".qParams", rparm);
   
   btess = (egTessel *) EGlite_alloc(sizeof(egTessel));
   if (btess == NULL) {
@@ -5658,7 +5872,11 @@ EGlite_makeTessBody(egObject *object, double *paramx, egObject **tess)
   if ((object->mtype == WIREBODY) || (paramx[0] < 0.0)) return EGADS_SUCCESS;
 
   /* Need Face triangulations */
-  stat = EGlite_getBodyTopos(object, NULL, FACE, &nface, &faces);
+  if (object->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(object, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(object, NULL,  FACE, &nface, &faces);
+  }
   if (stat != EGADS_SUCCESS) {
     printf(" EGADS Error: EGlite_getBodyTopos = %d (EGlite_makeTessBody)!\n",
            stat);
@@ -5711,18 +5929,9 @@ EGlite_makeTessBody(egObject *object, double *paramx, egObject **tess)
   tthread.params    = params;
   tthread.tparam    = btess->tparam;
   tthread.qparam[0] = tthread.qparam[1] = tthread.qparam[2] = 0.0;
-  if (aStat == EGADS_SUCCESS) {
-    if ((aType == ATTRINT) || (aType == ATTRCSYS)) {
-      printf(" EGADS Warning: qParam Integer/CSys Attribute (EGlite_makeTessBody)!\n");
-    } else if (aType == ATTRREAL) {
-      for (i = 0; i < aLen; i++) {
-        if (i == 3) break;
-        tthread.qparam[i] = aReals[i];
-      }
-    } else {
-      tthread.qparam[0] = -1.0;
-    }
-  }
+  if (aStat == EGADS_SUCCESS)
+    for (i = 0; i < 3; i++) tthread.qparam[i] = rparm[i];
+
   aStat = EGlite_attributeRet(object, ".silent", &aType, &aLen, &aInts,
                           &aReals, &aStr);
   if (aStat == EGADS_SUCCESS) tthread.silent = 1;
@@ -5790,6 +5999,40 @@ EGlite_makeTessBody(egObject *object, double *paramx, egObject **tess)
     if (i != 0) printf("\n");
   }
 
+#ifndef LITE
+  for (i = j = 0; j < nface; j++)
+    if (btess->tess2d[j].tfi == 1) {
+      np = btess->tess2d[j].ntris/2;
+      if (2*np == btess->tess2d[j].ntris) i++;
+    }
+  if (i != 0) {
+    int *qints;
+
+    qints = (int *) EGlite_alloc(nface*sizeof(int));
+    if (qints != NULL) {
+      for (j = 0; j < nface; j++) {
+        qints[j] = 0;
+        if (btess->tess2d[j].tfi == 1) {
+          np = btess->tess2d[j].ntris/2;
+          if (2*np == btess->tess2d[j].ntris) qints[j] = np;
+        }
+      }
+      stat = EGlite_attributeAdd(ttess, ".mixed", ATTRINT, nface, qints, NULL, NULL);
+      if (stat != EGADS_SUCCESS)
+        if (outLevel > 0)
+          printf(" EGADS Warning: EGlite_attributeAdd m = %d (EGlite_makeTessBody)!\n",
+                 stat);
+      EGlite_free(qints);
+      stat = EGlite_attributeAdd(ttess, ".tessType", ATTRSTRING, 5, NULL, NULL,
+                             "Mixed");
+      if (stat != EGADS_SUCCESS)
+        if (outLevel > 0)
+          printf(" EGADS Warning: EGlite_attributeAdd T = %d (EGlite_makeTessBody)!\n",
+                 stat);
+    }
+  }
+#endif
+
   return EGADS_SUCCESS;
 }
 
@@ -5799,7 +6042,7 @@ EGlite_remakeTess(egObject *tess, int nobj, egObject **objs, double *paramx)
 {
   int      i, j, mx, stat, outLevel, iface, nface, hit, np, aStat, aType, aLen;
   int      *ed, *marker = NULL;
-  double   params[3];
+  double   params[3], rparm[3];
   void     **threads = NULL;
   long     start;
   double   save[3];
@@ -5820,7 +6063,8 @@ EGlite_remakeTess(egObject *tess, int nobj, egObject **objs, double *paramx)
   object = btess->src;
   if (object == NULL)               return EGADS_NULLOBJ;
   if (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (object->oclass != BODY)       return EGADS_NOTBODY;
+  if ((object->oclass != BODY) &&
+      (object->oclass != EBODY))    return EGADS_NOTBODY;
   if (nobj <= 0)                    return EGADS_NODATA;
   outLevel = EGlite_outLevel(object);
   context  = EGlite_context(object);
@@ -5832,22 +6076,13 @@ EGlite_remakeTess(egObject *tess, int nobj, egObject **objs, double *paramx)
   params[0] = paramx[0];
   params[1] = paramx[1];
   params[2] = paramx[2];
-  aStat     = EGlite_attributeRet(object, ".tParams", &aType, &aLen, &aInts,
-                              &aReals, &aStr);
+  aStat     = EGlite_attrRet3R(object, ".tParams", rparm);
   if (aStat == EGADS_SUCCESS)
-    if (aType != ATTRREAL) {
-      printf(" EGADS Warning: tParams NonReal Attribute (EGlite_remakeTess)!\n");
-    } else {
-      for (i = 0; i < aLen; i++) {
-        if (i == 3) break;
-        if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
-          params[i] = aReals[i];
-      }
-    }
+    for (i = 0; i < 3; i++)
+      if ((rparm[i] < params[i]) && (rparm[i] > 0.0)) params[i] = rparm[i];
 
   /* get quadding parameters, if any */
-  aStat = EGlite_attributeRet(object, ".qParams", &aType, &aLen, &aInts,
-                          &aReals, &aStr);
+  aStat = EGlite_attrRet3R(object, ".qParams", rparm);
 
   for (hit = j = 0; j < nobj; j++) {
     if (objs[j] == NULL) {
@@ -5963,7 +6198,11 @@ EGlite_remakeTess(egObject *tess, int nobj, egObject **objs, double *paramx)
   }
   if (marker == NULL) return EGADS_SUCCESS;
  
-  stat = EGlite_getBodyTopos(object, NULL, FACE, &nface, &faces);
+  if (object->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(object, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(object, NULL,  FACE, &nface, &faces);
+  }
   if (stat != EGADS_SUCCESS) {
     printf(" EGADS Error: EGlite_getBodyTopos = %d (EGlite_remakeTess)!\n",
            stat);
@@ -6017,18 +6256,9 @@ EGlite_remakeTess(egObject *tess, int nobj, egObject **objs, double *paramx)
   tthread.params    = params;
   tthread.tparam    = btess->tparam;
   tthread.qparam[0] = tthread.qparam[1] = tthread.qparam[2] = 0.0;
-  if (aStat == EGADS_SUCCESS) {
-    if ((aType == ATTRINT) || (aType == ATTRCSYS)) {
-      printf(" EGADS Warning: qParam Integer/Csys Attribute (EGlite_remakeTess)!\n");
-    } else if (aType == ATTRREAL) {
-      for (i = 0; i < aLen; i++) {
-        if (i == 3) break;
-        tthread.qparam[i] = aReals[i];
-      }
-    } else {
-      tthread.qparam[0] = -1.0;
-    }
-  }
+  if (aStat == EGADS_SUCCESS)
+    for (i = 0; i < 3; i++) tthread.qparam[i] = rparm[i];
+  
   aStat = EGlite_attributeRet(object, ".silent", &aType, &aLen, &aInts,
                           &aReals, &aStr);
   if (aStat == EGADS_SUCCESS) tthread.silent = 1;
@@ -6093,8 +6323,8 @@ __HOST_AND_DEVICE__ int
 EGlite_finishTess(egObject *tess, double *paramx)
 {
   int      i, j, stat, outLevel, nface, np, aStat, aType, aLen, ignore, type;
-  int      *qints = NULL;
-  double   params[3];
+  int      *ed, *qints = NULL;
+  double   params[3], rparm[3];
   void     **threads = NULL;
   long     start;
   egTessel *btess;
@@ -6114,12 +6344,16 @@ EGlite_finishTess(egObject *tess, double *paramx)
   object = btess->src;
   if (object == NULL)               return EGADS_NULLOBJ;
   if (object->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (object->oclass != BODY)       return EGADS_NOTBODY;
+  if ((object->oclass != BODY) &&
+      (object->oclass != EBODY))    return EGADS_NOTBODY;
   outLevel = EGlite_outLevel(object);
   context  = EGlite_context(object);
   if (context == NULL)              return EGADS_NULLOBJ;
   if (EGlite_sameThread(context))       return EGADS_CNTXTHRD;
   cntx     = (egCntxt *) context->blind;
+  
+  /* cleanup local/global mappings */
+  EGlite_cleanupTessMaps(btess);
   
   /* get global settings */
   ignore = 0;
@@ -6128,18 +6362,10 @@ EGlite_finishTess(egObject *tess, double *paramx)
   params[1] = fabs(paramx[1]);
   params[2] =      paramx[2];
   if (ignore != 1) {
-    aStat     = EGlite_attributeRet(object, ".tParams", &aType, &aLen, &aInts,
-                                &aReals, &aStr);
+    aStat   = EGlite_attrRet3R(object, ".tParams", rparm);
     if (aStat == EGADS_SUCCESS)
-      if (aType != ATTRREAL) {
-        printf(" EGADS Warning: tParams NonReal Attribute (EGlite_finishTess)!\n");
-      } else {
-        for (i = 0; i < aLen; i++) {
-          if (i == 3) break;
-          if ((aReals[i] < params[i]) && (aReals[i] > 0.0))
-            params[i] = aReals[i];
-        }
-      }
+      for (i = 0; i < 3; i++)
+        if ((rparm[i] < params[i]) && (rparm[i] > 0.0)) params[i] = rparm[i];
   }
   btess->params[0] = params[0];
   btess->params[1] = params[1];
@@ -6149,23 +6375,51 @@ EGlite_finishTess(egObject *tess, double *paramx)
     for (i = 0; i < MTESSPARAM; i++) btess->tparam[i] = cntx->tess[i];
   
   /* get quadding parameters, if any */
-  aStat = EGlite_attributeRet(object, ".qParams", &aType, &aLen, &aInts,
-                          &aReals, &aStr);
+  aStat = EGlite_attrRet3R(object, ".qParams", rparm);
   
-  /* do the Edges & make the Tessellation Object */
+  /* do the unfilled Edges */
   
-  stat = EGlite_tessEdges(btess, ignore, NULL);
-  if (stat != EGADS_SUCCESS) {
-    printf(" EGADS Error: EGlite_tessEdges = %d (EGlite_finishTess)!\n",
-           stat);
-    return stat;
+  for (j = i = 0; i < btess->nEdge; i++)
+    if (btess->tess1d[i].npts == 0) j++;
+  if (j != 0) {
+    ed = (int *) EGlite_alloc(btess->nEdge*sizeof(int));
+    if (ed == NULL) {
+      printf(" EGADS Error: Allocating %d Edge ints (EGlite_finishTess)!\n",
+             btess->nEdge);
+      return EGADS_MALLOC;
+    }
+    for (i = 0; i < btess->nEdge; i++) {
+      ed[i] = 0;
+      if (btess->tess1d[i].npts == 0) ed[i] = 1;
+    }
+    stat = EGlite_tessEdges(btess, ignore, ed);
+    EGlite_free(ed);
+    if (stat != EGADS_SUCCESS) {
+      printf(" EGADS Error: EGlite_tessEdges = %d (EGlite_finishTess)!\n",
+             stat);
+      return stat;
+    }
   }
   
   /* Wire Body or Edges Only */
-  if ((object->mtype == WIREBODY) || (paramx[0] < 0.0)) return EGADS_SUCCESS;
+  if ((object->mtype == WIREBODY) || (paramx[0] < 0.0)) {
+    btess->done = 1;
+    return EGADS_SUCCESS;
+  }
+  
+  for (j = i = 0; i < btess->nFace; i++)
+    if (btess->tess2d[i].xyz == NULL) j++;
+  if (j == 0) {
+    btess->done = 1;
+    return EGADS_SUCCESS;
+  }
   
   /* Need Face triangulations */
-  stat = EGlite_getBodyTopos(object, NULL, FACE, &nface, &faces);
+  if (object->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(object, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(object, NULL,  FACE, &nface, &faces);
+  }
   if (stat != EGADS_SUCCESS) {
     printf(" EGADS Error: EGlite_getBodyTopos = %d (EGlite_finishTess)!\n",
            stat);
@@ -6211,18 +6465,9 @@ EGlite_finishTess(egObject *tess, double *paramx)
   tthread.params    = params;
   tthread.tparam    = btess->tparam;
   tthread.qparam[0] = tthread.qparam[1] = tthread.qparam[2] = 0.0;
-  if (aStat == EGADS_SUCCESS) {
-    if ((aType == ATTRINT) || (aType == ATTRCSYS)) {
-      printf(" EGADS Warning: qParam Integer/CSys Attribute (EGlite_finishTess)!\n");
-    } else if (aType == ATTRREAL) {
-      for (i = 0; i < aLen; i++) {
-        if (i == 3) break;
-        tthread.qparam[i] = aReals[i];
-      }
-    } else {
-      tthread.qparam[0] = -1.0;
-    }
-  }
+  if (aStat == EGADS_SUCCESS)
+    for (i = 0; i < 3; i++) tthread.qparam[i] = rparm[i];
+
   aStat = EGlite_attributeRet(object, ".silent", &aType, &aLen, &aInts,
                           &aReals, &aStr);
   if (aStat == EGADS_SUCCESS) tthread.silent = 1;
@@ -6274,6 +6519,10 @@ EGlite_finishTess(egObject *tess, double *paramx)
       if (2*qints[i] == btess->tess2d[i].ntris) j++;
     }
 #ifndef LITE
+    if (EGlite_fullAttrs(object) == 1) {
+      (void) EGlite_attributeDel(tess, ".mixed");
+      (void) EGlite_attributeDel(tess, ".tessType");
+    }
     if (j == nface) {
       stat = EGlite_attributeAdd(tess, ".mixed", ATTRINT, nface, qints, NULL, NULL);
       if (stat != EGADS_SUCCESS)
@@ -7387,7 +7636,7 @@ EGlite_getTessQuads(const egObject *tess, int *nquad, int **fIndices)
       printf(" EGADS Error: Source Not an Object (EGlite_getTessQuads)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_getTessQuads)!\n");
     return EGADS_NOTBODY;
@@ -7533,7 +7782,7 @@ EGlite_makeQuads(egObject *tess, double *parms, int index)
       printf(" EGADS Error: Source Not an Object (EGlite_makeQuads)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_makeQuads)!\n");
     return EGADS_NOTBODY;
@@ -7552,7 +7801,11 @@ EGlite_makeQuads(egObject *tess, double *parms, int index)
 
   /* quad patch based on current Edge tessellations */
   
-  stat = EGlite_getBodyTopos(obj, NULL, FACE, &nface, &faces);
+  if (obj->oclass == EBODY) {
+    stat = EGlite_getBodyTopos(obj, NULL, EFACE, &nface, &faces);
+  } else {
+    stat = EGlite_getBodyTopos(obj, NULL,  FACE, &nface, &faces);
+  }
   if (stat != EGADS_SUCCESS) return stat;
   stat = EGlite_getTopology(faces[index-1], &geom, &oclass, &ftype, limits,
                         &nloop, &loops, &senses);
@@ -7994,7 +8247,7 @@ EGlite_getQuads(const egObject *tess, int index, int *len, const double **xyz,
       printf(" EGADS Error: Source Not an Object (EGlite_getQuads)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_getQuads)!\n");
     return EGADS_NOTBODY;
@@ -8055,7 +8308,7 @@ EGlite_getPatch(const egObject *tess, int index, int patch, int *nu, int *nv,
       printf(" EGADS Error: Source Not an Object (EGlite_getPatch)!\n");
     return EGADS_NOTOBJ;
   }
-  if (obj->oclass != BODY) {
+  if ((obj->oclass != BODY) && (obj->oclass != EBODY)) {
     if (outLevel > 0)
       printf(" EGADS Error: Source Not Body (EGlite_getPatch)!\n");
     return EGADS_NOTBODY;

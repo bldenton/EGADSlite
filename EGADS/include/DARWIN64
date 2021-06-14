@@ -1,6 +1,6 @@
 #MAC OS X 10.5 & up -- 64 bit (clang):
 #
-EGREV   = 1.0.18
+EGREV   = 1.0.19
 
 LIBPATH = -L$(CASROOT)/$(CASARCH)/lib -L$(ESP_ROOT)/lib
 ifeq ($(CASREV),6.8)
@@ -17,6 +17,11 @@ CPDS    = -std=c++11
 INCS    = -I$(CASROOT)/inc -I$(CASROOT)/include/opencascade -I$(CASROOT)
 LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet
 endif
+ifeq ($(CASREV),7.5)
+CPDS    = -std=c++11
+INCS    = -I$(CASROOT)/inc -I$(CASROOT)/include/opencascade -I$(CASROOT)
+LIBS    = -lTKBool -lTKernel -lTKFeat -lTKBO -lTKGeomAlgo -lTKMath -lTKOffset -lTKPrim -lTKTopAlgo -lTKBRep -lTKG2d -lTKG3d -lTKGeomBase -lTKShHealing -lTKSTEP -lTKSTEP209 -lTKSTEPBase -lTKSTEPAttr -lTKXSBase -lTKIGES -lTKFillet
+endif
 
 DEFINE = -DREVISION=$(CASREV)
 CXX    = clang++ -m64 -g $(ESPFLAGS)
@@ -27,10 +32,12 @@ OCOPT  = -O -Wall -Wno-dangling-else -Wno-unused-result
 ifeq ($(EFCOMP),gfortran)
 FCOMP  = gfortran -m64 -g $(ESPFFLAGS)
 FOPTS  = -O -frecursive -fcray-pointer
+FSOFLG = -bundle -undefined error
 endif
 ifeq ($(EFCOMP),ifort)
 FCOMP  = ifort -m64 -g -traceback
 FOPTS  = -O -recursive
+FSOFLG = -nofor-main -Wl,-bundle,-undefined,error
 endif
 LOPTS  = rs
 RANLB  =
@@ -39,5 +46,5 @@ OSHLIB = libocsm.dylib
 CSHLIB = libcaps.dylib
 SOFLGS = -bundle -undefined error
 RPATH  = -rpath $(ESP_ROOT)/lib -rpath $(CASROOT)/$(CASARCH)/lib
-FRPATH = -Wl,-rpath $(ESP_ROOT)/lib -Wl,-rpath $(CASROOT)/$(CASARCH)/lib
+FRPATH = -Wl,-rpath,$(ESP_ROOT)/lib -Wl,-rpath,$(CASROOT)/$(CASARCH)/lib
 CPPSLB = -lc++

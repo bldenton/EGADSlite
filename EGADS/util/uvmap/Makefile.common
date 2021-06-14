@@ -1,0 +1,148 @@
+ifeq ($(USER), marcum)
+  ARCH_DIR = $(HOME)/simsys/$(ARCH_TYPE)/
+else
+  ARCH_DIR = $(ARCH_TYPE)
+endif
+
+EXE_MAIN = main/uvmap.c
+EXE_NAME = uvmap
+LIB_NAME = uvmap
+DEFS = 
+
+ifdef DEBUG
+  CPP_OPT_2 = 
+  EXE = $(ARCH_DIR)/bin/$(EXE_NAME)_g.exe
+  LIBRARY = $(ARCH_DIR)/lib/$(LIB_PREFIX)$(LIB_NAME)_g$(LIB_SUFFIX)
+else
+  DEBUG_FLAGS =
+  EXE = $(ARCH_DIR)/bin/$(EXE_NAME).exe
+  LIBRARY = $(ARCH_DIR)/lib/$(LIB_PREFIX)$(LIB_NAME)$(LIB_SUFFIX)
+endif
+
+LIBS = $(LIBRARY) -lm
+
+OBJS_0 = 
+OBJS_2 = \
+$(LIBRARY)(EG_uvmapFindUV.o) \
+$(LIBRARY)(EG_uvmapGen.o) \
+$(LIBRARY)(EG_uvmapRead.o) \
+$(LIBRARY)(EG_uvmapStructFree.o) \
+$(LIBRARY)(EG_uvmapTest.o) \
+$(LIBRARY)(EG_uvmapWrite.o) \
+$(LIBRARY)(uvmap_add.o) \
+$(LIBRARY)(uvmap_bnd_adj.o) \
+$(LIBRARY)(uvmap_chk_area_uv.o) \
+$(LIBRARY)(uvmap_chk_edge_ratio.o) \
+$(LIBRARY)(uvmap_cpu_message.o) \
+$(LIBRARY)(uvmap_find_uv.o) \
+$(LIBRARY)(uvmap_from_egads.o) \
+$(LIBRARY)(uvmap_gen.o) \
+$(LIBRARY)(uvmap_gen_uv.o) \
+$(LIBRARY)(uvmap_ibeibe.o) \
+$(LIBRARY)(uvmap_ibfibf.o) \
+$(LIBRARY)(uvmap_ibfin.o) \
+$(LIBRARY)(uvmap_iccibe.o) \
+$(LIBRARY)(uvmap_iccin.o) \
+$(LIBRARY)(uvmap_idibe.o) \
+$(LIBRARY)(uvmap_inibe.o) \
+$(LIBRARY)(uvmap_inl_uv_bnd.o) \
+$(LIBRARY)(uvmap_malloc.o) \
+$(LIBRARY)(uvmap_mben_disc.o) \
+$(LIBRARY)(uvmap_message.o) \
+$(LIBRARY)(uvmap_norm_uv.o) \
+$(LIBRARY)(uvmap_read.o) \
+$(LIBRARY)(uvmap_solve.o) \
+$(LIBRARY)(uvmap_struct_tasks.o) \
+$(LIBRARY)(uvmap_to_egads.o) \
+$(LIBRARY)(uvmap_test.o) \
+$(LIBRARY)(uvmap_version.o) \
+$(LIBRARY)(uvmap_write.o)
+
+UVMAP_LIB_INC_FILES = \
+EG_uvmapFindUV.h \
+EG_uvmapGen.h \
+EG_uvmapStructFree.h \
+uvmap_add.h \
+uvmap_bnd_adj.h \
+uvmap_chk_area_uv.h \
+uvmap_chk_edge_ratio.h \
+uvmap_cpu_message.h \
+uvmap_find_uv.h \
+uvmap_from_egads.h \
+uvmap_gen.h \
+uvmap_gen_uv.h \
+uvmap_ibeibe.h \
+uvmap_ibfibf.h \
+uvmap_ibfin.h \
+uvmap_iccibe.h \
+uvmap_iccin.h \
+uvmap_idibe.h \
+uvmap_inibe.h \
+uvmap_inl_uv_bnd.h \
+uvmap_malloc.h \
+uvmap_mben_disc.h \
+uvmap_message.h \
+uvmap_norm_uv.h \
+uvmap_read.h \
+uvmap_solve.h \
+uvmap_struct.h \
+uvmap_struct_tasks.h \
+uvmap_test.h \
+uvmap_to_egads.h \
+uvmap_version.h \
+uvmap_write.h
+
+all: $(EXE) $(OBJS_0) $(OBJS_2)
+
+$(EXE): $(OBJS_0) $(OBJS_2)
+	mkdir -p $(ARCH_DIR)/bin
+	$(LD_CC) $(EXE_MAIN) $(LD_CC_FLAGS) $(DEBUG_FLAGS) $(LIBS) -o $(EXE)
+
+$(OBJS_0):
+	mkdir -p $(ARCH_DIR)/lib
+	$(CC) $(CC_FLAGS) $(CC_OPT_0) $(DEFS) $(DEBUG_FLAGS) -c $*.c
+	ar rv $(LIBRARY) $*.o
+	/bin/rm $*.o
+
+$(OBJS_2):
+	mkdir -p $(ARCH_DIR)/lib
+	$(CC) $(CC_FLAGS) $(CC_OPT_2) $(DEFS) $(DEBUG_FLAGS) -c $*.c
+	ar rv $(LIBRARY) $*.o
+	/bin/rm $*.o
+
+
+clean:
+	/bin/rm -f $(LIBRARY) $(EXE)
+
+exe_path:
+	@echo $(EXE)
+
+$(LIBRARY)(EG_uvmapFindUV.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(EG_uvmapGen.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(EG_uvmapStructFree.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_add.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_bnd_adj.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_chk_area_uv.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_chk_edge_ratio.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_cpu_message.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_find_uv.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_from_egads.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_gen.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_gen_uv.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_ibeibe.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_ibfibf.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_ibfin.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_iccibe.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_iccin.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_idibe.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_inibe.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_inl_uv_bnd.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_malloc.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_mben_disc.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_message.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_norm_uv.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_solve.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_struct_tasks.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_to_egads.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_version.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)
+$(LIBRARY)(uvmap_write.o): UVMAP_LIB.h UVMAP_LIB_INC.h $(UVMAP_LIB_INC_FILES)

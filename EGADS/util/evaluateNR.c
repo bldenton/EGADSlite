@@ -3,7 +3,7 @@
  *
  *             EGADSlite Geometry Evaluation (non-recursive) Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -2957,13 +2957,17 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
     srange[3] = range[3];
   }
   
-  /* do we re-limit? */
+  /* do we re-limit (ignore surface periodics)? */
   if (limits != NULL) {
-    range[0] = limits[0];
-    range[1] = limits[1];
+    if (((per&1) != 1) || (geom->oclass != SURFACE)) {
+      range[0] = limits[0];
+      range[1] = limits[1];
+    }
     if (geom->oclass == SURFACE) {
-      range[2] = limits[2];
-      range[3] = limits[3];
+      if (per/2 == 0) {
+        range[2] = limits[2];
+        range[3] = limits[3];
+      }
     }
   }
   
@@ -3593,23 +3597,30 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
       }
     }
 
-    if ((per&1) != 0) {
-      period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
-        if (param[0]+PARAMACC < srange[0]) {
-          if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
-        } else {
-          if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
-        }
+    /* do we re-limit? */
+    if (limits != NULL) {
+      range[0] = limits[0];
+      range[1] = limits[1];
+      range[2] = limits[2];
+      range[3] = limits[3];
     }
-    if ((per&2) != 0) {
+    if (((per&1) != 0) && ((param[0]+PARAMACC < range[0]) ||
+                           (param[0]-PARAMACC > range[1]))) {
+      period = srange[1] - srange[0];
+      if (param[0]+PARAMACC < range[0]) {
+        if (param[0]+period-PARAMACC < range[1]) param[0] += period;
+      } else {
+        if (param[0]-period+PARAMACC > range[0]) param[0] -= period;
+      }
+    }
+    if (((per&2) != 0) && ((param[1]+PARAMACC < range[2]) ||
+                           (param[1]-PARAMACC > range[3]))) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
-        if (param[1]+PARAMACC < srange[2]) {
-          if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
-        } else {
-          if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
-        }
+      if (param[1]+PARAMACC < range[2]) {
+        if (param[1]+period-PARAMACC < range[3]) param[1] += period;
+      } else {
+        if (param[1]-period+PARAMACC > range[2]) param[1] -= period;
+      }
     }
     
   }
@@ -4296,7 +4307,7 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   if (x0[0]*p1[0]+x0[1]*p1[1] > 0.0) cx = 1;
   if (x1[0]*p0[0]+x1[1]*p0[1] > 0.0) cx = 1;
   dist = DOT(dir[0], dir[1]);
-  if ((dist < -1.0) || (dist > 1.0))
+  if ((dist < -1.0000001) || (dist > 1.0000001))
     printf(" EG_getWindingAngle: dot = %20.12lf\n", dist);
   if (dist < -1.0) dist = -1.0;
   if (dist >  1.0) dist =  1.0;

@@ -3,7 +3,7 @@
  *
  *             Lite Geometry Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -975,20 +975,22 @@ EGlite_invEvaLimits(const egObject *geom, /*@null@*/ const double *limits,
     result[2] = pt[2];
     if ((per&1) != 0) {
       period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
-        if (param[0]+PARAMACC < srange[0]) {
-          if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
+      if ((param[0]+PARAMACC < pface->urange[0]) ||
+          (param[0]-PARAMACC > pface->urange[1]))
+        if (param[0]+PARAMACC < pface->urange[0]) {
+          if (param[0]+period-PARAMACC < pface->urange[1]) param[0] += period;
         } else {
-          if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
+          if (param[0]-period+PARAMACC > pface->urange[0]) param[0] -= period;
         }
     }
     if ((per&2) != 0) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
-        if (param[1]+PARAMACC < srange[2]) {
-          if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
+      if ((param[1]+PARAMACC < pface->vrange[0]) ||
+          (param[1]-PARAMACC > pface->vrange[1]))
+        if (param[1]+PARAMACC < pface->vrange[0]) {
+          if (param[1]+period-PARAMACC < pface->vrange[1]) param[1] += period;
         } else {
-          if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
+          if (param[1]-period+PARAMACC > pface->vrange[0]) param[1] -= period;
         }
     }
   }
@@ -1055,7 +1057,7 @@ __HOST_AND_DEVICE__ int
 EGlite_arcLength(const egObject *geom, double t1, double t2, double *alen)
 {
   int            i, stat;
-  double         t, d, ur, mid, result[9];
+  double         t, d, ur, mid, result[9] = {0.,0.,0.,0.,0.,0.,0.,0.,0.};
   liteEdge       *ledge;
   const egObject *ref;
 /*

@@ -3,7 +3,7 @@
  *
  *             FORTRAN Bindings for Tessellation Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -17,56 +17,60 @@
 #include "egadsTypes.h"
 #include "egadsInternals.h"
 
+  extern /*@null@*/ char *EG_f2c(const char *name, int nameLen);
+  extern void EG_c2f(/*@null@*/ const char *string, char *name, int nameLen);
 
-  extern int EG_makeTessGeom(egObject *obj, double *params, int *sizes,
-                             egObject **tess);
-  extern int EG_getTessGeom(const egObject *tess, int *sizes, double **xyz);
+  extern int  EG_makeTessGeom(egObject *obj, double *params, int *sizes,
+                              egObject **tess);
+  extern int  EG_getTessGeom(const egObject *tess, int *sizes, double **xyz);
 
-  extern int EG_makeTessBody(egObject *object, double *params, egObject **tess);
-  extern int EG_remakeTess(egObject *tess, int nobj, /*@null@*/ egObject **objs,
-                           double *params);
-  extern int EG_finishTess(egObject *tess, double *params);
-  extern int EG_mapTessBody(egObject *tess, egObject *body, egObject **mapTess);
-  extern int EG_locateTessBody(const egObject *tess, int npt, const int *ifaces,
-                               const double *uvs, /*@null@*/ int *itris, 
-                               double *weights);
+  extern int  EG_makeTessBody(egObject *object, double *params, egObject **tess);
+  extern int  EG_remakeTess(egObject *tess, int nobj, /*@null@*/ egObject **objs,
+                            double *params);
+  extern int  EG_finishTess(egObject *tess, double *params);
+  extern int  EG_mapTessBody(egObject *tess, egObject *body, egObject **mapTess);
+  extern int  EG_locateTessBody(const egObject *tess, int npt, const int *ifaces,
+                                const double *uvs, /*@null@*/ int *itris,
+                                double *weights);
 
-  extern int EG_getTessEdge(const egObject *tess, int index, int *len,
-                            const double **xyz, const double **t);
-  extern int EG_getTessFace(const egObject *tess, int index, int *len, 
-                            const double **xyz, const double **uv, 
-                            const int **ptype, const int **pindex, 
-                            int *ntri, const int **tris, const int **tric);
-  extern int EG_getTessLoops(const egObject *tess, int index, int *nloop,
-                             const int **lIndices);
+  extern int  EG_getTessEdge(const egObject *tess, int index, int *len,
+                             const double **xyz, const double **t);
+  extern int  EG_getTessFace(const egObject *tess, int index, int *len,
+                             const double **xyz, const double **uv,
+                             const int **ptype, const int **pindex,
+                             int *ntri, const int **tris, const int **tric);
+  extern int  EG_getTessLoops(const egObject *tess, int index, int *nloop,
+                              const int **lIndices);
 
-  extern int EG_getTessQuads(const egObject *tess, int *nquad, int **fIndices);
-  extern int EG_makeQuads(egObject *tess, double *params, int fIndex);
-  extern int EG_getQuads(const egObject *tess, int fIndex, int *len, 
-                         const double **xyz, const double **uv, 
-                         const int **ptype, const int **pindex, int *npatch);
-  extern int EG_getPatch(const egObject *tess, int fIndex, int patch, int *nu, 
-                         int *nv, const int **ipts, const int **bounds);
-  extern int EG_quadTess(const egObject *tess, egObject **quadTess);
+  extern int  EG_getTessQuads(const egObject *tess, int *nquad, int **fIndices);
+  extern int  EG_makeQuads(egObject *tess, double *params, int fIndex);
+  extern int  EG_getQuads(const egObject *tess, int fIndex, int *len,
+                          const double **xyz, const double **uv,
+                          const int **ptype, const int **pindex, int *npatch);
+  extern int  EG_getPatch(const egObject *tess, int fIndex, int patch, int *nu,
+                          int *nv, const int **ipts, const int **bounds);
+  extern int  EG_quadTess(const egObject *tess, egObject **quadTess);
 
-  extern int EG_insertEdgeVerts(egObject *tess, int eIndex, int vIndex, 
-                                int npts, double *t);
-  extern int EG_deleteEdgeVert(egObject *tess, int eIndex, int vIndex, int dir);
-  extern int EG_moveEdgeVert(egObject *tess, int eIndex, int vIndex, double t);
+  extern int  EG_insertEdgeVerts(egObject *tess, int eIndex, int vIndex,
+                                 int npts, double *t);
+  extern int  EG_deleteEdgeVert(egObject *tess, int eIndex, int vIndex, int dir);
+  extern int  EG_moveEdgeVert(egObject *tess, int eIndex, int vIndex, double t);
 
-  extern int EG_openTessBody(egObject *tess);
-  extern int EG_initTessBody(egObject *object, egObject **tess);
-  extern int EG_statusTessBody(egObject *tess, egObject **body, int *state,
-                               int *npts);
-  extern int EG_setTessEdge(const egObject *tess, int index, int len,
-                            const double *xyz, const double *t);
-  extern int EG_setTessFace(const egObject *tess, int index, int len,
-                            const double *xyz, const double *uv,
-                            int ntri, const int *tris);
-  extern int EG_localToGlobal(const egObject *tess, int index, int local,
-                              int *global);
-  extern int EG_getGlobal(const egObject *tess, int global, int *ptype,
-                          int *pindex, /*@null@*/ double *xyz);
+  extern int  EG_openTessBody(egObject *tess);
+  extern int  EG_initTessBody(egObject *object, egObject **tess);
+  extern int  EG_statusTessBody(egObject *tess, egObject **body, int *state,
+                                int *npts);
+  extern int  EG_setTessEdge(const egObject *tess, int index, int len,
+                             const double *xyz, const double *t);
+  extern int  EG_setTessFace(const egObject *tess, int index, int len,
+                             const double *xyz, const double *uv,
+                             int ntri, const int *tris);
+  extern int  EG_localToGlobal(const egObject *tess, int index, int local,
+                               int *global);
+  extern int  EG_getGlobal(const egObject *tess, int global, int *ptype,
+                           int *pindex, /*@null@*/ double *xyz);
+  extern int  EG_saveTess( ego tess, const char *name );
+  extern int  EG_loadTess( ego body, const char *name, ego *tess );
 
   extern int  EG_tessMassProps(const ego tess, double *props);
   extern int  EG_tessMassProps_dot(const ego tess, double *xyz_dot,
@@ -497,6 +501,48 @@ ig_getglobal_(INT8 *obj, int *index, int *ptype, int *pindex, double *xyz)
   
   object = (egObject *) *obj;
   return EG_getGlobal(object, *index, ptype, pindex, xyz);
+}
+
+
+int
+#ifdef WIN32
+IG_SAVETESS (INT8 *obj, const char *name, int nameLen)
+#else
+ig_savetess_(INT8 *obj, const char *name, int nameLen)
+#endif
+{
+  int      stat;
+  char     *fname;
+  egObject *tess;
+  
+  tess  = (egObject *) *obj;
+  fname = EG_f2c(name, nameLen);
+  if (fname == NULL) return EGADS_NONAME;
+  stat = EG_saveTess(tess, fname);
+  EG_free(fname);
+  return stat;
+}
+
+
+int
+#ifdef WIN32
+IG_LOADTESS (INT8 *obj, const char *name, INT8 *tobj, int nameLen)
+#else
+ig_loadtess_(INT8 *obj, const char *name, INT8 *tobj, int nameLen)
+#endif
+{
+  int      stat;
+  char     *fname;
+  egObject *tess, *body;
+  
+  *tobj = 0;
+  body  = (egObject *) *obj;
+  fname = EG_f2c(name, nameLen);
+  if (fname == NULL) return EGADS_NONAME;
+  stat = EG_loadTess(body, fname, &tess);
+  EG_free(fname);
+  if (stat == EGADS_SUCCESS) *tobj = (INT8) tess;
+  return stat;
 }
 
 

@@ -3,7 +3,7 @@
  *
  *             Manipulate the Tessellation of a Face
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -1399,10 +1399,10 @@ EG_zeroArea(triStruct *ts, int outLevel, long tID)
       pti2[1] = ts->verts[i2].edge;
     }
     if ((pti0[0] == -1) || (pti1[0] == -1) || (pti2[0] == -1)) continue;
-                                                     side = other = -1;
-    if ((pti1[0] == pti2[0]) && (pti1[1] = pti2[1])) side = 0;
-    if ((pti0[0] == pti2[0]) && (pti0[1] = pti2[1])) side = 1;
-    if ((pti0[0] == pti1[0]) && (pti0[1] = pti1[1])) side = 2;
+                                                     side = -1;
+    if ((pti1[0] == pti2[0]) && (pti1[1] = pti2[1])) side =  0;
+    if ((pti0[0] == pti2[0]) && (pti0[1] = pti2[1])) side =  1;
+    if ((pti0[0] == pti1[0]) && (pti0[1] = pti1[1])) side =  2;
     if (side == -1) continue;
     other = ts->tris[i].neighbors[side];
     if (other < 0)  continue;
@@ -2091,12 +2091,14 @@ EG_addFacetDist(triStruct *ts)
 
 
 __HOST_AND_DEVICE__ static int
-EG_splitInter(int sideMid, triStruct *ts)
+EG_splitInter(int sideMid, /*@null@*/ double *aux, int cnt, triStruct *ts)
 {
   int    status, j, split, i0, i1, i2, i3, t1, side, t2, total;
-  double d, dist, uv[2], point[18];
+  double d, dist, *deru, *derv, *norm1, *norm2, uv[2], norm[3], point[18];
 
   total = ts->ntris;
+  deru  = &point[3];
+  derv  = &point[6];
   for (t1 = 0; t1 < total; t1++) ts->tris[t1].hit = 0;
 
   /* break up an edge that touches 2 bounds and is interior */
@@ -2112,8 +2114,14 @@ EG_splitInter(int sideMid, triStruct *ts)
       if (ts->tris[t2].hit != 0) continue;
       i1 = ts->tris[t1].indices[sides[j][0]];
       i2 = ts->tris[t1].indices[sides[j][1]];
-      if (ts->verts[i1-1].type == FACE) continue;
-      if (ts->verts[i2-1].type == FACE) continue;
+      if (aux == NULL) {
+        if (ts->verts[i1-1].type == FACE) continue;
+        if (ts->verts[i2-1].type == FACE) continue;
+      } else {
+        norm1 = &aux[3*i1-3];
+        norm2 = &aux[3*i2-3];
+        if (DOT(norm1, norm2) >= -0.00001) continue;
+      }
       d = DIST2(ts->verts[i1-1].xyz, ts->verts[i2-1].xyz);
       if (d > dist) {
         dist = d;
@@ -2133,15 +2141,29 @@ EG_splitInter(int sideMid, triStruct *ts)
     uv[1]  = 0.5*(ts->verts[i1-1].uv[1] + ts->verts[i2-1].uv[1]);
     status = EG_evaluate(ts->face, uv, point);
     if (status != EGADS_SUCCESS) continue;
-    if (EG_dotNorm(ts->verts[i0-1].xyz, point,
-                   ts->verts[i2-1].xyz, ts->verts[i3-1].xyz) <= 0.1) continue;
-    if (EG_dotNorm(ts->verts[i0-1].xyz, ts->verts[i1-1].xyz,
-                   point,               ts->verts[i3-1].xyz) <= 0.1) continue;
+    if (aux == NULL) {
+      if (EG_dotNorm(ts->verts[i0-1].xyz, point,
+                     ts->verts[i2-1].xyz, ts->verts[i3-1].xyz) <= 0.1) continue;
+      if (EG_dotNorm(ts->verts[i0-1].xyz, ts->verts[i1-1].xyz,
+                     point,               ts->verts[i3-1].xyz) <= 0.1) continue;
+    }
 
     if (EG_splitSide(t1, side, t2, sideMid, ts) == EGADS_SUCCESS) {
       EG_floodTriGraph(t1, FLOODEPTH, ts);
       EG_floodTriGraph(t2, FLOODEPTH, ts);
+      if (aux != NULL) {
+        i1 = ts->nverts - 1;
+        aux[3*i1  ] = aux[3*i1+1] = aux[3*i1+2] = 0.0;
+        status = EG_evaluate(ts->face, ts->verts[i1].uv, point);
+        if (status == EGADS_SUCCESS) {
+          CROSS(norm, deru, derv);
+          aux[3*i1  ] = norm[0];
+          aux[3*i1+1] = norm[1];
+          aux[3*i1+2] = norm[2];
+        }
+      }
       split++;
+      if ((cnt != 0) && (ts->nverts >= cnt)) return split;
     } else {
       ts->tris[t1].hit = ts->tris[t2].hit = 1;
     }
@@ -2330,10 +2352,11 @@ EG_addSideDist(int iter, double maxlen2, int sideMid, triStruct *ts)
 __HOST_AND_DEVICE__ int
 EG_tessellate(int outLevel, triStruct *ts, long tID)
 {
-  int    n0, n1, n2, n3, flag, stat[3], *tmp;
+  int    n0, n1, n2, n3, flag, stat[3], status, *tmp;
   int    i, j, k, l, stri, i0, i1, last, split, count, lsplit, qi1, qi3;
   int    eg_split, sideMid, badStart = 0;
   double result[18], trange[2], laccum, dist, lang, maxlen2, dot, xvec[3];
+  double norm[3], *deru, *derv, *aux;
   triTri *tt;
 
   ts->edist2 = 0.0;             /* average edge segment length */
@@ -2587,7 +2610,55 @@ EG_tessellate(int outLevel, triStruct *ts, long tID)
            tID, ts->accum, ts->dotnrm, lang);
 #endif
 
-    /* add nodes -- try to get geometrically correct (lettered phases) */
+    /*
+     *   add nodes -- try to get geometrically correct (lettered phases)
+     */
+    
+    /* X) split internal tri sides with opposite normals */
+    count = 0;
+    split = 1;
+    flag  = 6*ts->nverts;
+    deru  = &result[3];
+    derv  = &result[6];
+    aux   = (double *) EG_alloc(3*flag*sizeof(double));
+    if (aux == NULL) {
+      split = 0;
+    } else {
+      for (i = 0; i < ts->nverts; i++) {
+        aux[3*i  ] = aux[3*i+1] = aux[3*i+2] = 0.0;
+        status = EG_evaluate(ts->face, ts->verts[i].uv, result);
+        if (status != EGADS_SUCCESS) {
+          if (status != EGADS_EXTRAPOL)
+            printf(" EGADS Internal: Face %d EG_evaluate %lf %lf = %d\n",
+                   ts->fIndex, ts->verts[i].uv[0], ts->verts[i].uv[1], status);
+          continue;
+        }
+        CROSS(norm, deru, derv);
+        aux[3*i  ] = norm[0];
+        aux[3*i+1] = norm[1];
+        aux[3*i+2] = norm[2];
+      }
+    }
+    while ((split != 0) && (ts->orCnt < MAXORCNT)) {
+      split = EG_splitInter(sideMid, aux, flag, ts);
+      if (split != 0) {
+        EG_swapTris(EG_angUVTest, "angleUV",  0.0, ts);
+#ifdef REPORT
+        lang = ts->accum;
+#endif
+        EG_swapTris(EG_diagTest, "diagonals", 1.0, ts);
+        count += split;
+        if (ts->nverts >= flag) split = 0;
+      }
+    }
+    if (aux != NULL) EG_free(aux);
+#ifdef DEBUG
+    EG_checkTess(ts);
+#endif
+#ifdef REPORT
+    printf("%lX Phase X: dotN = %le,  UVang = %le,  split = %d\n",
+           tID, ts->accum, lang, count);
+#endif
     
     /* 0) start out Delauney-ish if maxlen is set -- use 2*maxlen */
     if (ts->maxlen > 0.0) {
@@ -2640,7 +2711,7 @@ EG_tessellate(int outLevel, triStruct *ts, long tID)
     count  = 0;
     split  = 1;
     while ((split != 0) && (ts->orCnt < MAXORCNT)) {
-      split = EG_splitInter(sideMid, ts);
+      split = EG_splitInter(sideMid, NULL, 0, ts);
       if (split != 0) {
         EG_swapTris(EG_angUVTest, "angleUV",  0.0, ts);
 #ifdef REPORT

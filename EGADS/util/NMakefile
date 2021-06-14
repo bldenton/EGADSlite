@@ -1,0 +1,75 @@
+#
+IDIR  = $(ESP_ROOT)\include
+!include $(IDIR)\$(ESP_ARCH).$(MSVC)
+SDIR  = $(MAKEDIR)
+LDIR  = $(ESP_ROOT)\lib
+!IFDEF ESP_BLOC
+ODIR  = $(ESP_BLOC)\obj
+TDIR  = $(ESP_BLOC)\test
+!ELSE
+ODIR  = .
+TDIR  = .
+!ENDIF
+
+
+$(TDIR)\uvmap.exe:	$(ODIR)\uvmap.obj $(LDIR)\uvmap.lib
+	cl /Fe$(TDIR)\uvmap.exe $(ODIR)\uvmap.obj \
+		/link /LIBPATH:$(LDIR) uvmap.lib
+	$(MCOMP) /manifest $(TDIR)\umap.exe.manifest \
+		/outputresource:$(TDIR)\umap.exe;1
+
+$(ODIR)\uvmap.obj:	uvmap\main\uvmap.c 
+	cl /c $(COPTS) $(DEFINE) /Iuvmap uvmap\main\uvmap.c /Fo$(ODIR)\uvmap.obj
+
+OBJS =	$(ODIR)\EG_uvmapFindUV.obj $(ODIR)\EG_uvmapGen.obj \
+	$(ODIR)\EG_uvmapStructFree.obj $(ODIR)\uvmap_chk_edge_ratio.obj \
+	$(ODIR)\EG_uvmap_Read.obj $(ODIR)\EG_uvmap_Write.obj \
+	$(ODIR)\EG_uvmapTest.obj $(ODIR)\uvmap_test.obj \
+	$(ODIR)\uvmap_add.obj $(ODIR)\uvmap_bnd_adj.obj \
+	$(ODIR)\uvmap_chk_area_uv.obj $(ODIR)\uvmap_cpu_message.obj \
+	$(ODIR)\uvmap_find_uv.obj $(ODIR)\uvmap_from_egads.obj \
+	$(ODIR)\uvmap_gen.obj $(ODIR)\uvmap_gen_uv.obj \
+	$(ODIR)\uvmap_ibeibe.obj $(ODIR)\uvmap_ibfibf.obj \
+	$(ODIR)\uvmap_ibfin.obj $(ODIR)\uvmap_iccibe.obj \
+	$(ODIR)\uvmap_iccin.obj $(ODIR)\uvmap_idibe.obj \
+	$(ODIR)\uvmap_inibe.obj $(ODIR)\uvmap_inl_uv_bnd.obj \
+	$(ODIR)\uvmap_malloc.obj $(ODIR)\uvmap_mben_disc.obj \
+	$(ODIR)\uvmap_message.obj $(ODIR)\uvmap_norm_uv.obj \
+	$(ODIR)\uvmap_read.obj $(ODIR)\uvmap_solve.obj \
+	$(ODIR)\uvmap_struct_tasks.obj $(ODIR)\uvmap_to_egads.obj \
+	$(ODIR)\uvmap_version.obj $(ODIR)\uvmap_write.obj
+
+INC =	uvmap\EG_uvmapFindUV.h uvmap\EG_uvmapGen.h uvmap\EG_uvmapStructFree.h \
+	uvmap\EG_uvmap_Read.h uvmap\EG_uvmap_Write.h uvmap\EG_uvmapTest.h \
+	uvmap\uvmap_chk_edge_ratio.h uvmap\uvmap_add.h uvmap\uvmap_bnd_adj.h \
+	uvmap\uvmap_chk_area_uv.h uvmap\uvmap_cpu_message.h \
+	uvmap\uvmap_find_uv.h uvmap\uvmap_from_egads.h uvmap\uvmap_gen.h \
+	uvmap\uvmap_gen_uv.h uvmap\uvmap_ibeibe.h uvmap\uvmap_ibfibf.h \
+	uvmap\uvmap_ibfin.h uvmap\uvmap_iccibe.h uvmap\uvmap_iccin.h \
+	uvmap\uvmap_idibe.h uvmap\uvmap_inibe.h uvmap\uvmap_inl_uv_bnd.h \
+	uvmap\uvmap_malloc.h uvmap\uvmap_mben_disc.h uvmap\uvmap_message.h \
+	uvmap\uvmap_norm_uv.h uvmap\uvmap_read.h uvmap\uvmap_solve.h \
+	uvmap\uvmap_struct_tasks.h uvmap\uvmap_to_egads.h \
+	uvmap\uvmap_version.h uvmap\uvmap_write.h uvmap\uvmap_test.h
+
+# Make sure object files also depend on all header files
+$(OBJS): $(INC)
+
+{uvmap\}.c{$(ODIR)\}.obj:
+	cl /c $(COPTS) $(DEFINE) /Iuvmap\. /Fo$(ODIR)\ $<
+
+$(ODIR)\egadsUVmap.obj:	egadsUVmap.c 
+	cl /c $(COPTS) $(DEFINE) /Iuvmap\. egadsUVmap.c \
+		/Fo$(ODIR)\egadsUVmap.obj
+
+$(LDIR)\uvmap.lib:	$(OBJS) $(ODIR)\egadsUVmap.obj
+	-del $(LDIR)\uvmap.lib
+	cd $(ODIR)
+	lib /out:$(LDIR)\uvmap.lib $(ODIR)\egadsUVmap.obj $(OBJS)
+	cd $(SDIR)
+
+clean:
+	-del $(OBJS) $(ODIR)\uvmap.obj $(ODIR)\egadsUVmap.obj
+
+cleanall:	clean
+	-del $(TDIR)\uvmap.exe $(LDIR)\uvmap.lib

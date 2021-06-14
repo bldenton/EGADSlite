@@ -27,3 +27,6 @@ the test program displays the results.
 
 extractTess shows how to generate a multi-body tessellation that has Face and
 Edge coherence.
+
+uvmap takes a triangulation and generates a single uv map. This is from David
+Marcum (MSU) and has its own license.

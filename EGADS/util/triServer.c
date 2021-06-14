@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
   startapp = getenv("WV_START");
 
   if (argc != 2) {
-    printf("\n Usage: quadServer datafile\n\n");
+    printf("\n Usage: triServer datafile\n\n");
     return 1;
   }
 

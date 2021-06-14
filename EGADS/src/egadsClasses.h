@@ -5,7 +5,7 @@
  *
  *             C++/OpenCASCADE Object Header
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -158,8 +158,9 @@ class egadsModel
 {
 public:
   TopoDS_Shape shape;                   // OCC topology
+  int          nobjs;                   // number of total egObjects
   int          nbody;                   // number of bodies
-  egObject     **bodies;                // vector of pointers to bodies
+  egObject     **bodies;                // vector of pointers to egObjects
   egadsBox     bbox;
 };
 

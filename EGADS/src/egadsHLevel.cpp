@@ -3,7 +3,7 @@
  *
  *             High-Level Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -71,6 +71,7 @@
                                  egObject **copy );
   extern "C" int  EG_splitBody( const egObject *body, int nedge,
                                 const egObject **facEdg, egObject **result );
+  extern     void EG_splitPeriodics( egadsBody *body );
 
   extern "C" int  EG_generalBoolean( egObject *src, egObject *tool, int oper,
                                      double tol, egObject **model );
@@ -139,6 +140,9 @@
              int  EG_copyGeometry_dot( const egObject *obj,
                                        /*@null@*/ const SurrealS<1> *xform,
                                        ego copy );
+  extern "C" int  EG_setRange_dot( egObject *geom, int oclass, const double *range,
+                                   const double *range_dot );
+             int  EG_setRange_dot( egObject *geom, int oclass, const SurrealS<1> *range );
 
 
 static void
@@ -201,9 +205,9 @@ EG_attrFixup(int outLevel, egObject *body, const egObject *src)
 
 #if CASVER >= 700
 static int
-EG_matchGeneral(BRepAlgoAPI_BuilderAlgo& BSO, egObject *src,
-                egObject *tool, TopoDS_Shape result,
-                egObject ***emapping, egObject ***fmapping)
+EG_matchSplitter(BRepAlgoAPI_BuilderAlgo& BSO, egObject *src,
+                 egObject *tool, TopoDS_Shape result,
+                 egObject ***emapping, egObject ***fmapping)
 {
   int         i, j, index, nbody, fullAttrs;
   egObject    **emap = NULL, **fmap = NULL, **bodies;
@@ -292,8 +296,9 @@ EG_matchGeneral(BRepAlgoAPI_BuilderAlgo& BSO, egObject *src,
   }
 
   for (i = 0; i < nbody; i++) {
-    if (bodies[i]        == NULL) return EGADS_NULLOBJ;
-    if (bodies[i]->blind == NULL) return EGADS_NODATA;
+    if (bodies[i]        == NULL)  return EGADS_NULLOBJ;
+    if (bodies[i]->blind == NULL)  return EGADS_NODATA;
+    if (bodies[i]->oclass != BODY) continue;
     egadsBody *pbody = (egadsBody *) bodies[i]->blind;
     if (emap != NULL)
       for (j = 1; j <= pbody->edges.map.Extent(); j++) {
@@ -331,24 +336,288 @@ EG_matchGeneral(BRepAlgoAPI_BuilderAlgo& BSO, egObject *src,
   *fmapping = fmap;
   return EGADS_SUCCESS;
 }
+
+
+/* remove spurious Nodes -- note: Face mapping remains the same
+ *
+ * Spurious Nodes adhere to the following rules:
+ * - The Node must have exactly 2 connected edges.
+ * - The 2 connected edges must have the same 2 connected faces
+ * - The 2 connected edges must have the same underlying geometry,
+ *       or reside on two G1 continuous spline CURVES
+ * - The Node cannot exist in the input Bodies
+ * - The Node cannot be part of Edges Modified by the SBO
+ * - The Node cannot be Generated from an Edge/Face or Edge/Edge intersection
+ */
+static void
+EG_removeSpuriousNodes(BRepAlgoAPI_BooleanOperation& BSO,
+                       TopoDS_Shape& result, TopoDS_Shape& newShape)
+{
+  int          i, iarg, m;
+  TopoDS_Edge  edge, genedge;
+  TopoDS_Face  face;
+  TopoDS_Vertex V1, V2;
+
+  newShape  = result;
+
+  /* get the tools and arguments from the SBO */
+  TopTools_ListOfShape args[2] = {BSO.Tools(), BSO.Arguments()};
+
+  /* get all the vertices in the result */
+  TopTools_IndexedMapOfShape MapVkeep;
+  TopExp::MapShapes(result, TopAbs_VERTEX, MapVkeep);
+
+  /* the list of Nodes that might be spurious */
+  TopTools_IndexedMapOfShape MapVdel(MapVkeep);
+
+  /* remove all Vertices in the tool/argument from the list
+   * as well as any Generated/Modified Vertices
+   */
+  for (iarg = 0; iarg < 2; iarg++) {
+    TopTools_ListIteratorOfListOfShape iter(args[iarg]);
+
+    for (; iter.More(); iter.Next()) {
+
+      /* first remove all vertices associated with edges */
+      TopTools_IndexedMapOfShape MapEs;
+      TopExp::MapShapes(iter.Value(), TopAbs_EDGE, MapEs);
+
+      for (i = 0; i < MapEs.Extent(); i++) {
+        edge = TopoDS::Edge(MapEs(i+1));
+
+        if (BRep_Tool::Degenerated(edge)) continue;
+        TopExp::Vertices(edge, V1, V2, Standard_True);
+        MapVdel.RemoveKey(V1);
+        MapVdel.RemoveKey(V2);
+
+        if (BSO.IsDeleted(edge)) continue;
+
+        /* remove Vertices from Modified/Generated Edges/Vertices */
+        for (m = 0; m < 2; m++) {
+           TopTools_ListOfShape list;
+           if (m == 0)
+             list = BSO.Generated(edge);
+           else
+             list = BSO.Modified(edge);
+
+          if (list.Extent() > 0) {
+            TopTools_ListIteratorOfListOfShape it(list);
+            for (; it.More(); it.Next()) {
+              if (it.Value().ShapeType() == TopAbs_EDGE) {
+                genedge = TopoDS::Edge(it.Value());
+
+                if (BRep_Tool::Degenerated(genedge)) continue;
+                TopExp::Vertices(genedge, V1, V2, Standard_True);
+                MapVdel.RemoveKey(V1);
+                MapVdel.RemoveKey(V2);
+              } else if (it.Value().ShapeType() == TopAbs_VERTEX) {
+                MapVdel.RemoveKey(it.Value());
+              }
+            }
+          }
+        }
+      }
+
+      /* removing Vertices generated by Faces */
+      TopTools_IndexedMapOfShape MapFs;
+      TopExp::MapShapes(iter.Value(), TopAbs_FACE, MapFs);
+
+      for (i = 0; i < MapFs.Extent(); i++) {
+        face = TopoDS::Face(MapFs(i+1));
+
+        const TopTools_ListOfShape& list = BSO.Generated(face);
+
+        if (list.Extent() > 0) {
+          TopTools_ListIteratorOfListOfShape it(list);
+          for (; it.More(); it.Next()) {
+            if (it.Value().ShapeType() == TopAbs_VERTEX) {
+              MapVdel.RemoveKey(it.Value());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  /* MapVdel now contains the vertices that are
+   * allowed to be removed (if possible)
+   */
+  if (MapVdel.Extent() > 0) {
+    for (i = 0; i < MapVdel.Extent(); i++) {
+      MapVkeep.RemoveKey(MapVdel(i+1));
+    }
+    EGADS::BRepLib_FuseEdges fuse(result);
+    fuse.AvoidVertexes(MapVkeep);
+    fuse.SetConcatBSpl();
+    if (fuse.NbVertices() != 0) {
+      fuse.Perform();
+      newShape = fuse.Shape();
+    }
+  }
+}
+
+
+static int
+EG_matchGeneral(BRepAlgoAPI_BooleanOperation& BSO, egObject *src,
+                egObject *tool, TopoDS_Shape& result,
+                egObject ***emapping, egObject ***fmapping)
+{
+  int          i, j, index, nbody, fullAttrs;
+  egObject     **emap = NULL, **fmap = NULL, **bodies;
+  TopoDS_Edge  edge, genedge;
+  TopoDS_Face  face, genface;
+  TopoDS_Shape newShape;
+
+  *emapping = NULL;
+  *fmapping = NULL;
+  fullAttrs = EG_fullAttrs(src);
+  
+  /* remove spurious Nodes -- note: Face mapping remains the same */
+  EG_removeSpuriousNodes(BSO, result, newShape);
+
+  TopTools_IndexedMapOfShape rmape, rmap;
+  TopExp::MapShapes(newShape, TopAbs_EDGE, rmape);
+  if (fullAttrs != 0) {
+    if (rmape.Extent() != 0) {
+      emap = (egObject **) EG_alloc(rmape.Extent()*sizeof(egObject *));
+      if (emap == NULL) return EGADS_MALLOC;
+    }
+  }
+  TopExp::MapShapes(result, TopAbs_FACE, rmap);
+  if (rmap.Extent() != 0) {
+    fmap = (egObject **) EG_alloc(rmap.Extent()*sizeof(egObject *));
+    if (fmap == NULL) {
+      if (emap != NULL) EG_free(emap);
+      return EGADS_MALLOC;
+    }
+  }
+  if ((emap == NULL) && (fmap == NULL)) return EGADS_CONSTERR;
+
+  if (emap != NULL)
+    for (i = 0; i < rmape.Extent(); i++) emap[i] = NULL;
+  if (fmap != NULL)
+    for (i = 0; i < rmap.Extent();  i++) fmap[i] = NULL;
+
+  if (src->oclass == MODEL) {
+    egadsModel *pmdl = (egadsModel *) src->blind;
+    nbody            = pmdl->nbody;
+    bodies           = pmdl->bodies;
+  } else {
+    nbody            = 1;
+    bodies           = &src;
+  }
+
+  for (i = 0; i < nbody; i++) {
+    if (bodies[i]        == NULL) return EGADS_NULLOBJ;
+    if (bodies[i]->blind == NULL) return EGADS_NODATA;
+    egadsBody *pbody = (egadsBody *) bodies[i]->blind;
+    if (emap != NULL)
+      for (j = 1; j <= pbody->edges.map.Extent(); j++) {
+        edge = TopoDS::Edge(pbody->edges.map(j));
+        if (BSO.IsDeleted(edge)) continue;
+        const TopTools_ListOfShape& listEdges = BSO.Modified(edge);
+        if (listEdges.Extent() > 0) {
+          /* modified Edges */
+          TopTools_ListIteratorOfListOfShape it(listEdges);
+          for (; it.More(); it.Next()) {
+            genedge = TopoDS::Edge(it.Value());
+            index   = rmape.FindIndex(genedge);
+            if (index > 0) emap[index-1] = pbody->edges.objs[j-1];
+          }
+        }
+      }
+    if (fmap != NULL)
+      for (j = 1; j <= pbody->faces.map.Extent(); j++) {
+        face = TopoDS::Face(pbody->faces.map(j));
+        if (BSO.IsDeleted(face)) continue;
+        const TopTools_ListOfShape& listFaces = BSO.Modified(face);
+        if (listFaces.Extent() > 0) {
+          /* modified Faces */
+          TopTools_ListIteratorOfListOfShape it(listFaces);
+          for (; it.More(); it.Next()) {
+            genface = TopoDS::Face(it.Value());
+            index   = rmap.FindIndex(genface);
+            if (index > 0) fmap[index-1] = pbody->faces.objs[j-1];
+          }
+        }
+      }
+    }
+
+  if (tool->oclass == MODEL) {
+    egadsModel *pmdl = (egadsModel *) tool->blind;
+    nbody            = pmdl->nbody;
+    bodies           = pmdl->bodies;
+  } else {
+    nbody  = 1;
+    bodies = &tool;
+  }
+
+  for (i = 0; i < nbody; i++) {
+    if (bodies[i]        == NULL)  return EGADS_NULLOBJ;
+    if (bodies[i]->blind == NULL)  return EGADS_NODATA;
+    if (bodies[i]->oclass != BODY) continue;
+    egadsBody *pbody = (egadsBody *) bodies[i]->blind;
+    if (emap != NULL)
+      for (j = 1; j <= pbody->edges.map.Extent(); j++) {
+        edge = TopoDS::Edge(pbody->edges.map(j));
+        if (BSO.IsDeleted(edge)) continue;
+        const TopTools_ListOfShape& listEdges = BSO.Modified(edge);
+        if (listEdges.Extent() > 0) {
+          /* modified Edges */
+          TopTools_ListIteratorOfListOfShape it(listEdges);
+          for (; it.More(); it.Next()) {
+            genedge = TopoDS::Edge(it.Value());
+            index   = rmape.FindIndex(genedge);
+            if (index > 0) emap[index-1] = pbody->edges.objs[j-1];
+          }
+        }
+      }
+    if (fmap != NULL)
+      for (j = 1; j <= pbody->faces.map.Extent(); j++) {
+        face = TopoDS::Face(pbody->faces.map(j));
+        if (BSO.IsDeleted(face)) continue;
+        const TopTools_ListOfShape& listFaces = BSO.Modified(face);
+        if (listFaces.Extent() > 0) {
+          /* modified Faces */
+          TopTools_ListIteratorOfListOfShape it(listFaces);
+          for (; it.More(); it.Next()) {
+            genface = TopoDS::Face(it.Value());
+            index   = rmap.FindIndex(genface);
+            if (index > 0) fmap[index-1] = pbody->faces.objs[j-1];
+          }
+        }
+      }
+  }
+
+  result    = newShape;
+  *emapping = emap;
+  *fmapping = fmap;
+  return EGADS_SUCCESS;
+}
 #endif
 
 
 static void
 EG_matchMdlFace(BRepAlgoAPI_BooleanOperation& BSO, TopoDS_Shape src,
-                int iface, TopoDS_Shape tool, TopoDS_Shape result,
+                int iface, TopoDS_Shape tool, TopoDS_Shape& result,
                 int fullAttrs, int **emapping, int **fmapping)
 {
-  int                        i, j, nf, ne, *emap = NULL, *map = NULL;
+  int                        i, j, nf, ne;
+  int                        *emap = NULL, *map = NULL;
   TopoDS_Edge                edge, genedge;
   TopoDS_Face                face, genface;
+  TopoDS_Shape               newShape;
   TopTools_IndexedMapOfShape rmap, smap, tmap, rmape, smape, tmape;
 
   *emapping = NULL;
   *fmapping = NULL;
+  
+  /* remove spurious Nodes -- note: Face mapping remains the same */
+  EG_removeSpuriousNodes(BSO, result, newShape);
+
   if (fullAttrs != 0) {
-    TopExp::MapShapes(result, TopAbs_EDGE, rmape);
-    TopExp::MapShapes(src,    TopAbs_EDGE, smape);
+    TopExp::MapShapes(newShape, TopAbs_EDGE, rmape);
+    TopExp::MapShapes(src,      TopAbs_EDGE, smape);
     ne = rmape.Extent();
   } else {
     ne = 0;
@@ -468,7 +737,8 @@ EG_matchMdlFace(BRepAlgoAPI_BooleanOperation& BSO, TopoDS_Shape src,
     }
 
   }
-
+  
+  result = newShape;
 }
 
 
@@ -477,10 +747,11 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
               const egObject *tool, TopAbs_ShapeEnum type, TopoDS_Shape& result,
               int ***emapping, int ***fmapping)
 {
-  int             i, j, k, ns, nface, fullAttrs, **map, **emap = NULL;
+  int             i, j, k, ns, nface, fullAttrs;
+  int             **map, **emap = NULL;
   egadsBody       *pbods, *pbodt;
   const egObject  *oface = NULL;
-  TopoDS_Shape    solid;
+  TopoDS_Shape    solid, newShape;
   TopoDS_Edge     edge, genedge;
   TopoDS_Face     face, genface;
   TopExp_Explorer Exp;
@@ -488,6 +759,9 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
   *emapping = NULL;
   *fmapping = NULL;
   fullAttrs = EG_fullAttrs(src);
+
+  /* remove spurious Nodes -- note: Face mapping remains the same */
+  EG_removeSpuriousNodes(BSO, result, newShape);
 
   pbods     = (egadsBody *) src->blind;
   if (((tool->oclass == FACE) ||
@@ -504,7 +778,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
   }
 
   ns = 0;
-  for (Exp.Init(result, type); Exp.More(); Exp.Next()) ns++;
+  for (Exp.Init(newShape, type); Exp.More(); Exp.Next()) ns++;
   if (ns == 0) return;
   map = (int **) EG_alloc(ns*sizeof(int *));
   if (map == NULL) return;
@@ -519,7 +793,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
   }
 
   k = 0;
-  for (Exp.Init(result, type); Exp.More(); Exp.Next()) {
+  for (Exp.Init(newShape, type); Exp.More(); Exp.Next()) {
     solid = Exp.Current();
     TopTools_IndexedMapOfShape MapE, MapF;
     TopExp::MapShapes(solid, TopAbs_EDGE, MapE);
@@ -553,7 +827,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
         for (; it.More(); it.Next()) {
           genedge = TopoDS::Edge(it.Value());
           k       = 0;
-          for (Exp.Init(result, type); Exp.More(); Exp.Next()) {
+          for (Exp.Init(newShape, type); Exp.More(); Exp.Next()) {
             solid = Exp.Current();
             TopTools_IndexedMapOfShape MapE;
             TopExp::MapShapes(solid, TopAbs_EDGE, MapE);
@@ -607,7 +881,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
           for (; it.More(); it.Next()) {
             genedge = TopoDS::Edge(it.Value());
             k       = 0;
-            for (Exp.Init(result, type); Exp.More(); Exp.Next()) {
+            for (Exp.Init(newShape, type); Exp.More(); Exp.Next()) {
               solid = Exp.Current();
               TopTools_IndexedMapOfShape MapE;
               TopExp::MapShapes(solid, TopAbs_EDGE, MapE);
@@ -658,7 +932,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
       TopTools_IndexedMapOfShape MapF;
       TopExp::MapShapes(solid, TopAbs_FACE, MapF);
       if (map[k] != NULL) {
-        j = MapF.FindIndex(genface);
+        j = MapF.FindIndex(face);
         if (j > 0) map[k][j-1] = -1;
       }
       k++;
@@ -686,6 +960,7 @@ EG_matchFaces(BRepAlgoAPI_BooleanOperation& BSO, const egObject *src,
     }
   }
 
+  result = newShape;
 }
 
 
@@ -744,10 +1019,10 @@ EG_generalBoolean(egObject *src, egObject *tool, int oper, double tol,
       printf(" EGADS Error: Context mismatch (EG_generalBoolean)!\n");
     return EGADS_MIXCNTX;
   }
-  if ((tool->oclass != MODEL) && (tool->oclass != BODY)) {
+  if ((tool->oclass > MODEL) || (tool->oclass < NODE)) {
     if (outLevel > 0)
-      printf(" EGADS Error: Tool is not a BODY or MODEL (EG_generalBoolean)!\n");
-    return EGADS_NOTBODY;
+      printf(" EGADS Error: Tool is not Topology (EG_generalBoolean)!\n");
+    return EGADS_NOTTOPO;
   }
 
   TopTools_ListOfShape sList, tList;
@@ -765,13 +1040,28 @@ EG_generalBoolean(egObject *src, egObject *tool, int oper, double tol,
   if (tool->oclass == MODEL) {
     egadsModel *pmdl = (egadsModel *) tool->blind;
     tList.Append(TopoDS::Compound(pmdl->shape));
-  } else {
+  } else if (tool->oclass == BODY) {
     egadsBody *pbody = (egadsBody *) tool->blind;
     if (tool->mtype == SOLIDBODY) {
       tList.Append(TopoDS::Solid(pbody->shape));
     } else {
       tList.Append(pbody->shape);
     }
+  } else if (tool->oclass == SHELL) {
+    egadsShell *pshell = (egadsShell *) tool->blind;
+    tList.Append(pshell->shell);
+  } else if (tool->oclass == FACE) {
+    egadsFace *pface = (egadsFace *) tool->blind;
+    tList.Append(pface->face);
+  } else if (tool->oclass == LOOP) {
+    egadsLoop *ploop = (egadsLoop *) tool->blind;
+    tList.Append(ploop->loop);
+  } else if (tool->oclass == EDGE) {
+    egadsEdge *pedge = (egadsEdge *) tool->blind;
+    tList.Append(pedge->edge);
+  } else {
+    egadsNode *pnode = (egadsNode *) tool->blind;
+    tList.Append(pnode->node);
   }
 
   if (oper == INTERSECTION) {
@@ -898,7 +1188,7 @@ EG_generalBoolean(egObject *src, egObject *tool, int oper, double tol,
         return EGADS_GEOMERR;
       }
       result = BSO.Shape();
-      stat   = EG_matchGeneral(BSO, src, tool, result, &emap, &fmap);
+      stat   = EG_matchSplitter(BSO, src, tool, result, &emap, &fmap);
     }
     catch (const Standard_Failure& e) {
       printf(" EGADS Error: SBO Split Exception (EG_generalBoolean)!\n");
@@ -915,7 +1205,7 @@ EG_generalBoolean(egObject *src, egObject *tool, int oper, double tol,
     if (outLevel > 0)
       printf(" EGADS Error: Attribute Mapping failed = %d (EG_generalBoolean)!\n",
              stat);
-    return EGADS_CONSTERR;
+    return EGADS_ATTRERR;
   }
 
   // parse the result
@@ -2133,6 +2423,13 @@ EG_fuseSheets(const egObject *srcx, const egObject *toolx, egObject **sheet)
         }
         stat = EG_getTopology(newModel, &obj, &oclass, &mtype, NULL,
                               &j, &bodies, &senses);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: EG_getTopology = %d (EG_fuseSheets)!\n",
+                   stat);
+          EG_deleteObject(newModel);
+          return stat;
+        }
         if (j != 1) {
           if (outLevel > 0)
             printf(" EGADS Warning: Fuse has %d Bodies (EG_fuseSheets)!\n", j);
@@ -3193,7 +3490,8 @@ EG_imprintBody(const egObject *src, int nedge, const egObject **facEdg,
 
   /* use OpenCASCADE */
   if (outLevel > 0)
-    printf(" EGADS Info: splitBody = %d\n", stat);
+    printf(" EGADS Info: splitBody = %d -- using OpenCASCADE (EG_imprintBody)!\n",
+           stat);
   if (result != NULL) {
     EG_deleteObject(*result);
     *result = NULL;
@@ -3518,7 +3816,7 @@ EG_filletBody(const egObject *src, int nedge, const egObject **edges,
       }
     }
   }
-  
+
   for (i = 0; i < pbody->faces.map.Extent(); i++) {
     face = pbody->faces.objs[i];
     egadsFace *pface = (egadsFace *) face->blind;
@@ -4149,9 +4447,7 @@ EG_extrude_plane(egObject *edge, const T* dir, int *mtype, T *data)
   int stat = EGADS_SUCCESS;
   T mZ;
 
-  /* The plane is reversed to be consistent with OCC */
-
-  *mtype = -PLANE;
+  *mtype = PLANE;
 
   if (edge->oclass != EDGE) return EGADS_TOPOERR;
 
@@ -4202,17 +4498,17 @@ EG_extrude_plane(egObject *edge, const T* dir, int *mtype, T *data)
   data[3] = D1u[0]; /* x-axis */
   data[4] = D1u[1];
   data[5] = D1u[2];
-  data[6] = -dir[0]; /* y-axis */
-  data[7] = -dir[1];
-  data[8] = -dir[2];
+  data[6] = dir[0]; /* y-axis */
+  data[7] = dir[1];
+  data[8] = dir[2];
 
   gp_Dir Dir(value(dir[0]), value(dir[1]), value(dir[2]));
   gp_Ax3 Ax3(P,gp_Dir(value(newZ[0]), value(newZ[1]), value(newZ[2])),
                gp_Dir(value( D1u[0]), value( D1u[2]), value( D1u[2])));
   if (Dir.Dot(Ax3.YDirection()) < 0.0){
-    data[6] = dir[0]; /* y-axis */
-    data[7] = dir[1];
-    data[8] = dir[2];
+    data[6] = -dir[0]; /* y-axis */
+    data[7] = -dir[1];
+    data[8] = -dir[2];
     *mtype = -(*mtype);
   }
 
@@ -4239,12 +4535,10 @@ EG_extrude_surf(egObject *edge, int *mtype, const T* dir, T *data)
    * from OCC BRepSweep_Translation::MakeEmptyFace
    *  "extruded surfaces are inverted correspondingly to the topology, so reverse."
    *
-   * However, reversing the direction makes the topology unnecessarily convoluted
-   *
    */
-  vec[0] = dir[0];
-  vec[1] = dir[1];
-  vec[2] = dir[2];
+  vec[0] = -dir[0];
+  vec[1] = -dir[1];
+  vec[2] = -dir[2];
 
   gp_Dir Dir(value(vec[0]), value(vec[1]), value(vec[2]));
 
@@ -4415,15 +4709,15 @@ EG_extrude_loop(objStack *stack, const egObject *loop0, const egObject *loop1,
       tdata[1] = pedge0->trange[1];
 
       /* create P-curves */
-      data[0] = tdata[0]; data[1] = 0.;    /* u == UMIN */
-      data[2] = 0.;       data[3] = 1.;
+      data[0] = tdata[0]; data[1] = 0.;     /* u == UMIN */
+      data[2] = 0.;       data[3] = -1.;
       stat = EG_makeGeometry(context, PCURVE, LINE, NULL, NULL, data,
                              &eedges[4+0]);
       if (stat != EGADS_SUCCESS) goto cleanup;
       stat = EG_stackPush(stack, eedges[4+0]);
       if (stat != EGADS_SUCCESS) goto cleanup;
 
-      data[0] = 0.;       data[1] = 0.;    /* v == VMIN */
+      data[0] = 0.;       data[1] = 0.;     /* v == VMIN */
       data[2] = 1.;       data[3] = 0.;
       stat = EG_makeGeometry(context, PCURVE, LINE, NULL, NULL, data,
                              &eedges[4+1]);
@@ -4431,15 +4725,15 @@ EG_extrude_loop(objStack *stack, const egObject *loop0, const egObject *loop1,
       stat = EG_stackPush(stack, eedges[4+1]);
        if (stat != EGADS_SUCCESS) goto cleanup;
 
-      data[0] = tdata[1]; data[1] = 0.;    /* u == UMAX */
-      data[2] = 0.;       data[3] = 1.;
+      data[0] = tdata[1]; data[1] = 0.;     /* u == UMAX */
+      data[2] = 0.;       data[3] = -1.;
       stat = EG_makeGeometry(context, PCURVE, LINE, NULL, NULL, data,
                              &eedges[4+2]);
       if (stat != EGADS_SUCCESS) goto cleanup;
       stat = EG_stackPush(stack, eedges[4+2]);
        if (stat != EGADS_SUCCESS) goto cleanup;
 
-      data[0] = 0.;       data[1] = dist;  /* v == VMAX */
+      data[0] = 0.;       data[1] = -dist;  /* v == VMAX */
       data[2] = 1.;       data[3] = 0.;
       stat = EG_makeGeometry(context, PCURVE, LINE, NULL, NULL, data,
                              &eedges[4+3]);
@@ -4456,7 +4750,7 @@ EG_extrude_loop(objStack *stack, const egObject *loop0, const egObject *loop1,
     }
 
     /* make the face */
-    stat = EG_makeTopology(context, surfs[i], FACE, ssens[i],
+    stat = EG_makeTopology(context, surfs[i], FACE, -ssens[i],
                            NULL, 1, &eloop, lsens, &eface);
     if (stat != EGADS_SUCCESS) goto cleanup;
     stat = EG_stackPush(stack, eface);
@@ -4632,7 +4926,7 @@ EG_extrude_loop_dot(const egObject *loop0, const SurrealS<1>& dist,
     stat = EG_copyGeometry_dot(enodes[0], mat, pedge->nodes[1]);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
-    stat = EG_setGeometry_dot(eedges[iedge[0]], EDGE, TWONODE, NULL, tdata);
+    stat = EG_setRange_dot(eedges[iedge[0]], EDGE, tdata);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
 
@@ -4669,7 +4963,7 @@ EG_extrude_loop_dot(const egObject *loop0, const SurrealS<1>& dist,
     stat = EG_copyGeometry_dot(enodes[1], mat, pedge->nodes[1]);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
-    stat = EG_setGeometry_dot(eedges[iedge[2]], EDGE, TWONODE, NULL, tdata);
+    stat = EG_setRange_dot(eedges[iedge[2]], EDGE, tdata);
     if (stat != EGADS_SUCCESS) goto cleanup;
   }
 
@@ -5025,11 +5319,30 @@ cleanup:
 
 
 #ifdef OCC_ROTATE
+static void
+EG_attrSameSurf(egObject *obj, TopoDS_Face Face, egadsBody *pbody)
+{
+  Handle(Geom_Surface) hSurface = BRep_Tool::Surface(Face);
+  for (int i = 0; i < pbody->faces.map.Extent(); i++) {
+    if (pbody->faces.objs[i] == NULL) continue;
+    if (pbody->faces.objs[i]->blind == NULL) continue;
+    egadsFace *pface = (egadsFace *) pbody->faces.objs[i]->blind;
+    egObject  *geom  = pface->surface;
+    if (geom == NULL) continue;
+    if (geom->blind == NULL) continue;
+    egadsSurface *psurf = (egadsSurface *) geom->blind;
+    if (hSurface != psurf->handle) continue;  /* note: this does not work!
+                                                 need to find something else */
+    EG_attributeDup(obj, pbody->faces.objs[i]);
+  }
+}
+
+
 int
 EG_rotate(const egObject *src, double angle, const double *axis,
           egObject **result)
 {
-  int          outLevel, stat, mtype, nerr;
+  int          outLevel, stat, mtype, nerr, split = 0;
   double       ang;
   egObject     *context, *obj, *edge;
   TopoDS_Shape shape, newShape;
@@ -5088,6 +5401,15 @@ EG_rotate(const egObject *src, double angle, const double *axis,
   if (mtype == SOLIDBODY) {
     GProp_GProps VProps;
     BRepGProp    BProps;
+    
+    if (fabs(fabs(ang)-360.0) < 1.e-6) {
+      char *env = getenv("EGADSrotate");
+      if (env != NULL) {
+        if (strcmp(env,"Split") == 0) split = 1;
+        if (strcmp(env,"split") == 0) split = 1;
+        if (strcmp(env,"SPLIT") == 0) split = 1;
+      }
+    }
 
     BProps.VolumeProperties(newShape, VProps);
     if (VProps.Mass() < 0.0) {
@@ -5117,6 +5439,7 @@ EG_rotate(const egObject *src, double angle, const double *axis,
   pbods->bbox.filled = 0;
   pbods->massFill    = 0;
   obj->blind         = pbods;
+  if (split == 1) EG_splitPeriodics(pbods);
   stat = EG_traverseBody(context, 0, obj, obj, pbods, &nerr);
   if (stat != EGADS_SUCCESS) {
     delete pbods;
@@ -5138,7 +5461,11 @@ EG_rotate(const egObject *src, double angle, const double *axis,
           if (qFace.ShapeType() != TopAbs_FACE) continue;
           TopoDS_Face genface = TopoDS::Face(qFace);
           int index = pbods->faces.map.FindIndex(genface);
-          if (index > 0) EG_attributeDup(edge, pbods->faces.objs[index-1]);
+          if (index > 0) {
+            EG_attributeDup(edge, pbods->faces.objs[index-1]);
+          } else if (split == 1) {
+            EG_attrSameSurf(edge, genface, pbods);
+          }
         }
       }
     }
@@ -5156,7 +5483,11 @@ EG_rotate(const egObject *src, double angle, const double *axis,
           if (qFace.ShapeType() != TopAbs_FACE) continue;
           TopoDS_Face genface = TopoDS::Face(qFace);
           int index = pbods->faces.map.FindIndex(genface);
-          if (index > 0) EG_attributeDup(edge, pbods->faces.objs[index-1]);
+          if (index > 0) {
+            EG_attributeDup(edge, pbods->faces.objs[index-1]);
+          } else if (split == 1) {
+            EG_attrSameSurf(edge, genface, pbods);
+          }
         }
       }
     }
@@ -5176,7 +5507,11 @@ EG_rotate(const egObject *src, double angle, const double *axis,
             if (qFace.ShapeType() != TopAbs_FACE) continue;
             TopoDS_Face genface = TopoDS::Face(qFace);
             int index = pbods->faces.map.FindIndex(genface);
-            if (index > 0) EG_attributeDup(edge, pbods->faces.objs[index-1]);
+            if (index > 0) {
+              EG_attributeDup(edge, pbods->faces.objs[index-1]);
+            } else {
+              EG_attrSameSurf(edge, genface, pbods);
+            }
           }
         }
       }

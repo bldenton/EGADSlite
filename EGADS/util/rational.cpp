@@ -29,7 +29,7 @@ typedef int bool;
 #endif
 
 
-/* 
+/*
  * These routines were taken from the OpenNURBS package with the date of
  * 2013-07-11, see <http://www.openNURBS.org>.
  */
@@ -107,22 +107,22 @@ BinomialCoefficient(int i, int j)
     125994627894135.0, 191991813933920.0, 270533919634160.0,
     352870329957600.0, 426384982032100.0, 477551179875952.0,
     495918532948104.0};
-  
+
   int n, half_n, bc_i;
-  
+
   if (i  < 0 || j  < 0) return  0.0;
   if (0 == i || 0 == j) return  1.0;
   n = i+j;
   if (1 == i || 1 == j) return (double)n;
   if (4 == n)           return  6.0;
   if (5 == n)           return 10.0;
-  
+
   if (n%2) return BinomialCoefficient(i-1,j)+BinomialCoefficient(i,j-1);
-  
+
   half_n = n >> 1;
   if (half_n > MAX_HALF_N)
            return BinomialCoefficient(i-1,j)+BinomialCoefficient(i,j-1);
-  
+
   if (i > half_n) i = n - i;
  /* at this point we have n even,
   * MAX_HALF_N*2 >= n >= 6 and 1 < i <= n/2
@@ -131,7 +131,7 @@ BinomialCoefficient(int i, int j)
   half_n -= 2;
   bc_i = ((half_n*(half_n+1))>>1) + i - 3;
   return bc[bc_i];
-  
+
 #undef MAX_HALF_N
 }
 
@@ -149,7 +149,7 @@ Parameters:
     v[] is an array of length (der_count+1)*v_stride.
     The input v[] array contains  derivatives of the numerator and
     denominator	functions in the order (X, W), (Xt, Wt), (Xtt, Wtt), ...
-    In general, the (dim+1) coordinates of the d-th derivative 
+    In general, the (dim+1) coordinates of the d-th derivative
     are in (v[n],...,v[n+dim]) where n = d*v_stride.
     In the output v[] array the derivatives of X are replaced with
     the derivatives of F and the derivatives of W are divided by
@@ -170,37 +170,27 @@ void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, DOUBLE *v)
                                                                  (i)   (j)
       (The missing summands look like  BinomialCoefficient(i,j)*w   * f   )
   */
-
+#ifndef __clang_analyzer__
   DOUBLE wt, w2, *f, *x, *w;
   int    i, j, n, df;
 
-#ifndef __clang_analyzer__
   wt = v[dim];
   wt = 1.0/wt;
-#else
-  wt = 1.0;
-#endif
   i  = (der_count+1)*v_stride;
   x  = v;
-#ifndef __clang_analyzer__
   while (i--) *x++ *= wt;
-#else
-  while (i--) *x++  = wt;
-#endif
 
   if (der_count) {
     // 1st derivative - faster special case
     f  = v;            // f  =  func(t)
     x  = v + v_stride; // x  =  numerator'(t)/w
-#ifndef __clang_analyzer__
     wt = -x[dim];      // wt = -denominator'(t)/w
-#endif
     j  = dim; while (j--) *x++ +=  wt* *f++;
     if (der_count > 1) {
-      // 2nd derivative - faster special case 
+      // 2nd derivative - faster special case
       f = v + v_stride;
       x = f + v_stride;
-      // v = func(t), f = func'(t), x = numerator''(t)/w, 
+      // v = func(t), f = func'(t), x = numerator''(t)/w,
       // * wt = -2*denominator'(t)/w, w2 = denominator''(t)/w
       wt *= 2.0;
       w2  = -x[dim];
@@ -213,10 +203,10 @@ void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, DOUBLE *v)
         for (n = 3; n <= der_count; n++) {
           // computing n-th derivative
           f  = v;
-          x += v_stride; // x = numerator^(n)/weight 
+          x += v_stride; // x = numerator^(n)/weight
           w  = v + n*v_stride + dim;
           for (i = 0; i < n; i++) {
-            // f = value of i-th derivative 
+            // f = value of i-th derivative
             // w = ((n-i)-th derivative of denominator)/weight
             wt = -BinomialCoefficient(n-i,i) * *w;
             w -= v_stride;
@@ -228,7 +218,7 @@ void EG_EvaluateQuotientRule(int dim, int der_count, int v_stride, DOUBLE *v)
       }
     }
   }
-
+#endif
 }
 
 
@@ -263,9 +253,9 @@ void EG_EvaluateQuotientRule2(int dim, int der_count, int v_stride, DOUBLE *v)
   //  W = value of denominator
   //  F = X/W
   //  Xs = partial w.r.t. 1rst parameter
-  //  Xt = partial w.r.t. 2nd parameter 
+  //  Xt = partial w.r.t. 2nd parameter
   //  ...
-  // 
+  //
 
   // divide everything by the weight
   F = v[dim];
@@ -359,7 +349,7 @@ EG_IncreaseBezierDegree(int dim, int order, int cv_stride, DOUBLE* cv)
   DOUBLE *newcv   = cv;
   const int cvdim = dim+1;
   const int dcv   = cv_stride - cvdim;
-  
+
   j = cv_stride*order;
   newcv += j;
 #ifdef LITE
@@ -395,7 +385,7 @@ EG_RemoveBezierSingAt0(int dim, int order, int cv_stride, DOUBLE* cv)
 {
   const int cvdim = dim+1;
   int j,k,ord0;
-  
+
   ord0 = order;
   while(cv[dim] == 0.0) {
     order--;
@@ -419,7 +409,7 @@ EG_RemoveBezierSingAt0(int dim, int order, int cv_stride, DOUBLE* cv)
 
 /*****************************************************************************
 Evaluate a Rational Bezier
- 
+
 INPUT:
   dim
     (>= 1) dimension of Bezier's range
@@ -464,7 +454,7 @@ bool EG_Bezier1DRat(int dim,              // dimension
                     int v_stride,         // v_stride (>=dimension)
                     DOUBLE *v           ) // v[(der_count+1)*v_stride] array
 {
-  unsigned char stack_buffer[4*64*sizeof(double)];
+  unsigned char stack_buffer[4*64*sizeof(DOUBLE)];
   DOUBLE delta_t;
   DOUBLE alpha0;
   DOUBLE alpha1;
@@ -475,19 +465,19 @@ bool EG_Bezier1DRat(int dim,              // dimension
   const int degree = order-1;
   const int cvdim  = dim+1;
   size_t sizeofCV;
-  
+
   if (cv_stride < cvdim) cv_stride = cvdim;
-  
+
 #ifdef LITE
   memset(v, 0, v_stride*(der_count+1)*sizeof(*v));
 #else
   for (i = 0; i < v_stride*(der_count+1); i++) v[i] = 0.;
 #endif
-  
+
   i = order*cvdim;
   j = 0;
   if (der_count > degree) j = (der_count-degree)*cvdim;
-  
+
   sizeofCV = (i+j)*sizeof(*CV);
   CV = (DOUBLE *)( (sizeofCV <= sizeof(stack_buffer)) ? stack_buffer : (free_me=malloc(sizeofCV)) );
 #ifdef LITE
@@ -528,7 +518,7 @@ bool EG_Bezier1DRat(int dim,              // dimension
     alpha1  = (t1-t)*alpha0;
     alpha0 *= t-t0;
   }
-  
+
   /* deCasteljau (from the right) */
   if (alpha1 != 0.0) {
     j = order; while (--j) {
@@ -541,7 +531,7 @@ bool EG_Bezier1DRat(int dim,              // dimension
 #ifndef __clang_analyzer__
           *cv0 = *cv0 * alpha0 + *cv1 * alpha1;
 #else
-          *cv0 =        alpha0 + *cv1 * alpha1;
+          *cv0 =        alpha0 +        alpha1;
 #endif
           cv0++;
           cv1++;
@@ -549,7 +539,7 @@ bool EG_Bezier1DRat(int dim,              // dimension
       }
     }
   }
-  
+
   /* check for removable singularity */
 #ifndef __clang_analyzer__
   if (CV[dim] == 0.0) {
@@ -559,7 +549,7 @@ bool EG_Bezier1DRat(int dim,              // dimension
     }
   }
 #endif
-  
+
   /* Lee (from the right) */
   if (der_count) {
     tmp=CV;
@@ -576,34 +566,36 @@ bool EG_Bezier1DRat(int dim,              // dimension
 #ifndef __clang_analyzer__
           *cv1 = alpha1*(*cv1 - *cv0);
 #else
-          *cv1 = *cv0*alpha1;
+          *cv1 = alpha1;
 #endif
         }
       }
     }
     CV=tmp;
   }
-  
+
   if (order == 2) {
     j = cv_stride;
     for (i = 0; i < cvdim; i++, j++)
       if (cv[i] == cv[j]) CV[i] = cv[i];
   }
-  
+
   EG_EvaluateQuotientRule(dim, der_count, cvdim, CV);
-  
+
   for (i = 0; i <= der_count; i++) {
 #ifdef LITE
     memcpy(v, CV, dim*sizeof(*v));
 #else
+#ifndef __clang_analyzer__
     for (int ii = 0; ii < dim; ii++) v[ii] = CV[ii];
+#endif
 #endif
     v  += v_stride;
     CV += cvdim;
   }
-  
+
   if (free_me) free(free_me);
-  
+
   return true;
 }
 

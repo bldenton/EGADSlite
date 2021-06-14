@@ -5,7 +5,7 @@
  *
  *             Function Prototypes
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -60,6 +60,9 @@ __ProtoExt__ int  EGlite_open( ego *context );
 __ProtoExt__ int  EGlite_loadModel( ego context, int bflg, const char *name, 
                                 ego *model );
 __ProtoExt__ int  EGlite_saveModel( const ego model, const char *name );
+__ProtoExt__ int  EGlite_exportModel( ego model, size_t *nbytes, char **stream );
+__ProtoExt__ int  EGlite_importModel( ego context, const size_t nbytes,
+                                  const char *stream, ego *model );
 __ProtoExt__ int  EGlite_deleteObject( ego object );
 __ProtoExt__ int  EGlite_makeTransform( ego context, const double *xform, 
                                     ego *oform );
@@ -142,8 +145,8 @@ __ProtoExt__ int  EGlite_isoCline( const ego surface, int UV, double val,
 __ProtoExt__ int  EGlite_convertToBSpline( ego geom, ego *bspline );
 __ProtoExt__ int  EGlite_convertToBSplineRange( ego geom, const double *range,
                                             ego *bspline );
-__ProtoExt__ int  EGlite_skinning ( ego context, int nCurves, ego *curves,
-                                int skinning_degree, ego *surface );
+__ProtoExt__ int  EGlite_skinning( int nCurves, ego *curves, int skinning_degree,
+                               ego *surface );
 
 /* topology functions */
 
@@ -253,10 +256,12 @@ __ProtoExt__ int  EGlite_localToGlobal( const ego tess, int index, int local,
                                     int *global );
 __ProtoExt__ int  EGlite_getGlobal( const ego tess, int global, int *ptype,
                                 int *pindex, /*@null@*/ double *xyz );
+__ProtoExt__ int  EGlite_saveTess( ego tess, const char *name );
+__ProtoExt__ int  EGlite_loadTess( ego body, const char *name, ego *tess );
   
 __ProtoExt__ int  EGlite_tessMassProps( const ego tess, double *props );
 
-/* high level functions */
+/* top down build functions */
 
 __ProtoExt__ int  EGlite_fuseSheets( const ego src, const ego tool, ego *sheet );
 __ProtoExt__ int  EGlite_generalBoolean( ego src, ego tool, int oper, double tol,
@@ -287,6 +292,20 @@ __ProtoExt__ int  EGlite_loft( int nsec, const ego *secs, int opt, ego *result )
 __ProtoExt__ int  EGlite_blend( int nsec, const ego *secs, /*@null@*/ double *rc1,
                             /*@null@*/ double *rcN, ego *result );
 __ProtoExt__ int  EGlite_ruled( int nsec, const ego *secs, ego *result );
+
+/* effective topology functions */
+
+__ProtoExt__ int  EGlite_initEBody( ego tess, double angle, ego *ebody );
+__ProtoExt__ int  EGlite_finishEBody( ego EBody );
+__ProtoExt__ int  EGlite_makeEFace( ego EBody, int nFace, ego *Faces, ego *EFace );
+__ProtoExt__ int  EGlite_makeAttrEFaces( ego EBody, const char *attrName, int *nEFace,
+                                     /*@null@*/ ego **EFaces );
+__ProtoExt__ int  EGlite_effectiveMap( ego EObject, double *eparam, ego *Object,
+                                   double *param );
+__ProtoExt__ int  EGlite_effectiveEdgeList( ego EEdge, int *nedge, ego **edges,
+                                        int **senses, double **tstart );
+__ProtoExt__ int  EGlite_effectiveTri( ego EObj, double *uv, int *fIndex, int *itri,
+                                   double *w );
 
 /* other functions */
 

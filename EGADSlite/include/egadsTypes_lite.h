@@ -5,7 +5,7 @@
  *
  *             General Object Header
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -15,8 +15,8 @@
 
 
 #define EGADSMAJOR     1
-#define EGADSMINOR    18
-#define EGADSPROP     EGADSprop: Revision 1.18
+#define EGADSMINOR    19
+#define EGADSPROP     EGADSprop: Revision 1.19
 
 #define MAGIC      98789
 #define MTESSPARAM     2
@@ -39,6 +39,11 @@
 #define SHELL         24
 #define BODY          25
 #define MODEL         26
+#define EEDGE         31
+#define ELOOPX        32        /* ELOOP conflicts with errno.h */
+#define EFACE         33
+#define ESHELL        34
+#define EBODY         35
 
 
 /* MEMBER TYPES */
@@ -247,5 +252,102 @@ typedef struct {
   int      nv;                  /* number of vs for surface tessellation */
   int      done;                /* is Object complete? */
 } egTessel;
+
+
+typedef struct {
+  int       nobjs;              /* number in the map */
+  egObject **objs;              /* vector of egos for map */
+} egEMap;
+
+
+typedef struct {
+  egObject *edge;               /* Bounding Edge */
+  int      curve;               /* -1 internal, 0 - line, 1 - curve */
+  int      npts;                /* number of verts */
+  double   *ts;                 /* the t values (npts in length) */
+  double   dstart[3];           /* displacement in xyz first Node */
+  double   dend[3];             /* displacement in xyz last Node */
+} egEdVert;
+
+
+typedef struct {
+  int      iedge;               /* the Edge Index */
+  int      sense;               /* sense use for Edge */
+  egObject *nstart;             /* Node object @ beginning */
+  double   tstart;              /* t for beginning of segment */
+  double   tend;                /* t for end of segment */
+} egEEseg;
+
+
+typedef struct {
+  egEdVert *sedges;             /* source Edge structure */
+  int      nsegs;               /* number of Edge segments */
+  egEEseg  *segs;               /* Edge segments */
+  double   trange[2];
+  egObject *nodes[2];           /* pointer to ego Nodes */
+} egEEdge;
+
+
+typedef struct {
+  egObject *edge;               /* Edge object */
+  int      sense;               /* sense use for Edge */
+  int      npts;                /* number of discrete points */
+  int      *iuv;                /* index into uvmap for Edge ts */
+} egEdgeUV;
+
+
+typedef struct {
+  egEMap   eedges;              /* list of EEdges (in order) */
+  int      *senses;             /* sense for each EEdge */
+  double   area;                /* area in UVmap */
+  int      nedge;               /* length of edgeUVs */
+  egEdgeUV *edgeUVs;            /* the UVs for each Edge in the ELoop */
+} egELoop;
+
+
+typedef struct {
+  egObject *face;               /* Face object */
+  double   tol;                 /* max displacement magnitude */
+  int      start;               /* offset for start in larger triangulation */
+  int      nuvs;                /* length of uvs (x 2) */
+  int      ndeflect;            /* length of deflect (x 3) */
+  int      ntris;               /* number of triangles (single Face) */
+  int      *uvtris;             /* tri indices into uvs */
+  int      *uvtric;             /* neighbors (NULL until needed) */
+  double   *uvs;                /* UVs for the triangle vertices -- Face Tess */
+  double   *deflect;            /* displacement in xyz for frame indices */
+} egEPatch;
+
+
+typedef struct {
+  egEdVert *sedges;             /* source Edge structure */
+  int      npatch;              /* number of Faces */
+  egEPatch *patches;            /* the Face(s) and discrete data */
+  egEMap   eloops;              /* list of ELoops */
+  int      *senses;
+  int      *trmap;              /* triangle remapping -- can be null */
+  void     *uvmap;              /* UVmap structure */
+  double   range[4];
+  int      last;                /* last triangle -- single Face */
+} egEFace;
+
+
+typedef struct {
+  egEMap efaces;                /* list of EFaces */
+} egEShell;
+
+
+typedef struct {
+  egObject *ref;                /* source of the EBody (Body Tess or Body) */
+  egEMap   eedges;
+  egEMap   eloops;
+  egEMap   efaces;
+  egEMap   eshells;
+  int      *senses;
+  double   angle;               /* Open Edge Node removal criteria */
+  int      done;                /* is EBody complete? */
+  int      nedge;               /* the number of source Edges */
+  egEdVert *edges;              /* the source Edge discretizations */
+} egEBody;
 
 #endif

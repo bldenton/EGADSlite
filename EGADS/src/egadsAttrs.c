@@ -3,7 +3,7 @@
  *
  *             Attribute Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -855,20 +855,22 @@ EG_attributeAddSeq(egObject *obj, const char *name, int atype, int len,
   attrs = (egAttrs *) obj->attrs;
   
   /* what is the sequence status? */
-  for (i = 0; i < attrs->nseqs; i++)
-    if (strcmp(attrs->seqs[i].root,name) == 0) {
-      find = i;
-      break;
-    }
-  
-  if (find == -1) {
-    /* no sequence */
-    for (i = 0; i < attrs->nattrs; i++)
-      if (strcmp(attrs->attrs[i].name,name) == 0) {
+  if (attrs != NULL)
+    for (i = 0; i < attrs->nseqs; i++)
+      if (strcmp(attrs->seqs[i].root,name) == 0) {
         find = i;
         break;
       }
-    if (find == -1)
+  
+  if ((find == -1) || (attrs == NULL)) {
+    /* no sequence */
+    if (attrs != NULL)
+      for (i = 0; i < attrs->nattrs; i++)
+        if (strcmp(attrs->attrs[i].name,name) == 0) {
+          find = i;
+          break;
+        }
+    if ((find == -1) || (attrs == NULL))
       return EG_attributeMerge(1, obj, name, atype, len, ints, reals, str);
   
     /* do we have the same value? */
@@ -1126,7 +1128,7 @@ EG_attributeRet(const egObject *obj, const char *name, int *atype,
 
   if (name == NULL) {
     if (outLevel > 0) 
-      printf(" EGADS Error: NULL Name (EG_attributeAdd)!\n");
+      printf(" EGADS Error: NULL Name (EG_attributeRet)!\n");
     return EGADS_NONAME;
   }
   attrs = (egAttrs *) obj->attrs;
@@ -1427,4 +1429,250 @@ EG_attributeDup(const egObject *src, egObject *dst)
   if (EG_sameThread(src)) return EGADS_CNTXTHRD;
   if (EG_sameThread(dst)) return EGADS_CNTXTHRD;
   return EG_attributeXDup(src, NULL, dst);
+}
+
+
+int
+EG_attributeCommon(const egObject *src, egObject *dst)
+{
+  int          i, j, hit, stat, outLevel, snum, dnum, stype, slen, dtype, dlen;
+  double       reals[3];
+  const char   *name, *dstr, *sstr;
+  const int    *dints,  *sints;
+  const double *dreals, *sreals;
+  
+  if (src == NULL)               return EGADS_NULLOBJ;
+  if (src->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (src->oclass == EMPTY)      return EGADS_EMPTY;
+  if (src->oclass == NIL)        return EGADS_EMPTY;
+  if (src->oclass == REFERENCE)  return EGADS_REFERCE;
+  if (EG_sameThread(src))        return EGADS_CNTXTHRD;
+  if (EG_sameThread(dst))        return EGADS_CNTXTHRD;
+  outLevel = EG_outLevel(src);
+  
+  if (dst == NULL) {
+    if (outLevel > 0)
+      printf(" EGADS Error: NULL dst (EG_attributeCommon)!\n");
+    return EGADS_NULLOBJ;
+  }
+  if (dst->magicnumber != MAGIC) {
+    if (outLevel > 0)
+      printf(" EGADS Error: dst not an EGO (EG_attributeCommon)!\n");
+    return EGADS_NOTOBJ;
+  }
+  stat = EG_attributeNum(src, &snum);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: EG_attributeNum src = %d (EG_attributeCommon)!\n",
+             stat);
+    return stat;
+  }
+  stat = EG_attributeNum(dst, &dnum);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: EG_attributeNum dst = %d (EG_attributeCommon)!\n",
+             stat);
+    return stat;
+  }
+  if ((dnum == 0) && (snum == 0)) return EGADS_SUCCESS;
+  
+  /* handle EGADS attributes first */
+  hit  = 0;
+  stat = EG_attributeRet(dst, ".tParams", &dtype, &dlen, &dints, &dreals, &dstr);
+  if (stat == EGADS_SUCCESS) {
+    if ((dtype != ATTRREAL) || (dlen != 3)) {
+      EG_attributeDel(dst, ".tParams");
+      hit = 1;
+    } else {
+      stat = EG_attributeRet(src, ".tParams", &stype, &slen,
+                             &sints, &sreals, &sstr);
+      if (stat == EGADS_SUCCESS) {
+        if ((stype == ATTRREAL) && (slen == 3)) {
+          if ((sreals[0] != dreals[0]) || (sreals[1] != dreals[1]) ||
+              (sreals[2] != dreals[2])) {
+            reals[0] = sreals[0];
+            if (dreals[0] < reals[0]) reals[0] = dreals[0];
+            reals[1] = sreals[1];
+            if (dreals[1] < reals[1]) reals[1] = dreals[1];
+            reals[2] = sreals[2];
+            if (dreals[2] < reals[2]) reals[2] = dreals[2];
+            stat = EG_attributeAdd(dst, ".tParams", dtype, dlen, NULL, reals,
+                                   NULL);
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf(" EGADS Error: EG_attributeAdd tPs = %d (EG_attributeCommon)!\n",
+                       stat);
+              return stat;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    hit = 1;
+  }
+  if (hit == 1) {
+    stat = EG_attributeRet(src, ".tParams", &stype, &slen,
+                           &sints, &sreals, &sstr);
+    if (stat == EGADS_SUCCESS)
+      if ((stype == ATTRREAL) && (slen == 3)) {
+        stat = EG_attributeAdd(dst, ".tParams", stype, slen, NULL, sreals,
+                               NULL);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: EG_attributeAdd TPs = %d (EG_attributeCommon)!\n",
+                   stat);
+          return stat;
+        }
+      }
+  }
+  
+  hit  = 0;
+  stat = EG_attributeRet(dst, ".tParam", &dtype, &dlen, &dints, &dreals, &dstr);
+  if (stat == EGADS_SUCCESS) {
+    if ((dtype != ATTRREAL) || (dlen != 3)) {
+      EG_attributeDel(dst, ".tParam");
+      hit = 1;
+    } else {
+      stat = EG_attributeRet(src, ".tParam", &stype, &slen,
+                             &sints, &sreals, &sstr);
+      if (stat == EGADS_SUCCESS) {
+        if ((stype == ATTRREAL) && (slen == 3)) {
+          if ((sreals[0] != dreals[0]) || (sreals[1] != dreals[1]) ||
+              (sreals[2] != dreals[2])) {
+            reals[0] = sreals[0];
+            if (dreals[0] < reals[0]) reals[0] = dreals[0];
+            reals[1] = sreals[1];
+            if (dreals[1] < reals[1]) reals[1] = dreals[1];
+            reals[2] = sreals[2];
+            if (dreals[2] < reals[2]) reals[2] = dreals[2];
+            stat = EG_attributeAdd(dst, ".tParam", dtype, dlen, NULL, reals,
+                                   NULL);
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf(" EGADS Error: EG_attributeAdd tP = %d (EG_attributeCommon)!\n",
+                       stat);
+              return stat;
+            }
+          }
+        }
+      }
+    }
+  } else {
+    hit = 1;
+  }
+  if (hit == 1) {
+    stat = EG_attributeRet(src, ".tParam", &stype, &slen,
+                           &sints, &sreals, &sstr);
+    if (stat == EGADS_SUCCESS)
+      if ((stype == ATTRREAL) && (slen == 3)) {
+        stat = EG_attributeAdd(dst, ".tParam", stype, slen, NULL, sreals,
+                               NULL);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: EG_attributeAdd TP = %d (EG_attributeCommon)!\n",
+                   stat);
+          return stat;
+        }
+      }
+  }
+  
+  stat = EG_attributeRet(dst, ".nPos", &dtype, &dlen, &dints, &dreals, &dstr);
+  if (stat == EGADS_SUCCESS) {
+    if ((dtype != ATTRINT) || (dlen != 1)) {
+      EG_attributeDel(dst, ".nPos");
+    } else {
+      stat = EG_attributeRet(src, ".nPos", &stype, &slen,
+                             &sints, &sreals, &sstr);
+      if (stat == EGADS_SUCCESS) {
+        if ((stype == ATTRINT) && (slen == 1)) {
+          hit  = dints[0] + sints[0] + 1;
+          stat = EG_attributeAdd(dst, ".nPos", dtype, dlen, &hit, reals, NULL);
+          if (stat != EGADS_SUCCESS) {
+            if (outLevel > 0)
+              printf(" EGADS Error: EG_attributeAdd nP = %d (EG_attributeCommon)!\n",
+                     stat);
+            return stat;
+          }
+        } else {
+          EG_attributeDel(dst, ".nPos");
+        }
+      } else {
+        EG_attributeDel(dst, ".nPos");
+      }
+    }
+  }
+
+  /* remove all other EGADS attributes */
+  do {
+    hit  = 0;
+    stat = EG_attributeNum(dst, &dnum);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: EG_attributeNum Dst = %d (EG_attributeCommon)!\n",
+               stat);
+      return stat;
+    }
+    for (i = 1; i <= dnum; i++) {
+      stat = EG_attributeGet(dst, i, &name, &dtype, &dlen,
+                             &dints, &dreals, &dstr);
+      if (stat != EGADS_SUCCESS)        continue;
+      if (name[0] != '.')               continue;
+      if (strcmp(name,".tParams") == 0) continue;
+      if (strcmp(name,".tParam")  == 0) continue;
+      if (strcmp(name,".nPos")    == 0) continue;
+      stat = EG_attributeDel(dst, name);
+      if (stat != EGADS_SUCCESS) continue;
+      hit = 1;
+      break;
+    }
+  } while (hit == 1);
+  
+  /* find common attributes -- delete others */
+  do {
+    hit  = 0;
+    stat = EG_attributeNum(dst, &dnum);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: EG_attributeNum DSt = %d (EG_attributeCommon)!\n",
+               stat);
+      return stat;
+    }
+    for (i = 1; i <= dnum; i++) {
+      stat = EG_attributeGet(dst, i, &name, &dtype, &dlen,
+                             &dints, &dreals, &dstr);
+      if (stat != EGADS_SUCCESS)      continue;
+      if (name[0] == '.')             continue;
+      stat = EG_attributeRet(src, name, &stype, &slen, &sints, &sreals, &sstr);
+      if (stat  != EGADS_SUCCESS)     goto bail;
+      if (stype != dtype)             goto bail;
+      if (stype == ATTRINT) {
+        if (slen != dlen)             goto bail;
+        if ((sints == NULL) ||
+            (dints == NULL))          goto bail;
+        for (j = 0; j < slen; j++)
+          if (dints[j] != sints[j])   goto bail;
+      } else if ((stype == ATTRREAL) || (stype == ATTRCSYS)) {
+        if (slen != dlen)             goto bail;
+        if ((sreals == NULL) ||
+            (dreals == NULL))         goto bail;
+        for (j = 0; j < slen; j++)
+          if (dreals[j] != sreals[j]) goto bail;
+      } else if (stype == ATTRPTR) {
+        if (dstr != sstr)             goto bail;
+      } else {
+        if ((dstr == NULL) ||
+            (sstr == NULL))           goto bail;
+        if (strcmp(dstr,sstr) != 0)   goto bail;
+      }
+      continue;
+    bail:
+      stat = EG_attributeDel(dst, name);
+      if (stat != EGADS_SUCCESS) continue;
+      hit = 1;
+      break;
+    }
+  } while (hit == 1);
+  
+  return EGADS_SUCCESS;
 }

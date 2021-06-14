@@ -5,7 +5,7 @@
  * This module creates and manages grid fits                                  *
  * Written by John Dannenhoffer @ Syracuse University                         *
  *                                                                            *
- * Copyright 2011-2020, Massachusetts Institute of Technology                 *
+ * Copyright 2011-2021, Massachusetts Institute of Technology                 *
  * Licensed under The GNU Lesser General Public License, version 2.1          *
  * See http://www.opensource.org/licenses/lgpl-2.1.php                        *
  ******************************************************************************
@@ -3378,7 +3378,7 @@ splineWithGaps2d(int      nvrt,              /* (in)   number of Vertices to fit
     for (i = 0; i < nu; i++) {
         DPRINT1x(" %5d     ", i);
     }
-    DPRINT0("");
+    DPRINT0(" ");
 
     for (j = 0; j < nv; j++) {
         DPRINT1x("j=%3d", j);
@@ -3386,7 +3386,7 @@ splineWithGaps2d(int      nvrt,              /* (in)   number of Vertices to fit
             ij = (i) + nu * (j);
             DPRINT1x(" %10.5f", xx[ij]);
         }
-        DPRINT0("");
+        DPRINT0(" ");
     }
 #endif
 
@@ -3672,6 +3672,19 @@ prm_BestGrid(int      nvrt,                  /* (in)   number of Vertices */
     char        tag[2];
 
     ROUTINE(prm_BestGrid);
+  
+    /*
+     * initialize the pointers in the Trees
+     */
+    tree0.cell = NULL;
+    tree0.knot = NULL;
+
+    tree1.cell = NULL;
+    tree1.knot = NULL;
+
+    tree2.cell = NULL;
+    tree2.knot = NULL;
+
     DPRINT7("%s(nvrt=%d, nvar=%d, tol=%f, periodic=%d, nu=%d, nv=%d) {",
             routine, nvrt, nvar, tol, periodic, *nu, *nv);
     for (ivrt = 0; ivrt < nvrt; ivrt++) {
@@ -3686,7 +3699,7 @@ prm_BestGrid(int      nvrt,                  /* (in)   number of Vertices */
         for (ivar = 0; ivar < nvar; ivar++) {
             DPRINT1x("%10.5f ", var[ivar+nvar*ivrt]);
         }
-        DPRINT0("");
+        DPRINT0(" ");
     }
 
     /* ----------------------------------------------------------------------- */
@@ -3747,18 +3760,6 @@ prm_BestGrid(int      nvrt,                  /* (in)   number of Vertices */
         }
         nuvmax = numax * nvmax;
     }
-
-    /*
-     * initialize the pointers in the Trees
-     */
-    tree0.cell = NULL;
-    tree0.knot = NULL;
-
-    tree1.cell = NULL;
-    tree1.knot = NULL;
-
-    tree2.cell = NULL;
-    tree2.knot = NULL;
 
     /*
      * the initial residual is just the original data
@@ -4131,7 +4132,7 @@ prm_EvalGrid(gridTree tree,                  /* (in)   Grid Tree */
 //    for (ivar = 0; ivar < nvar; ivar++) {
 //        DPRINT1x("%12.6f ", var[ivar]);
 //    }
-//    DPRINT0("");
+//    DPRINT0(" ");
 
 //    DPRINT2("%s --> status=%d}", routine, status);
     return status;

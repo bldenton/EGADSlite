@@ -11,12 +11,14 @@ ODIR  = $(ESP_BLOC)\obj
 ODIR  = .
 !ENDIF
 
-OBJSP = egadsGeom.obj  egadsHLevel.obj egadsTopo.obj     egadsCopy.obj \
-	egadsIO.obj    egadsSplineFit.obj egadsSpline.obj egadsTessSens.obj
+OBJSP = egadsGeom.obj  egadsHLevel.obj    egadsTopo.obj  egadsCopy.obj \
+	egadsIO.obj    egadsSplineFit.obj egadsSpline.obj egadsTessSens.obj \
+	egadsSkinning.obj BRepLib_FuseEdges.obj
 OBJS  = egadsBase.obj  egadsMemory.obj egadsAttrs.obj    egadsTessInp.obj \
 	egadsTess.obj  egadsTris.obj   egadsQuads.obj    egadsRobust.obj \
-	egadsSBO.obj   egadsFit.obj    egadsSkinning.obj prmCfit.obj \
-	prmGrid.obj    prmUV.obj       egadsExport.obj   egadsSolids.obj
+	egadsSBO.obj   egadsFit.obj    prmCfit.obj \
+	prmGrid.obj    prmUV.obj       egadsExport.obj   egadsSolids.obj \
+	egadsEffect.obj
 FOBJS = fgadsBase.obj  fgadsMemory.obj fgadsAttrs.obj    fgadsTess.obj \
         fgadsGeom.obj  fgadsHLevel.obj fgadsTopo.obj
 SRINC = $(SIDIR)\SurrealD.h $(SIDIR)\SurrealD_Lazy.h $(SIDIR)\SurrealD_Trad.h \
@@ -24,21 +26,21 @@ SRINC = $(SIDIR)\SurrealD.h $(SIDIR)\SurrealD_Lazy.h $(SIDIR)\SurrealD_Trad.h \
         $(SIDIR)\always_inline.h
 
 !IFDEF ESP_BLOC
-default:	start uts $(LDIR)\egads.dll $(LDIR)\egadstatic.lib \
-		$(LDIR)\fgads.lib $(LDIR)\emp.lib $(IDIR)\$(ESP_ARCH).$(MSVC) \
+default:	start $(IDIR)\$(ESP_ARCH).$(MSVC) uts $(LDIR)\egads.dll \
+		$(LDIR)\egadstatic.lib $(LDIR)\fgads.lib $(LDIR)\emp.lib \
 		$(IDIR)\egads.h $(IDIR)\egads_dot.h $(IDIR)\egads.inc \
 		$(IDIR)\egadsErrors.h $(IDIR)\egadsTypes.h $(IDIR)\emp.h \
 		$(IDIR)\prm.h $(IDIR)\wsserver.h $(IDIR)\wsserver.inc \
 		$(IDIR)\wsss.h $(IDIR)\egadsTris.h $(IDIR)\egadsSplineFit.h \
 		$(IDIR)\egadsSplineVels.h $(IDIR)\egadsf90.inc $(SRINC) end
 !ELSE
-default:	uts $(LDIR)\egads.dll $(LDIR)\egadstatic.lib \
-		$(LDIR)\fgads.lib $(LDIR)\emp.lib $(IDIR)\$(ESP_ARCH).$(MSVC) \
+default:	$(IDIR)\$(ESP_ARCH).$(MSVC) uts $(LDIR)\egads.dll \
+		$(LDIR)\egadstatic.lib $(LDIR)\fgads.lib $(LDIR)\emp.lib \
 		$(IDIR)\egads.h $(IDIR)\egads_dot.h $(IDIR)\egads.inc \
 		$(IDIR)\egadsErrors.h $(IDIR)\egadsTypes.h $(IDIR)\emp.h \
 		$(IDIR)\prm.h $(IDIR)\wsserver.h $(IDIR)\wsserver.inc \
 		$(IDIR)\wsss.h $(IDIR)\egadsTris.h $(IDIR)\egadsSplineFit.h \
-		$(IDIR)\egadsSplineVels.h $(IDIR)\egadsf90.inc $(SRINC)
+		$(IDIR)\egadsSplineVels.h $(IDIR)\egadsf90.inc $(SRINC) endd
 !ENDIF
 
 start:
@@ -60,17 +62,17 @@ start:
 	xcopy $(SDIR)\..\util\Surreal*_btest.cpp   /Q /Y
 
 $(LDIR)\egadstatic.lib:	$(OBJSP) $(OBJS) emp.obj evaluate.obj rational.obj \
-			regQuads.obj
+			regQuads.obj $(LDIR)\uvmap.lib
 	-del $(LDIR)\egadstatic.lib
 	lib /out:$(LDIR)\egadstatic.lib $(OBJS) $(OBJSP) emp.obj evaluate.obj \
-		rational.obj regQuads.obj
+		rational.obj regQuads.obj $(LDIR)\uvmap.lib
 
 $(LDIR)\egads.dll:	$(OBJSP) $(OBJS) emp.obj evaluate.obj rational.obj \
-			regQuads.obj egads.res
+			regQuads.obj $(LDIR)\uvmap.lib egads.res 
 	-del $(LDIR)\egads.dll $(LDIR)\egads.lib $(LDIR)\egads.exp
 	link /out:$(LDIR)\egads.dll /dll /def:egads.def $(OBJSP) $(OBJS) \
 		emp.obj evaluate.obj rational.obj regQuads.obj \
-		egads.res $(LNKPTH) $(LIBS)
+		egads.res $(LDIR)\uvmap.lib $(LNKPTH) $(LIBS)
 	$(MCOMP) /manifest $(LDIR)\egads.dll.manifest \
 		/outputresource:$(LDIR)\egads.dll;2
 
@@ -81,6 +83,15 @@ $(LDIR)\fgads.lib:	$(FOBJS)
 $(LDIR)\emp.lib:	emp.obj
 	-del $(LDIR)\emp.lib
 	lib /out:$(LDIR)\emp.lib emp.obj
+
+$(LDIR)\uvmap.lib:
+	cd $(SDIR)\..\util
+	nmake -f NMakefile
+!IFDEF ESP_BLOC
+	cd $(ODIR)
+!ELSE
+	cd $(SDIR)
+!ENDIF
 
 egads.res:	egads.rc
 	rc egads
@@ -94,7 +105,7 @@ $(FOBJS):	$(INCD)\egadsErrors.h egadsInternals.h egadsStack.h \
 	cl /c $(COPTS) $(DEFINE) $(XDEF) /I. /I$(INCD) $*.c
 
 $(OBJSP):	$(INCD)\egadsErrors.h egadsOCC.h egadsInternals.h egadsStack.h \
-		$(INCD)\egadsTypes.h egadsClasses.h egadsSplineFit.h \
+		$(INCD)\egadsTypes.h $(INCD)\egads_dot.h egadsClasses.h egadsSplineFit.h \
 		$(OBJSP:.obj=.cpp)
 	cl /c $(CPPOPT) $(DEFINE) $(XDEF) $(INCS) /I. /I$(INCD) $*.cpp
 
@@ -163,6 +174,13 @@ $(ODIR)\SurrealS4.exe:	..\util\SurrealS4_btest.cpp
 
 uts:    $(ODIR)\SurrealD1.exe $(ODIR)\SurrealD4.exe $(ODIR)\SurrealS1.exe \
 	$(ODIR)\SurrealS4.exe
+	cd $(SDIR)\..\util
+	nmake -f NMakefile
+!IFDEF ESP_BLOC
+	cd $(ODIR)
+!ELSE
+	cd $(SDIR)
+!ENDIF
 
 $(IDIR)\$(ESP_ARCH).$(MSVC):	$(INCD)\$(ESP_ARCH).$(MSVC)
 	-del $(IDIR)\$(ESP_ARCH).$(MSVC)
@@ -235,16 +253,33 @@ $(SRINC):	Surreal\SurrealD.h Surreal\SurrealS.h Surreal\always_inline.h \
 end:
 	-del *.cpp *.c *.h *.rc *def *.manifest
 	-del Surreal\* /Q
-	-rmdir Surreal /Q
+	-rmdir Surreal
 	cd $(SDIR)
+	@echo  *** EGADS Build Complete! ***
+
+endd:
+	@echo  *** EGADS Build Complete! ***
 
 clean:
+	cd $(SDIR)\..\util
+	nmake -f NMakefile clean
+!IFDEF ESP_BLOC
 	cd $(ODIR)
+!ELSE
+	cd $(SDIR)
+!ENDIF
 	-del $(FOBJS) $(OBJSP) $(OBJS) emp.obj evaluate.obj rational.obj \
 		SurrealD1.exe SurrealD4.exe SurrealS1.exe SurrealS4.exe
 	cd $(SDIR)
 
 cleanall:	clean
+	cd $(SDIR)\..\util
+	nmake -f NMakefile cleanall
+!IFDEF ESP_BLOC
+	cd $(ODIR)
+!ELSE
+	cd $(SDIR)
+!ENDIF
 	-del $(LDIR)\egads.dll $(LDIR)\egads.lib $(LDIR)\egads.exp
 	-del $(LDIR)\egads.res $(LDIR)\egads.dll.manifest $(IDIR)\egads.h
 	-del $(LDIR)\egadstatic.lib $(LDIR)\fgads.lib $(LDIR)\emp.lib
@@ -253,4 +288,4 @@ cleanall:	clean
 	-del $(IDIR)\wsserver.h $(IDIR)\wsserver.inc $(IDIR)\wsss.h
 	-del $(IDIR)\egadsTris.h $(IDIR)\egadsSplineFit.h 
 	-del $(IDIR)\egadsSplineVels.h $(IDIR)\egadsf90.inc $(SRINC)
-	-rmdir $(SIDIR) /Q
+	-rmdir $(SIDIR)

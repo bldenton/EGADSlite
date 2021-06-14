@@ -3,7 +3,7 @@
  *
  *             Solid Primitives Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -57,11 +57,11 @@ EG_expectClassType(int oclass, int mtype, int eclass, int etype)
   static 
   const char *topoType[5] = {"ONENODE", "TWONODE", "OPEN", "CLOSED", "DEGENERATE"};
   static 
-  const char *curvType[9] = {"LINE", "CIRCLE", "ELLIPSE", "PARABOLA",
-                             "HYPERBOLA", "TRIMMED", "BEZIER", "BSPLINE",
-                             "OFFSET"};
+  const char *curvType[10] = {"", "LINE", "CIRCLE", "ELLIPSE", "PARABOLA",
+                              "HYPERBOLA", "TRIMMED", "BEZIER", "BSPLINE",
+                              "OFFSET"};
   static 
-  const char *surfType[11] = {"PLANE", "SPHERICAL", "CYLINDER", "REVOLUTION",
+  const char *surfType[12] = {"", "PLANE", "SPHERICAL", "CYLINDER", "REVOLUTION",
                               "TOROIDAL", "TRIMMED" , "BEZIER", "BSPLINE",
                               "OFFSET", "CONICAL", "EXTRUSION"};
   const char **objType, **eType;
@@ -94,8 +94,8 @@ EG_expectClassType(int oclass, int mtype, int eclass, int etype)
       return EGADS_GEOMERR;
     }
     printf(" EGADS Error: Object %s %s is not expected %s %s (%s)!\n",
-           classType[oclass], objType[mtype-1], classType[eclass],
-           eType[etype-1], __func__);
+           classType[oclass], objType[mtype], classType[eclass],
+           eType[etype], __func__);
     return EGADS_GEOMERR;
   }
 
@@ -430,7 +430,7 @@ EG_makeSolidBox_dot(const double *data, const double *data_dot, egObject *body)
   int      stat = EGADS_SUCCESS;
   int      i, j, oclass, mtype, outLevel, *senses;
   int      nshell, nface, nloop, nedge, nnode;
-  double   xyz0[3], xyz0_dot[3], xyz1[3], xyz1_dot[3], rdata[6], rdata_dot[6];
+  double   xyz0[3], xyz0_dot[3], xyz1[3], xyz1_dot[3], rdata[6], rdata_dot[6], tdata[2], tdata_dot[2];
   ego      nodes[8], edges[12], *faces, *shells;
   ego      ref, line, plane, *enodes, *ledges, *loops;
 
@@ -548,6 +548,16 @@ EG_makeSolidBox_dot(const double *data, const double *data_dot, egObject *body)
 
     /* set the line sensitivity */
     stat = EG_setGeometry_dot(line, CURVE, LINE, NULL, rdata, rdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* set the Edge t-range sensitivity */
+    tdata[0] = 0;
+    tdata[1] = sqrt(rdata[3]*rdata[3] + rdata[4]*rdata[4] + rdata[5]*rdata[5]);
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = (rdata[3]*rdata_dot[3] + rdata[4]*rdata_dot[4] + rdata[5]*rdata_dot[5])/tdata[1];
+
+    stat = EG_setRange_dot(edges[i], EDGE, tdata, tdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
   }
 
@@ -943,7 +953,7 @@ EG_makeSolidSphere_dot(int stypx, const double *data, const double *data_dot,
 #endif
   int      i, oclass, mtype, outLevel, *senses;
   int      nshell, nface, nloop, nedge, nnode;
-  double   rdata[10], rdata_dot[10], *rvec=NULL;
+  double   rdata[10], rdata_dot[10], *rvec=NULL, tdata[2], tdata_dot[2];
   ego      *faces, *shells;
   ego      ref, circle, trimmed, sphere, *enodes, *ledges, *loops;
 
@@ -1057,8 +1067,34 @@ EG_makeSolidSphere_dot(int stypx, const double *data, const double *data_dot,
       stat = EG_getGeometry(trimmed, &oclass, &mtype, &sphere, NULL, NULL);
       if (stat != EGADS_SUCCESS) goto cleanup;
 
+      /* set the Edge t-range sensitivity for the DEGENERATE edges */
+      tdata_dot[0] = 0;
+      tdata_dot[1] = 0;
+
+      tdata[0] = rdata[0];
+      tdata[1] = rdata[1];
+
+      stat = EG_setRange_dot(ledges[0], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      stat = EG_setRange_dot(ledges[2], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
     } else {
       sphere = trimmed;
+      
+      /* set the Edge t-range sensitivity for the DEGENERATE edges */
+      tdata_dot[0] = 0;
+      tdata_dot[1] = 0;
+
+      tdata[0] = 0;
+      tdata[1] = 2*PI;
+
+      stat = EG_setRange_dot(ledges[0], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      stat = EG_setRange_dot(ledges[2], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
     }
 
     /* create the Sphere data */
@@ -1198,6 +1234,25 @@ EG_makeSolidSphere_dot(int stypx, const double *data, const double *data_dot,
     if (stat != EGADS_SUCCESS) goto cleanup;
 
   }
+
+  /* set the Edge t-range sensitivity on the u = 0 and u = PI edges
+   * Note: edge[1] == edge[3] for stypx < 0
+   */
+  tdata_dot[0] = 0;
+  tdata_dot[1] = 0;
+
+  tdata[0] = -PI/2;
+  tdata[1] =  PI/2;
+
+  stat = EG_setRange_dot(ledges[1], EDGE, tdata, tdata_dot);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  tdata[0] = -PI/2;
+  tdata[1] =  PI/2;
+
+  stat = EG_setRange_dot(ledges[3], EDGE, tdata, tdata_dot);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
 
 cleanup:
   if (stat != EGADS_SUCCESS) {
@@ -1762,7 +1817,7 @@ EG_makeSolidCone_dot(int stypx, const double *data, const double *data_dot,
   int    nshell, nface, nloop, nedge, nnode;
   double dirx[3], dirx_dot[3], diry[3], diry_dot[3], dirz[3], dirz_dot[3];
   double rdata[14], rdata_dot[14], height, height_dot, height2;
-  double angle, angle_dot, vmax, vmax_dot, xyz[3], xyz_dot[3];
+  double angle, angle_dot, vmax, vmax_dot, xyz[3], xyz_dot[3], tdata[2], tdata_dot[2];
   double rcone[14], rcone_dot[14], *rvec=NULL, *rvec_dot=NULL;
   ego    *faces, *shells, edges[5], nodes[3];
   ego    ref, circle, lines[2], trimmed, cone, plane, *enodes, *ledges, *loops;
@@ -1939,6 +1994,21 @@ EG_makeSolidCone_dot(int stypx, const double *data, const double *data_dot,
         goto cleanup;
       }
 
+      /* set the Edge t-range sensitivity */
+      tdata[0] = rdata[0];
+      tdata[1] = rdata[1];
+
+      tdata_dot[0] = 0;
+      tdata_dot[1] = 0;
+
+      /* CIRCLE edge */
+      stat = EG_setRange_dot(ledges[0], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      /* DEGENERATE edge */
+      stat = EG_setRange_dot(ledges[2], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
       edges[ifaceEdgesCone[i][0]] = ledges[0];
       edges[ifaceEdgesCone[i][1]] = ledges[1];
       edges[ifaceEdgesCone[i][2]] = ledges[2];
@@ -2052,6 +2122,19 @@ EG_makeSolidCone_dot(int stypx, const double *data, const double *data_dot,
     stat = EG_setGeometry_dot(lines[1], CURVE, LINE, NULL, rdata, rdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
+
+    /* set the Edge t-range sensitivity on Lines */
+    tdata[0] = 0;
+    tdata[1] = vmax;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = vmax_dot;
+
+    stat = EG_setRange_dot(edges[1], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_setRange_dot(edges[3], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
   } else {
 
     if ( nface != 2 ) {
@@ -2159,6 +2242,32 @@ EG_makeSolidCone_dot(int stypx, const double *data, const double *data_dot,
     /* get the circle */
     stat = EG_getTopology(edges[0], &circle, &oclass, &mtype,
                           rdata, &nnode, &enodes, &senses);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+
+    /* set the Edge t-range sensitivity */
+    tdata[0] = 0;
+    tdata[1] = 2*PI;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = 0;
+
+    /* CIRCLE edge */
+    stat = EG_setRange_dot(edges[0], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* DEGENERATE edge */
+    stat = EG_setRange_dot(edges[2], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* LINE edge */
+    tdata[0] = 0;
+    tdata[1] = vmax;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = vmax_dot;
+
+    stat = EG_setRange_dot(edges[1], EDGE, tdata, tdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
   }
 
@@ -2896,7 +3005,7 @@ EG_makeSolidCylinder_dot(int stypx, const double *data, const double *data_dot,
   int    nshell, nface, nloop, nedge, nnode;
   double dirx[3], dirx_dot[3], diry[3], diry_dot[3], dirz[3], dirz_dot[3];
   double rdata[14], rdata_dot[14], height, height_dot, height2;
-  double vmax, vmax_dot, xyz0[3], xyz0_dot[3], xyz1[3], xyz1_dot[3];
+  double vmax, vmax_dot, xyz0[3], xyz0_dot[3], xyz1[3], xyz1_dot[3], tdata[2], tdata_dot[2];
   double rcyl[13], rcyl_dot[13], *rvec=NULL, *rvec_dot=NULL;
   ego    *faces, *shells, *enodes, *ledges, *loops, edges[6], nodes[4];
   ego    ref, circles[2], lines[2], trimmed, cylinder, planes[2];
@@ -3067,6 +3176,18 @@ EG_makeSolidCylinder_dot(int stypx, const double *data, const double *data_dot,
         goto cleanup;
       }
 
+      /* set the Edge t-range sensitivity for CIRCLE Edges */
+      tdata[0] = rdata[0];
+      tdata[1] = rdata[1];
+
+      tdata_dot[0] = 0;
+      tdata_dot[1] = 0;
+
+      stat = EG_setRange_dot(ledges[0], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+      stat = EG_setRange_dot(ledges[2], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
       edges[ifaceEdgesCyl[i][0]] = ledges[0];
       edges[ifaceEdgesCyl[i][1]] = ledges[1];
       edges[ifaceEdgesCyl[i][2]] = ledges[2];
@@ -3193,6 +3314,18 @@ EG_makeSolidCylinder_dot(int stypx, const double *data, const double *data_dot,
     stat = EG_setGeometry_dot(lines[1], CURVE, LINE, NULL, rdata, rdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
+    /* set the Edge t-range sensitivity for LINE Edges */
+    tdata[0] = 0;
+    tdata[1] = vmax;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = vmax_dot;
+
+    stat = EG_setRange_dot(edges[1], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_setRange_dot(edges[3], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
   } else {
 
     if (nface != 3) {
@@ -3317,6 +3450,29 @@ EG_makeSolidCylinder_dot(int stypx, const double *data, const double *data_dot,
     if (stat != EGADS_SUCCESS) goto cleanup;
 
     stat = EG_expectClassType(oclass, mtype, EDGE, ONENODE);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* set the Edge t-range sensitivity */
+    /* CIRCLE Edges */
+    tdata[0] = 0;
+    tdata[1] = 2*PI;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = 0;
+
+    stat = EG_setRange_dot(edges[0], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_setRange_dot(edges[2], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* LINE Edge */
+    tdata[0] = 0;
+    tdata[1] = vmax;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = vmax_dot;
+
+    stat = EG_setRange_dot(edges[1], EDGE, tdata, tdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
   }
 
@@ -3919,7 +4075,7 @@ EG_makeSolidTorus_dot(int stypx, const double *data, const double *data_dot,
   int    i, oclass, mtype, outLevel, *senses;
   int    nshell, nface, nloop, nedge, nnode;
   double dirx[3], dirx_dot[3], diry[3], diry_dot[3], r, r_dot, R, R_dot;
-  double rdata[14], rdata_dot[14], height, height_dot, height2;
+  double rdata[14], rdata_dot[14], height, height_dot, height2, tdata[2], tdata_dot[2];
   double rtorus[14], rtorus_dot[14], *rvec=NULL, *rvec_dot=NULL;
   ego    *faces, *shells, edges[8], nodes[4];
   ego    ref, circles[4], trimmed, torus, *enodes, *ledges, *loops;
@@ -4103,6 +4259,21 @@ EG_makeSolidTorus_dot(int stypx, const double *data, const double *data_dot,
       /* extract the nodes */
       nodes[iedgeNodesTorus[i][0]] = enodes[0];
       nodes[iedgeNodesTorus[i][1]] = enodes[1];
+
+      /* set the Edge t-range sensitivity */
+      if (i % 2 == 0) {
+        tdata[0] = 0;
+        tdata[1] = PI;
+      } else {
+        tdata[0] = PI;
+        tdata[1] = 2*PI;
+      }
+
+      tdata_dot[0] = 0;
+      tdata_dot[1] = 0;
+
+      stat = EG_setRange_dot(edges[i], EDGE, tdata, tdata_dot);
+      if (stat != EGADS_SUCCESS) goto cleanup;
     }
 
     stat = EG_getGeometry_dot(torus, &rvec, &rvec_dot);
@@ -4322,6 +4493,18 @@ EG_makeSolidTorus_dot(int stypx, const double *data, const double *data_dot,
     if (stat != EGADS_SUCCESS) goto cleanup;
 
     stat = EG_expectClassType(oclass, mtype, EDGE, ONENODE);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* set the Edge t-range sensitivity */
+    tdata[0] = 0;
+    tdata[1] = 2*PI;
+
+    tdata_dot[0] = 0;
+    tdata_dot[1] = 0;
+
+    stat = EG_setRange_dot(edges[0], EDGE, tdata, tdata_dot);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_setRange_dot(edges[1], EDGE, tdata, tdata_dot);
     if (stat != EGADS_SUCCESS) goto cleanup;
   }
 

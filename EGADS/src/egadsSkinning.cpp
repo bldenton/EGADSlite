@@ -3,34 +3,37 @@
  *
  *             Skin a series of BSpline Curves
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
  */
 
 #include "egads.h"
+#include "egads_dot.h"
 
 #include <stdio.h>
 #include <math.h>
 
-extern int EG_sameThread( const ego object );
+extern "C" int EG_sameThread( const ego object );
+extern "C" int EG_outLevel( const ego object );
 
 #define EPS 1.E-08
 #define PI  3.1415926535897931159979635
 
 
 /* Computes Bsplines values for a given knot sequence */
-static double
-OneBasisFun (int p, int m, double U[], int i, double u)
+template<class T>
+static T
+OneBasisFun (int p, int m, T U[], int i, T u)
 {
-  int    j, k;
-  double saved, Uleft, Uright, temp, *N;
+  int j, k;
+  T   saved, Uleft, Uright, temp, *N;
 
   // Special cases
   if ( ((i == 0) && (u == U[0])) ||  ((i == m-p-1) && (u == U[m])) ) return 1.0;
   if ( (u < U[i]) || (u >= U[i+p+1]) ) return 0.0;
-  N = (double *) EG_alloc((p+1) *sizeof(double));
+  N = (T *) EG_alloc((p+1) *sizeof(T));
   if (N == NULL) return EGADS_MALLOC;
 
   for (j = 0; j <= p; ++j) {
@@ -65,17 +68,18 @@ OneBasisFun (int p, int m, double U[], int i, double u)
 }
 
 
+template<class T>
 static int
-matsol(double    A[],           /* (in)  matrix to be solved (stored rowwise) */
-                                /* (out) upper-triangular form of matrix */
-       double    b[],           /* (in)  right hand side */
-                                /* (out) right-hand side after swapping */
-       int       n,             /* (in)  size of matrix */
-       double    x[])           /* (out) solution of A*x=b */
+matsol(T    A[],           /* (in)  matrix to be solved (stored rowwise) */
+                           /* (out) upper-triangular form of matrix */
+       T    b[],           /* (in)  right hand side */
+                           /* (out) right-hand side after swapping */
+       int  n,             /* (in)  size of matrix */
+       T    x[])           /* (out) solution of A*x=b */
 {
 
-  int    ir, jc, kc, imax;
-  double amax, swap, fact;
+  int ir, jc, kc, imax;
+  T   amax, swap, fact;
   double EPS12=1.E-12;
 
   /* --------------------------------------------------------------- */
@@ -134,8 +138,9 @@ matsol(double    A[],           /* (in)  matrix to be solved (stored rowwise) */
 
 
 // This function is a duplicate. Copied from egasSplineFit.cpp
+template<class T>
 static int
-FindSpan(int n, int p, double u, double *U)
+FindSpan(int n, int p, const T& u, T *U)
 {
   int low, mid, high;
 
@@ -155,8 +160,9 @@ FindSpan(int n, int p, double u, double *U)
 
 
 /* Finds the knot multiplicity */
+template<class T>
 static int
-getMultiplicity(double *vector, int idx, int size)
+getMultiplicity(T *vector, int idx, int size)
 {
   int j, m;
 
@@ -173,11 +179,12 @@ getMultiplicity(double *vector, int idx, int size)
     - kOut should have at least dim = dim_kIn+dim_kOut
     - *dim_kOut saves the ACTUAL length of the merged vector
 */
+template<class T>
 static int
-mergeKnotVectors(int dim_kIn, double *kIn, int *dim_kOut, double *kOut)
+mergeKnotVectors(int dim_kIn, T *kIn, int *dim_kOut, T *kOut)
 {
   int i, j, m, idx, mu, mv, maxm, dimAux;
-  double *auxK = NULL;
+  T *auxK = NULL;
 
   if ( *dim_kOut == 0 ) {
     if ( dim_kIn == 0 )  return EGADS_EMPTY;
@@ -187,7 +194,7 @@ mergeKnotVectors(int dim_kIn, double *kIn, int *dim_kOut, double *kOut)
   }
 
   dimAux = *dim_kOut;
-  auxK   = (double *) EG_alloc(dimAux*sizeof(double));
+  auxK   = (T *) EG_alloc(dimAux*sizeof(T));
   if (auxK == NULL ) return EGADS_MALLOC;
   // Copy data from kOut because it will overwrite it
   for ( i = 0; i < dimAux ; ++ i) auxK[i] = kOut[i];
@@ -248,20 +255,23 @@ mergeKnotVectors(int dim_kIn, double *kIn, int *dim_kOut, double *kOut)
 	- *Udiff pointer should have minimum size = dimUnew
 	- Assumes knot sequences are ordered!
 */
+template<class T>
 static int
-findMissingKnots (int dimUold,   double *Uold, int dimUnew, double *Unew,
-                  int *dimUdiff, double *Udiff)
+findMissingKnots (int outLevel, int dimUold,   T *Uold, int dimUnew, T *Unew,
+                  int *dimUdiff, T *Udiff)
 {
   int i, j, k, m, mu_old, mu_new, mu_old0, mu_new0, idx;
 
   mu_old0 = getMultiplicity (Uold, 0, dimUold);
   mu_new0 = getMultiplicity (Unew, 0, dimUnew);
   if (fabs ( Unew[0] - Uold[0] ) > EPS  ) {
-    printf(" EG_skinning: First knot and last should be the same\n");
+    if (outLevel > 0)
+      printf(" EG_skinning: First knot and last should be the same\n");
     return EGADS_RANGERR;
   }
   if (mu_old0 != mu_new0) {
-    printf(" EG_skinning: (Assuming clamped knots) curves degree must be equal\n");
+    if (outLevel > 0)
+      printf(" EG_skinning: (Assuming clamped knots) curves degree must be equal\n");
     return EGADS_GEOMERR;
   }
   i = mu_old0 ; j = mu_new0 ; idx = 0;
@@ -304,19 +314,20 @@ findMissingKnots (int dimUold,   double *Uold, int dimUnew, double *Unew,
           and at least dim = m+r +2
    ACTUAL lengths are stored in pointers *dimNewKnot and *dimNewCps
 */
+template<class T>
 static int
-RefineKnotVectCurve (int n, int p, double *splineData, int r, double *insertKnots,
-                     int *dimNewCps, double *newPts,int *dimNewKnot,
-                     double *newKnots)
+RefineKnotVectCurve (int n, int p, T *splineData, int r, T *insertKnots,
+                     int *dimNewCps, T *newPts,int *dimNewKnot,
+                     T *newKnots)
 {
-  int    d, i, j, k, l, m, a, b, nP, offset, ind;
-  double *splineKnots = NULL, alfa;
+  int d, i, j, k, l, m, a, b, nP, offset, ind;
+  T   *splineKnots = NULL, alfa;
 
   m  = n + p + 1;  // Tot knots in Spline data( acually number is m+1 )
   nP = n + r + 1; // num of new ctrl points ( acually number is nP+1 )
   if ( n < 0  || p < 0 || r < 0 ) return EGADS_INDEXERR;
   if ( (splineData == NULL ) || (insertKnots == NULL ) ) return EGADS_NULLOBJ;
-  splineKnots = (double *) EG_alloc( (m+1) *sizeof(double));
+  splineKnots = (T *) EG_alloc( (m+1) *sizeof(T));
   if (splineKnots == NULL ) return EGADS_MALLOC;
 
   for ( i = 0; i <= m; ++i)  splineKnots[i] = splineData[i];
@@ -370,21 +381,24 @@ RefineKnotVectCurve (int n, int p, double *splineData, int r, double *insertKnot
 	- creates a common (unique) knot vector.
 	- creates new control points for each curve.
 */
+template<class T>
 static int
-makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
-                     double **knotVector, int *dimKnotVector, int *degree)
+makeCurvesCompatible(int nC, ego *splineCurves, int *nP, T **controlPoints,
+                     T **knotVector, int *dimKnotVector, int *degree)
 {
-  int    c = 0, k = 0, p = 0, d = 0, oclass, ctype, stat, offset, dimMergedKnots;
-  int    dimKnotIsert = 0, dimKnotCheck = 0, nPts = 0,  deg = 0, knotSum = 0;
-  int    **splineInfo = NULL;
-  double **splineData = NULL, *cp = NULL, *mergedKnots = NULL;
-  double *knotInsert = NULL,  *knotCheck = NULL, *newCtrlPts = NULL;
-  ego    geom;
+  int c = 0, k = 0, p = 0, d = 0, oclass, ctype, stat, offset, dimMergedKnots;
+  int dimKnotIsert = 0, dimKnotCheck = 0, nPts = 0,  deg = 0, knotSum = 0;
+  int **splineInfo = NULL;
+  T   **splineData = NULL, *cp = NULL, *mergedKnots = NULL;
+  T   *knotInsert = NULL,  *knotCheck = NULL, *newCtrlPts = NULL;
+  ego geom;
+
+  int outLevel = EG_outLevel(splineCurves[0]);
 
   *controlPoints = NULL;
   *knotVector    = NULL;
   if ( nC <= 0 ) return EGADS_INDEXERR;
-  splineData = (double **) EG_alloc(nC*sizeof(double *));
+  splineData = (T **) EG_alloc(nC*sizeof(T *));
   if ( splineData == NULL ) return  EGADS_MALLOC;
   splineInfo = (int    **) EG_alloc(nC*sizeof(int *));
   if ( splineInfo == NULL )  {
@@ -396,21 +410,25 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
     stat = EG_getGeometry(splineCurves[c], &oclass, &ctype, &geom,
                           &splineInfo[c], &splineData[c]);
     if ( stat != EGADS_SUCCESS ) {
-      printf(" EG_getGeometry from curve %d  = %d\n", c, stat);
+      if (outLevel > 0)
+        printf(" EG_getGeometry from curve %d  = %d\n", c, stat);
       goto bail;
     }
     if ( oclass != CURVE ) {
-      printf(" EG_skinning: Curve %d not a Curve!\n", c);
+      if (outLevel > 0)
+        printf(" EG_skinning: Curve %d not a Curve!\n", c);
       stat = EGADS_NOTGEOM;
       goto bail;
     }
     if ( ctype != BSPLINE ) {
-      printf(" EG_skinning: Curve %d not a BSpline!\n", c);
+      if (outLevel > 0)
+        printf(" EG_skinning: Curve %d not a BSpline!\n", c);
       stat = EGADS_NOTGEOM;
       goto bail;
     }
     if ( ( splineInfo[c][0] & 2 ) != 0 ) {
-      printf(" EG_skinning: Curve %d is Rational!\n", c);
+      if (outLevel > 0)
+        printf(" EG_skinning: Curve %d is Rational!\n", c);
       stat = EGADS_NOTGEOM;
       goto bail;
     }
@@ -419,7 +437,8 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
   deg = splineInfo[0][1];
   for (c = 1; c < nC; ++c) {
     if (deg != splineInfo[c][1])    {
-      printf(" EG_skinning: Curves need to be of same degree!\n");
+      if (outLevel > 0)
+        printf(" EG_skinning: Curves need to be of same degree!\n");
       stat = EGADS_NOTGEOM;
       goto bail;
     }
@@ -449,24 +468,25 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
     knotSum = 0;
     for ( c = 0 ; c < nC ; ++c )
       knotSum += splineInfo[c][3]; // maximum size= all knots are different
-    mergedKnots = (double *) EG_alloc(knotSum *sizeof(double));
+    mergedKnots = (T *) EG_alloc(knotSum *sizeof(T));
     if ( mergedKnots == NULL ) goto bail;
     dimMergedKnots = 0;
     for ( c = 0 ; c < nC ; ++c ) {
       stat = mergeKnotVectors( splineInfo[c][3], splineData[c],
                                &dimMergedKnots, mergedKnots);
       if ( stat != EGADS_SUCCESS)  {
-        printf(" EG_skinning: mergeKnotVectors for curve %d   = %d\n", c, stat);
+        if (outLevel > 0)
+          printf(" EG_skinning: mergeKnotVectors for curve %d   = %d\n", c, stat);
         goto bail;
       }
     }
     knotSum = 0;
     for ( c = 0 ; c < nC ; ++c )
       knotSum += splineInfo[c][3]; // maximum size= all knots are different
-    cp         = (double*) EG_alloc(knotSum*3*nC  *sizeof(double));  // max size of control points
-    knotInsert = (double*) EG_alloc(dimMergedKnots*sizeof(double));
-    knotCheck  = (double*) EG_alloc(knotSum 	  *sizeof(double));
-    newCtrlPts = (double*) EG_alloc(knotSum*3     *sizeof(double));
+    cp         = (T*) EG_alloc(knotSum*3*nC  *sizeof(T));  // max size of control points
+    knotInsert = (T*) EG_alloc(dimMergedKnots*sizeof(T));
+    knotCheck  = (T*) EG_alloc(knotSum 	     *sizeof(T));
+    newCtrlPts = (T*) EG_alloc(knotSum*3     *sizeof(T));
     if ( cp == NULL  || knotInsert == NULL || newCtrlPts == NULL ||
         knotCheck == NULL )  {
       stat = EGADS_MALLOC;
@@ -474,10 +494,11 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
     }
     dimKnotIsert = 0;
     for ( c = 0; c < nC; ++c ) {
-      stat = findMissingKnots(splineInfo[c][3], splineData[c], dimMergedKnots, mergedKnots,
+      stat = findMissingKnots(outLevel, splineInfo[c][3], splineData[c], dimMergedKnots, mergedKnots,
                               &dimKnotIsert, knotInsert);
       if (stat != EGADS_SUCCESS) {
-        printf(" EG_skinning: findMissingKnots %d = %d\n", c, stat);
+        if (outLevel > 0)
+          printf(" EG_skinning: findMissingKnots %d = %d\n", c, stat);
         goto bail;
       }
       if ( dimKnotIsert > 0 ) {
@@ -488,13 +509,15 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
         if (stat != EGADS_SUCCESS) goto bail;
         // knotcheck is a vector which should coincide with the mergedKnot sequence that we found
         if (dimKnotCheck != dimMergedKnots)	{
-          printf(" EG_skinning: Knot Refinement has the wrong dimension!!\n");
+          if (outLevel > 0)
+            printf(" EG_skinning: Knot Refinement has the wrong dimension!!\n");
           stat = EGADS_GEOMERR;
           goto bail;
         }
         for( k = 0; k< dimKnotCheck; ++k) {
           if (fabs( knotCheck[k] - mergedKnots[k] ) > EPS) {
-            printf(" EG_skinning: Knot Refinement has the wrong sequence!!\n");
+            if (outLevel > 0)
+              printf(" EG_skinning: Knot Refinement has the wrong sequence!!\n");
             stat = EGADS_GEOMERR;
             goto bail;
           }
@@ -518,8 +541,8 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
     deg            = splineInfo[0][1];
     nPts           = splineInfo[0][2];
     dimMergedKnots = splineInfo[0][3];
-    mergedKnots    = (double*) EG_alloc(dimMergedKnots*sizeof(double));
-    cp             = (double*) EG_alloc(nC*nPts*3     *sizeof(double));  // max size of control points
+    mergedKnots    = (T*) EG_alloc(dimMergedKnots*sizeof(T));
+    cp             = (T*) EG_alloc(nC*nPts*3     *sizeof(T));  // max size of control points
     if ( mergedKnots == NULL || cp == NULL ) {
       stat = EGADS_MALLOC;
       goto bail;
@@ -537,14 +560,14 @@ makeCurvesCompatible(int nC, ego *splineCurves, int *nP, double **controlPoints,
   // Copy all data to input variables & leave
   *degree        = deg;  // Assuming that one day degree elevation function will be implemented, *degree will update
   *dimKnotVector = dimMergedKnots;
-  *knotVector    = (double *) EG_alloc( dimMergedKnots*sizeof(double));
+  *knotVector    = (T *) EG_alloc( dimMergedKnots*sizeof(T));
   if ( *knotVector == NULL ) {
     stat = EGADS_MALLOC;
     goto bail;
   }
   for ( k = 0; k < dimMergedKnots ; ++k )
     (*knotVector)[k] = mergedKnots[k];
-  *controlPoints = (double *) EG_alloc(nPts*nC*3*sizeof(double));
+  *controlPoints = (T *) EG_alloc(nPts*nC*3*sizeof(T));
   if( *controlPoints == NULL ) {
     stat = EGADS_MALLOC;
     goto bail ;
@@ -573,41 +596,32 @@ bail:
   return stat;
 }
 
-
-#ifdef STANDALONE
-static
-#endif
-int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
-                 ego *surface)
+template<class T>
+int makeSkinningGeom(int nC, ego *sectionCurves, int skinning_degree,
+                     int *splineInfo, T **splineData)
 {
-  double *P_cross, *Uknots; // ptr to control points and commont knot vector
-  int    c = 0, d = 0, i = 0, j = 0, n=0, it = 0, stat = 1, dimVknots = 0;
-  int    nP = 0, dimUknots = 0, degree = 0;
-  int    blend = 0, dataLength = 0, offset = 0, splineInfo[7];
-  double sumVal, diam, dist, locCord;
-  double *A = NULL, *A_aux = NULL, *net[3] , *b = NULL, *splineData = NULL;
-  double *v_param = NULL , *vKnots = NULL;
+  T   *P_cross, *Uknots; // ptr to control points and commont knot vector
+  int c = 0, d = 0, i = 0, j = 0, n=0, it = 0, stat, dimVknots = 0;
+  int nP = 0, dimUknots = 0, degree = 0;
+  int blend = 0, dataLength = 0, offset = 0;
+  T   sumVal, diam, dist, locCord;
+  T   *A = NULL, *A_aux = NULL, *net[3] , *b = NULL;
+  T   *v_param = NULL , *vKnots = NULL;
 
-  *surface = NULL;
-  if (context == NULL)               return EGADS_NULLOBJ;
-  if (context->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (context->oclass != CONTXT)     return EGADS_NOTCNTX;
-  if (EG_sameThread(context))        return EGADS_CNTXTHRD;
+  int outLevel = EG_outLevel(sectionCurves[0]);
 
-  if (skinning_degree > nC-1) {  // max spline degree allowed in v-direction is nC
-    printf(" EGADS Warning: Reducing skinning degree to %d from %d (EG_skinning)\n",
-           nC-1, skinning_degree);
-    skinning_degree = nC-1;
-  }
-  stat = makeCurvesCompatible (nC, sectionCurves, &nP, &P_cross, &Uknots,
-                               &dimUknots, &degree);
+  (*splineData) = NULL;
+
+  stat = makeCurvesCompatible<T>(nC, sectionCurves, &nP, &P_cross, &Uknots,
+                              &dimUknots, &degree);
   if (stat != EGADS_SUCCESS) {
-    printf(" EGADS Warning: makeCurvesCompatible = %d (EG_skinning)!\n", stat);
+    if (outLevel > 0)
+      printf(" EGADS Error: makeCurvesCompatible = %d (EG_skinning)!\n", stat);
     return stat;
   }
 
   // Get parameters for skinning:
-  v_param = (double *) EG_alloc(nC *sizeof(double));
+  v_param = (T *) EG_alloc(nC *sizeof(T));
   if ( v_param == NULL ) return EGADS_MALLOC;
   v_param[0]    = 0.0;
   v_param[nC-1] = 1.0;
@@ -629,7 +643,7 @@ int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
     v_param[c] = v_param[c-1] + ( 1./(double)nP )*sumVal;
   }
   dimVknots = nC + skinning_degree +1;
-  vKnots    = (double *) EG_alloc(dimVknots *sizeof(double));
+  vKnots    = (T *) EG_alloc(dimVknots *sizeof(T));
   if ( vKnots == NULL ) {
     EG_free(v_param);
     EG_free(P_cross);
@@ -647,12 +661,12 @@ int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
     vKnots[skinning_degree+j]  /= (double) skinning_degree;
   }
   // FIND SURFACE CONTROL NET ----> INTERPOLATING CROSS CURVES + SOLVING LINEAR SYSTEMS
-  A      = (double *) EG_alloc(nC*nC*sizeof(double));
-  A_aux  = (double *) EG_alloc(nC*nC*sizeof(double));
-  net[0] = (double *) EG_alloc(nP*nC*sizeof(double));
-  net[1] = (double *) EG_alloc(nP*nC*sizeof(double));
-  net[2] = (double *) EG_alloc(nP*nC*sizeof(double));
-  b      = (double *) EG_alloc(   nC*sizeof(double));
+  A      = (T *) EG_alloc(nC*nC*sizeof(T));
+  A_aux  = (T *) EG_alloc(nC*nC*sizeof(T));
+  net[0] = (T *) EG_alloc(nP*nC*sizeof(T));
+  net[1] = (T *) EG_alloc(nP*nC*sizeof(T));
+  net[2] = (T *) EG_alloc(nP*nC*sizeof(T));
+  b      = (T *) EG_alloc(   nC*sizeof(T));
   if ( (A == NULL) || (A_aux == NULL) || (net[0] == NULL) || (net[1] == NULL) ||
        (net[2] == NULL) || (b == NULL) ) {
     if (b      != NULL) EG_free(b);
@@ -678,7 +692,8 @@ int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
       // Finds the Control Points such that the curve interpolates the original control points.
       stat = matsol(A_aux, b, nC, &net[d][blend*nC]);
       if (stat != EGADS_SUCCESS) {
-        printf(" EGADS Error: Solving Linear System = %d!!\n", stat);
+        if (outLevel > 0)
+          printf(" EGADS Error: Solving Linear System = %d!!\n", stat);
         EG_free(b);
         EG_free(net[2]);
         EG_free(net[1]);
@@ -708,8 +723,8 @@ int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
   splineInfo[5] = nC;
   splineInfo[6] = dimVknots; // TOTAL KNOTS IN BLENDER FUNCTIONS
   dataLength    = splineInfo[3] + nC*nP*3 + splineInfo[6];
-  splineData    = (double *) EG_alloc(dataLength *sizeof(double));
-  if (splineData == NULL ) {
+  *splineData   = (T *) EG_alloc(dataLength *sizeof(T));
+  if (*splineData == NULL ) {
     EG_free(net[2]);
     EG_free(net[1]);
     EG_free(net[0]);
@@ -719,26 +734,152 @@ int EG_skinning (ego context, int nC, ego *sectionCurves, int skinning_degree,
   }
 
   /* KNOT SEQUENCE  (cross-sections direction) */
-  for ( i = 0; i < dimUknots; ++i ) splineData[i] = Uknots[i];
+  for ( i = 0; i < dimUknots; ++i ) (*splineData)[i] = Uknots[i];
   EG_free(Uknots);
   /* KNOT SEQUENCE  (skinning direction) */
-  for ( i = 0; i < dimVknots; ++i ) splineData[dimUknots+i] = vKnots[i];
+  for ( i = 0; i < dimVknots; ++i ) (*splineData)[dimUknots+i] = vKnots[i];
   EG_free(vKnots);
   /* CONTOL NET */
   offset = dimVknots + dimUknots;
   for (c = 0; c < nC; ++c)
     for (n = 0; n < nP; ++n) {
-      for (d = 0; d < 3; d++) splineData[offset+d] = net[d][n*nC+c];
+      for (d = 0; d < 3; d++) (*splineData)[offset+d] = net[d][n*nC+c];
       offset+=3;
     }
   EG_free(net[2]);
   EG_free(net[1]);
   EG_free(net[0]);
-  stat = EG_makeGeometry(context, SURFACE, BSPLINE,
-                         NULL, splineInfo, splineData, surface);
+
+  return EGADS_SUCCESS;
+}
+
+
+extern "C"
+#ifdef STANDALONE
+static
+#endif
+int EG_skinning(int nC, ego *sectionCurves, int skinning_degree, ego *surface)
+{
+  int    stat, i, outLevel, data_dot=1;
+  int    splineInfo[7];
+  ego    context;
+
+  *surface = NULL;
+  if (nC <= 0)                                return EGADS_RANGERR;
+  for (i = 0; i < nC; i++) {
+    if (sectionCurves[i] == NULL)               return EGADS_NULLOBJ;
+    if (sectionCurves[i]->magicnumber != MAGIC) return EGADS_NOTOBJ;
+    if (sectionCurves[i]->oclass != CURVE)      return EGADS_NOTGEOM;
+    if (EG_sameThread(sectionCurves[i]))        return EGADS_CNTXTHRD;
+    if (EG_hasGeometry_dot(sectionCurves[i]) != EGADS_SUCCESS) data_dot=0;
+  }
+  stat = EG_getContext(sectionCurves[0], &context);
+  if (stat != EGADS_SUCCESS) return stat;
+  outLevel = EG_outLevel(sectionCurves[0]);
+
+  if (skinning_degree > nC-1) {  // max spline degree allowed in v-direction is nC
+    if (outLevel > 0)
+      printf(" EGADS Warning: Reducing skinning degree to %d from %d (EG_skinning)\n",
+             nC-1, skinning_degree);
+    skinning_degree = nC-1;
+  }
+
+  if (data_dot == 1) {
+    SurrealS<1> *splineData = NULL;
+
+    stat = makeSkinningGeom< SurrealS<1> >(nC, sectionCurves, skinning_degree,
+                                           splineInfo, &splineData);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeSkinningGeom = %d (EG_skinning)!\n", stat);
+      return stat;
+    }
+
+    stat = EG_makeGeometry(context, SURFACE, BSPLINE,
+                           NULL, splineInfo, splineData, surface);
+    EG_free(splineData);
+    if ( stat != EGADS_SUCCESS ) {
+      if (outLevel > 0)
+        printf(" EG_skinning: EG_makeGeometry SPLINE SURFACE = %d\n", stat);
+      return stat;
+    }
+  } else {
+    double *splineData = NULL;
+
+    stat = makeSkinningGeom<double>(nC, sectionCurves, skinning_degree,
+                                    splineInfo, &splineData);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeSkinningGeom = %d (EG_skinning)!\n", stat);
+      return stat;
+    }
+
+    stat = EG_makeGeometry(context, SURFACE, BSPLINE,
+                           NULL, splineInfo, splineData, surface);
+    EG_free(splineData);
+    if ( stat != EGADS_SUCCESS ) {
+      if (outLevel > 0)
+        printf(" EG_skinning: EG_makeGeometry SPLINE SURFACE = %d\n", stat);
+      return stat;
+    }
+  }
+  return EGADS_SUCCESS;
+}
+
+
+extern "C"
+#ifdef STANDALONE
+static
+#endif
+int EG_skinning_dot(ego surface, int nC, ego *sectionCurves)
+{
+  int    stat, outLevel, i, skinning_degree;
+  int    splineInfo[7], oclass, mtype, *ivec=NULL;
+  double *rvec=NULL;
+  SurrealS<1> *splineData = NULL;
+  ego refGeom;
+
+  if (nC <= 0)                                  return EGADS_RANGERR;
+  for (i = 0; i < nC; i++) {
+    if (sectionCurves[i] == NULL)               return EGADS_NULLOBJ;
+    if (sectionCurves[i]->magicnumber != MAGIC) return EGADS_NOTOBJ;
+    if (sectionCurves[i]->oclass != CURVE)      return EGADS_NOTGEOM;
+    if (EG_sameThread(sectionCurves[i]))        return EGADS_CNTXTHRD;
+    if (EG_hasGeometry_dot(sectionCurves[i]) != EGADS_SUCCESS) {
+      outLevel = EG_outLevel(sectionCurves[0]);
+      if (outLevel > 0)
+        printf(" EGADS Error: Curve[%d] does not have sensitivities (EG_skinning_dot)!\n", i);
+      return EGADS_NODATA;
+    }
+  }
+  outLevel = EG_outLevel(sectionCurves[0]);
+
+
+  stat = EG_getGeometry(surface, &oclass, &mtype, &refGeom, &ivec, &rvec);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: EG_getGeometry = %d (EG_skinning_dot)!\n", stat);
+    return stat;
+  }
+
+  skinning_degree = ivec[4];
+  EG_free(ivec); ivec=NULL;
+  EG_free(rvec); rvec=NULL;
+
+  stat = makeSkinningGeom< SurrealS<1> >(nC, sectionCurves, skinning_degree,
+                                  splineInfo, &splineData);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: makeSkinningGeom = %d (EG_skinning_dot)!\n", stat);
+    return stat;
+  }
+
+  stat = EG_setGeometry_dot(surface, SURFACE, BSPLINE,
+                            splineInfo, splineData);
   EG_free(splineData);
   if ( stat != EGADS_SUCCESS ) {
-    printf(" EG_skinning: EG_makeGeometry SPLINE SURFACE = %d\n", stat);
+    if (outLevel > 0)
+      printf(" EGADS Error: EG_setGeometry_dot = %d (EG_skinning_dot)!\n", stat);
     return stat;
   }
   return EGADS_SUCCESS;
@@ -830,7 +971,7 @@ int main(int argc, char *argv[])
     printf(" CREATE CROSS SECTIONS             = %d\n", stat);
     goto bail;
   }
-  stat = EG_skinning(context, nC, sectionCurves, skinning_degree, &surface);
+  stat = EG_skinning(nC, sectionCurves, skinning_degree, &surface);
   if(stat != EGADS_SUCCESS) {
     printf(" EG_surfaceSkinning     = %d\n", stat);
     goto bail;

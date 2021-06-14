@@ -5,7 +5,7 @@
  * This module creates and manages curve fits (Cfits)                         *
  * Written by John Dannenhoffer @ Syracuse University                         *
  *                                                                            *
- * Copyright 2011-2020, Massachusetts Institute of Technology                 *
+ * Copyright 2011-2021, Massachusetts Institute of Technology                 *
  * Licensed under The GNU Lesser General Public License, version 2.1          *
  * See http://www.opensource.org/licenses/lgpl-2.1.php                        *
  ******************************************************************************
@@ -1725,7 +1725,7 @@ prm_BestCfit(int      nvrt,                  /* (in)   number of Vertices */
         for (ivar = 0; ivar < nvar; ivar++) {
             DPRINT1x("%10.5f ", var[ivar+nvar*ivrt]);
         }
-        DPRINT0("");
+        DPRINT0(" ");
     }
 
     /* ----------------------------------------------------------------------- */
@@ -1847,10 +1847,11 @@ prm_BestCfit(int      nvrt,                  /* (in)   number of Vertices */
         uu = (double)(iu) / (double)(*nu - 1);
 
         prm_EvalCfit(tree0, uu, xyz, NULL, NULL);
-
+#ifndef __clang_analyzer__
         for (ivar = 0; ivar < nvar; ivar++) {
             (*cfit)[nvar*iu+ivar] = xyz[ivar];
         }
+#endif
     }
 
 #ifdef GRAFIC
@@ -1998,7 +1999,7 @@ prm_EvalCfit(cfitTree tree,                  /* (in)   Cfit Tree */
 //    for (ivar = 0; ivar < nvar; ivar++) {
 //        DPRINT1x("%12.6f ", var[ivar]);
 //    }
-//    DPRINT0("");
+//    DPRINT0(" ");
 
 //    DPRINT2("%s --> status=%d}", routine, status);
     return status;

@@ -3,7 +3,7 @@
  *
  *             Replacement Solid Boolean Operator Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -347,27 +347,27 @@ EG_adjPeriodic(double *uv, double *uvs, double *srange, int sper)
 
 
 static void
-EG_adjustPeriod(double *param, double *srange, int sper)
+EG_adjustPeriod(double *param, double *range, double *srange, int sper)
 {
   double period;
   
   if ((sper&1) != 0) {
     period = srange[1] - srange[0];
-    if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
-      if (param[0]+PARAMACC < srange[0]) {
-        if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
+    if ((param[0]+PARAMACC < range[0]) || (param[0]-PARAMACC > range[1]))
+      if (param[0]+PARAMACC < range[0]) {
+        if (param[0]+period-PARAMACC < range[1]) param[0] += period;
       } else {
-        if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
+        if (param[0]-period+PARAMACC > range[0]) param[0] -= period;
       }
   }
   
   if ((sper&2) != 0) {
     period = srange[3] - srange[2];
-    if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
-      if (param[1]+PARAMACC < srange[2]) {
-        if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
+    if ((param[1]+PARAMACC < range[2]) || (param[1]-PARAMACC > range[3]))
+      if (param[1]+PARAMACC < range[2]) {
+        if (param[1]+period-PARAMACC < range[3]) param[1] += period;
       } else {
-        if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
+        if (param[1]-period+PARAMACC > range[2]) param[1] -= period;
       }
   }
   
@@ -381,7 +381,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
   int      i, n, cnt, oclass, mtype, stat, fsense, outLevel, first, next, nNode;
   int      j0, j1, sper, *sens, *sen, *ints;
   double   ang, angle, tol, range[4], srange[4], result[9], u[3], v[3], dir[2];
-  double   duv[4], uvs[2], uv[2], *pdata, *reals;
+  double   frange[4], duv[4], uvs[2], uv[2], *pdata, *reals;
   egObject *geom, *surf, *ref, *sref, **nodes, **objs, **list;
   edgeLoop *el;
   nodeCnt  *nl;
@@ -394,7 +394,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
   outLevel = EG_outLevel(context);
   
   /* look at Face */
-  stat = EG_getTopology(face, &surf, &oclass, &fsense, range, &n, &nodes,
+  stat = EG_getTopology(face, &surf, &oclass, &fsense, frange, &n, &nodes,
                         &sen);
   if (stat != EGADS_SUCCESS) {
     printf(" EGADS Error: Cannot get Face = %d (EG_traceLoops)!\n", stat);
@@ -471,7 +471,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
                  i+1, stat);
           goto bail;
         }
-        EG_adjustPeriod(result, srange, sper);
+        EG_adjustPeriod(result, frange, srange, sper);
         el[i].uvs[1][0] = result[0];
         el[i].uvs[1][1] = result[1];
         result[0]       = result[2];
@@ -498,7 +498,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
                  i+1, stat);
           goto bail;
         }
-        EG_adjustPeriod(result, srange, sper);
+        EG_adjustPeriod(result, frange, srange, sper);
         el[i].uvs[0][0] = result[0];
         el[i].uvs[0][1] = result[1];
         result[0]       = result[2];
@@ -529,7 +529,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
                  i+1, stat);
           goto bail;
         }
-        EG_adjustPeriod(result, srange, sper);
+        EG_adjustPeriod(result, frange, srange, sper);
         el[i].uvs[0][0] = result[0];
         el[i].uvs[0][1] = result[1];
         result[0]       = result[2];
@@ -556,7 +556,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
                  i+1, stat);
           goto bail;
         }
-        EG_adjustPeriod(result, srange, sper);
+        EG_adjustPeriod(result, frange, srange, sper);
         el[i].uvs[1][0] = result[0];
         el[i].uvs[1][1] = result[1];
         result[0]       = result[2];
@@ -812,6 +812,7 @@ EG_traceLoops(egObject *context, const egObject *face, int nEdges,
     if (stat != EGADS_SUCCESS) {
       printf(" EGADS Error: makeTopology %d = %d (EG_traceLoops)!\n",
              *nLoops+1, stat);
+      *loops = list;
       goto bail;
     }
     if (list[*nLoops]->mtype == OPEN) {
@@ -1736,6 +1737,7 @@ EG_splitBody(const egObject *body, int nseg, const egObject **facEdg,
       status = EG_getBodyTopos(body, fe[i].face, EDGE, &m,  &dum);
       if (status != EGADS_SUCCESS) goto cleanup;
       for (k = 0; k < m; k++) {
+        if (dum[k]        == NULL)       continue;
         if (dum[k]->mtype == DEGENERATE) continue;
         status = EG_getTolerance(dum[k], &toler);
         if (status != EGADS_SUCCESS) {
@@ -2079,7 +2081,7 @@ EG_splitBody(const egObject *body, int nseg, const egObject **facEdg,
       lnodes[0] = lnodes[1];
       limits[1] = ts[j];
       lnodes[1] = dum[j];
-      status    = EG_makeTopology(context, ref, oclass, mtype, limits, 2,
+      status    = EG_makeTopology(context, ref, oclass, TWONODE, limits, 2,
                                   lnodes, senses, &sEdges[i].ents[j]);
 #ifdef DEBUG
       printf("           newEdge status = %d\n", status);
@@ -2100,7 +2102,7 @@ EG_splitBody(const egObject *body, int nseg, const egObject **facEdg,
     lnodes[0] = lnodes[1];
     limits[1] = data[1];
     lnodes[1] = children[l-1];
-    status    = EG_makeTopology(context, ref, oclass, mtype, limits, 2,
+    status    = EG_makeTopology(context, ref, oclass, TWONODE, limits, 2,
                                 lnodes, senses, &sEdges[i].ents[n]);
 #ifdef DEBUG
     printf("           newEdge status = %d\n", status);

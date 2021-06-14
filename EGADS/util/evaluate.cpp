@@ -3,7 +3,7 @@
  *
  *             Internal Geometry Evaluation Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -120,6 +120,8 @@ typedef struct {
   extern "C" int  EG_getBody( const egObject *object, egObject **body );
 
   extern "C" int  EG_getWindingAngle( egObject *edge, double t, double *angle );
+  extern "C" int  EG_inFaceX( const egObject *face, const double *uva,
+                              /*@null@*/ double *pt, /*@null@*/ double *uvx );
 
   /* forward prototype for EG_eval3deriv */
   TEMPLATE   int EG_evaluateGeom( const egObject *geom, const DOUBLE *param,
@@ -2229,13 +2231,17 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
     srange[3] = range[3];
   }
   
-  /* do we re-limit? */
+  /* do we re-limit (ignore surface periodics)? */
   if (limits != NULL) {
-    range[0] = limits[0];
-    range[1] = limits[1];
+    if (((per&1) != 1) || (geom->oclass != SURFACE)) {
+      range[0] = limits[0];
+      range[1] = limits[1];
+    }
     if (geom->oclass == SURFACE) {
-      range[2] = limits[2];
-      range[3] = limits[3];
+      if (per/2 == 0) {
+        range[2] = limits[2];
+        range[3] = limits[3];
+      }
     }
   }
   
@@ -2330,7 +2336,39 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
         }
       }
     } else {
-      if (geom->mtype == BEZIER) {
+      /* raw parabola -- limit range */
+      if ((geom->mtype == PARABOLA) && (range[0] < -1.e100) &&
+                                       (range[1] >  1.e100)) {
+        tx   = 0.0;
+        stat = EG_evaluateGeom(geom, &tx, data);
+        if (stat != EGADS_SUCCESS) return stat;
+        a  = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+             (data[1]-xyz[1])*(data[1]-xyz[1]) +
+             (data[2]-xyz[2])*(data[2]-xyz[2]);
+        tx = -1.0;
+        while (tx > range[0]) {
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          if ((data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]) > a) break;
+          tx *= 2.0;
+        }
+        range[0] = tx;
+        tx       = 1.0;
+        while (tx < range[1]) {
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          if ((data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]) > a) break;
+          tx *= 2.0;
+        }
+        range[1] = tx;
+/*      printf(" Parabola new range = %le %le\n", range[0], range[1]);  */
+      }
+      
+      if ((geom->mtype == BEZIER) || (geom->mtype == PARABOLA)) {
         urats = xfinrt;
         ulen = 20;
       } else if (geom->mtype == LINE) {
@@ -2473,7 +2511,39 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
         }
       }
     } else {
-      if (geom->mtype == BEZIER) {
+      /* raw parabola -- limit range */
+      if ((geom->mtype == PARABOLA) && (range[0] < -1.e100) &&
+                                       (range[1] >  1.e100)) {
+        tx   = 0.0;
+        stat = EG_evaluateGeom(geom, &tx, data);
+        if (stat != EGADS_SUCCESS) return stat;
+        a  = (data[0]-xyz[0])*(data[0]-xyz[0]) +
+             (data[1]-xyz[1])*(data[1]-xyz[1]) +
+             (data[2]-xyz[2])*(data[2]-xyz[2]);
+        tx = -1.0;
+        while (tx > range[0]) {
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          if ((data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]) > a) break;
+          tx *= 2.0;
+        }
+        range[0] = tx;
+        tx       = 1.0;
+        while (tx < range[1]) {
+          stat = EG_evaluateGeom(geom, &tx, data);
+          if (stat != EGADS_SUCCESS) return stat;
+          if ((data[0]-xyz[0])*(data[0]-xyz[0]) +
+              (data[1]-xyz[1])*(data[1]-xyz[1]) +
+              (data[2]-xyz[2])*(data[2]-xyz[2]) > a) break;
+          tx *= 2.0;
+        }
+        range[1] = tx;
+/*      printf(" Parabola new range = %le %le\n", range[0], range[1]);  */
+      }
+      
+      if ((geom->mtype == BEZIER) || (geom->mtype == PARABOLA)) {
         urats = xfinrt;
         ulen = 20;
       } else if (geom->mtype == LINE) {
@@ -2829,7 +2899,8 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
     } else {
 
       if ((geom->mtype == BEZIER) ||
-          (geom->mtype == OFFSET)) {
+          (geom->mtype == OFFSET) ||
+          (geom->mtype == TOROIDAL)) {
         urats = xfinrt;
         ulen = 20;
         vrats = xfinrt;
@@ -2844,8 +2915,7 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
         ulen = 1;
         vrats = ratios;
         vlen = 1;
-      } else if ((geom->mtype == SPHERICAL) ||
-                 (geom->mtype == TOROIDAL)) {
+      } else if (geom->mtype == SPHERICAL) {
         urats = percrv;
         ulen = 11;
         vrats = percrv;
@@ -2897,23 +2967,30 @@ EG_invEvaGeomLimits(const egObject *geomx, /*@null@*/ const double *limits,
       }
     }
 
-    if ((per&1) != 0) {
-      period = srange[1] - srange[0];
-      if ((param[0]+PARAMACC < srange[0]) || (param[0]-PARAMACC > srange[1]))
-        if (param[0]+PARAMACC < srange[0]) {
-          if (param[0]+period-PARAMACC < srange[1]) param[0] += period;
-        } else {
-          if (param[0]-period+PARAMACC > srange[0]) param[0] -= period;
-        }
+    /* do we re-limit? */
+    if (limits != NULL) {
+      range[0] = limits[0];
+      range[1] = limits[1];
+      range[2] = limits[2];
+      range[3] = limits[3];
     }
-    if ((per&2) != 0) {
+    if (((per&1) != 0) && ((param[0]+PARAMACC < range[0]) ||
+                           (param[0]-PARAMACC > range[1]))) {
+      period = srange[1] - srange[0];
+      if (param[0]+PARAMACC < range[0]) {
+        if (param[0]+period-PARAMACC < range[1]) param[0] += period;
+      } else {
+        if (param[0]-period+PARAMACC > range[0]) param[0] -= period;
+      }
+    }
+    if (((per&2) != 0) && ((param[1]+PARAMACC < range[2]) ||
+                           (param[1]-PARAMACC > range[3]))) {
       period = srange[3] - srange[2];
-      if ((param[1]+PARAMACC < srange[2]) || (param[1]-PARAMACC > srange[3]))
-        if (param[1]+PARAMACC < srange[2]) {
-          if (param[1]+period-PARAMACC < srange[3]) param[1] += period;
-        } else {
-          if (param[1]-period+PARAMACC > srange[2]) param[1] -= period;
-        }
+      if (param[1]+PARAMACC < range[2]) {
+        if (param[1]+period-PARAMACC < range[3]) param[1] += period;
+      } else {
+        if (param[1]-period+PARAMACC > range[2]) param[1] -= period;
+      }
     }
     
   }
@@ -3573,7 +3650,6 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   stat = EG_getBody(edge, &body);
   if (stat != EGADS_SUCCESS)      return stat;
   if (body == NULL)               return EGADS_NODATA;
-  if (body->mtype != SOLIDBODY)   return EGADS_NOTBODY;
   
   stat = EG_getBodyTopos(body, edge, FACE, &nface, &faces);
   if (stat != EGADS_SUCCESS) return stat;
@@ -3666,7 +3742,7 @@ EG_getWindingAngle(egObject *edge, double t, double *angle)
   if (x0[0]*p1[0]+x0[1]*p1[1] > 0.0) cx = 1;
   if (x1[0]*p0[0]+x1[1]*p0[1] > 0.0) cx = 1;
   dist = DOT(dir[0], dir[1]);
-  if ((dist < -1.0) || (dist > 1.0))
+  if ((dist < -1.0000001) || (dist > 1.0000001))
     printf(" EG_getWindingAngle: dot = %20.12lf\n", dist);
   if (dist < -1.0) dist = -1.0;
   if (dist >  1.0) dist =  1.0;

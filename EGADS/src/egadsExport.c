@@ -3,7 +3,7 @@
  *
  *             Export a Model (via a string) for use in egadsLite
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -16,7 +16,7 @@
 #include "egads.h"
 
   extern int EG_outLevel( const egObject *object );
-  extern int EG_flattenBSpline ( egObject *object, egObject **result );
+  extern int EG_flattenBSpline( egObject *object, egObject **result );
 
 
 typedef struct {
@@ -1428,11 +1428,8 @@ EG_writeBody(egObject *bobject, stream_T *fp)
 }
 
 
-#ifdef STANDALONE
-static
-#endif
 int
-EG_exportModel(egObject *mobject, size_t *nbytes, char *stream[])
+EG_exportModel(ego mobject, size_t *nbytes, char **stream)
 {
   int      i, n, oclass, mtype, nbody, *senses, rev[2] = {1, 0};
   double   bbox[6];
@@ -1449,7 +1446,7 @@ EG_exportModel(egObject *mobject, size_t *nbytes, char *stream[])
   if (mobject->oclass != MODEL)      return EGADS_NOTMODEL;
 
   i = EG_getTopology(mobject, &ref, &oclass, &mtype, NULL, &nbody, &bodies,
-                        &senses);
+                     &senses);
   if (i != EGADS_SUCCESS) return i;
   i = EG_getBoundingBox(mobject, bbox);
   if (i != EGADS_SUCCESS) return i;

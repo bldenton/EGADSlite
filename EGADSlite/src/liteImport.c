@@ -3,7 +3,7 @@
  *
  *             Import a Model from EGADS (via a string)
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -998,8 +998,10 @@ EGlite_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
         return EGADS_READERR;
       }
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
       if (iref != 0) EGlite_GET_OBJECT_PTR(&(ledge_h->curve),
                                        &(lbody_h->curves.objs[iref-1]));
+#endif
 /*@+nullderef@*/
       n = Fread(&iref, sizeof(int), 1, fp);
       if (n != 1) {
@@ -1007,8 +1009,10 @@ EGlite_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
         return EGADS_READERR;
       }
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
       if (iref != 0) EGlite_GET_OBJECT_PTR(&(ledge_h->nodes[0]),
                                        &(lbody_h->nodes.objs[iref-1]));
+#endif
 /*@+nullderef@*/
       n = Fread(&iref, sizeof(int), 1, fp);
       if (n != 1) {
@@ -1016,8 +1020,10 @@ EGlite_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
         return EGADS_READERR;
       }
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
       if (iref != 0) EGlite_GET_OBJECT_PTR(&(ledge_h->nodes[1]),
                                        &(lbody_h->nodes.objs[iref-1]));
+#endif
 /*@+nullderef@*/
      
       n = Fread(ledge_h->trange, sizeof(double), 2, fp);
@@ -1074,8 +1080,10 @@ EGlite_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
       }
       if (iref != 0) {
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
         EGlite_GET_OBJECT_PTR(&(lloop_h->surface),
                           &(lbody_h->surfaces.objs[iref-1]));
+#endif
 /*@+nullderef@*/
         m *= 2;
       }
@@ -1132,11 +1140,15 @@ EGlite_readBody(egObject *context, egObject *mobject, int bindex, stream_T *fp)
           }
           if (j < lloop_h->nedges) {
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
             EGlite_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->edges.objs[iref-1]));
+#endif
 /*@+nullderef@*/
           } else {
 /*@-nullderef@*/
+#ifndef __clang_analyzer__
             EGlite_GET_OBJECT_PTR(&(otemp[j]), &(lbody_h->pcurves.objs[iref-1]));
+#endif
 /*@+nullderef@*/
           }
         }

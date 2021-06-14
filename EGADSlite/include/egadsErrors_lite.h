@@ -5,12 +5,15 @@
  *
  *             Error Code Header
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
  */
 
+#define EGADS_EXTRAPOL -37
+#define EGADS_EFFCTOBJ -36
+#define EGADS_UVMAP    -35
 #define EGADS_SEQUERR  -34
 #define EGADS_CNTXTHRD -33
 #define EGADS_READERR  -32

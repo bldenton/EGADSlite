@@ -3,7 +3,7 @@
  *
  *             Copy-based Topology Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -200,12 +200,15 @@ EG_copyAttrTopo(egadsBody *pbody, /*@null@*/ double *xform, gp_Trsf form,
     }
     int k = 0;
     for (ExpWE.Init(Wire); ExpWE.More(); ExpWE.Next()) {
+      if (edgeo == NULL) continue;
       TopoDS_Shape shapW = ExpWE.Current();
       TopoDS_Edge  Edge  = TopoDS::Edge(shapW);
-      edgeo[k]           = NULL;
-      senses[k]          = 1;
-      if (shapW.Orientation() == TopAbs_REVERSED) senses[k] = -1;
+      edgeo[k] = NULL;
       if (hit == 2) edgeo[k+ne] = NULL;
+      if (senses != NULL) {
+        senses[k] = 1;
+        if (shapW.Orientation() == TopAbs_REVERSED) senses[k] = -1;
+      }
       index = pbody->edges.map.FindIndex(Edge);
       if (index > 0) edgeo[k] = pbody->edges.objs[index-1];
       if (edgeo[k] == NULL) {
@@ -273,11 +276,14 @@ EG_copyAttrTopo(egadsBody *pbody, /*@null@*/ double *xform, gp_Trsf form,
     }
     int k = 0;
     for (ExpW.Init(Face, TopAbs_WIRE); ExpW.More(); ExpW.Next()) {
+      if (loopo == NULL) continue;
       TopoDS_Shape shapw = ExpW.Current();
       TopoDS_Wire  Wire  = TopoDS::Wire(shapw);
       loopo[k]           = NULL;
-      senses[k]          = -1;
-      if (Wire.IsSame(oWire)) senses[k] = 1;
+      if (senses != NULL) {
+        senses[k] = -1;
+        if (Wire.IsSame(oWire)) senses[k] = 1;
+      }
       index = pbody->loops.map.FindIndex(Wire);
       if (index > 0) loopo[k] = pbody->loops.objs[index-1];
       if (loopo[k] == NULL) {
@@ -934,11 +940,14 @@ EG_flipAttrTopo(egadsBody *pbody, egadsBody *tbody, const egObject *src,
     }
     int k = 0;
     for (ExpWE.Init(Wire); ExpWE.More(); ExpWE.Next()) {
+      if (edgeo == NULL) continue;
       TopoDS_Shape shapW = ExpWE.Current();
       TopoDS_Edge  Edge  = TopoDS::Edge(shapW);
       edgeo[k]           = NULL;
-      senses[k]          = 1;
-      if (shapW.Orientation() == TopAbs_REVERSED) senses[k] = -1;
+      if (senses != NULL) {
+        senses[k] = 1;
+        if (shapW.Orientation() == TopAbs_REVERSED) senses[k] = -1;
+      }
       if (hit == 2) edgeo[k+ne] = NULL;
       index = pbody->edges.map.FindIndex(Edge);
       if (index > 0) edgeo[k] = pbody->edges.objs[index-1];
@@ -1026,11 +1035,14 @@ EG_flipAttrTopo(egadsBody *pbody, egadsBody *tbody, const egObject *src,
     }
     int k = 0;
     for (ExpW.Init(Face, TopAbs_WIRE); ExpW.More(); ExpW.Next()) {
+      if (loopo == NULL) continue;
       TopoDS_Shape shapw = ExpW.Current();
       TopoDS_Wire  Wire  = TopoDS::Wire(shapw);
       loopo[k]           = NULL;
-      senses[k]          = -1;
-      if (Wire.IsSame(oWire)) senses[k] = 1;
+      if (senses != NULL) {
+        senses[k] = -1;
+        if (Wire.IsSame(oWire)) senses[k] = 1;
+      }
       index = pbody->loops.map.FindIndex(Wire);
       if (index > 0) loopo[k] = pbody->loops.objs[index-1];
       if (loopo[k] == NULL) {

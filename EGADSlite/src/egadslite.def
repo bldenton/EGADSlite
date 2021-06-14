@@ -13,6 +13,7 @@ EGlite_setOutLevel
 EGlite_makeObject
 EGlite_loadModel
 EGlite_deleteObject
+EGlite_getInfo
 EGlite_close
 EGlite_attributeNum
 EGlite_attributeNumSeq

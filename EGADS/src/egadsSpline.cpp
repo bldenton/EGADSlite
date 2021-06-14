@@ -3,7 +3,7 @@
  *
  *             Blend, Rule and Sculpting Functions
  *
- *      Copyright 2011-2020, Massachusetts Institute of Technology
+ *      Copyright 2011-2021, Massachusetts Institute of Technology
  *      Licensed under The GNU Lesser General Public License, version 2.1
  *      See http://www.opensource.org/licenses/lgpl-2.1.php
  *
@@ -23,9 +23,6 @@
 
 #ifdef EGADS_SPLINE_VELS
 #include "egadsSplineVels.h"
-namespace {
-static egadsSplineVels *vels=NULL;
-}
 #endif
 
 //#define PCURVE_SENSITIVITY
@@ -46,9 +43,37 @@ static egadsSplineVels *vels=NULL;
 #define UMAX 2
 #define VMAX 3
 
-#if !defined(__APPLE__) && !defined(WIN32) && defined(BLEND_FPE)
+#if !defined(WIN32) && defined(BLEND_FPE)
 // floating point exceptions
   #include <fenv.h>
+
+#if defined(__APPLE__) && defined(__MACH__)
+
+// This fixes the missing feenbableexcept on MacOS.  The fix reuses in verbatim a code available on
+// https://github.com/ArduPilot/ardupilot/blob/master/libraries/AP_Common/missing/fenv.h.
+
+// Public domain polyfill for feenableexcept on OS X
+// http://www-personal.umich.edu/~williams/archive/computation/fe-handling-example.c
+
+int feenableexcept(unsigned int excepts)
+{
+  static fenv_t fenv;
+  unsigned int new_excepts = excepts & FE_ALL_EXCEPT;
+  // previous masks
+  unsigned int old_excepts;
+
+  if (fegetenv(&fenv))
+    return -1;
+
+  old_excepts = fenv.__control & FE_ALL_EXCEPT;
+
+  // unmask
+  fenv.__control &= ~new_excepts;
+  fenv.__mxcsr   &= ~(new_excepts << 7);
+
+  return fesetenv(&fenv) ? -1 : old_excepts;
+}
+#endif
 #endif
 
 #define PI               3.1415926535897931159979635
@@ -97,6 +122,10 @@ extern "C" int EG_spline1dDeriv( int *ivec, double *rdata, int der, double t,
 template<int N, class T>
 int EG_spline1dDeriv( int *ivec, SurrealS<N> *data, int der, T& t,
                       SurrealS<N> *point );
+template<class T>
+int
+EG_spline1dFit(int endx, int imaxx, const T *xyz, const T *kn,
+               double tol, int *ivec, T **rdata);
 
 template<int N, class T>
 int EG_spline2dEval( int *ivec, SurrealS<N> *data, const T *uv,
@@ -122,12 +151,17 @@ EG_isoCurve( const int *header2d, const T *data2d,
              const int ik, const int jk, int *header, T **data );
 template<class T>
 int
-EG_subSpline( const int *fheader, const T *fdata,
-              const int i1, const int iN,
-              const int j1, const int jN, int *sheader, T **sdata );
+EG_subSpline1d( const int *fheader, const T *fdata,
+                const int i1, const int iN,
+                int *sheader, T **sdata );
+template<class T>
+int
+EG_subSpline2d( const int *fheader, const T *fdata,
+                const int i1, const int iN,
+                const int j1, const int jN, int *sheader, T **sdata );
 
 #ifdef EGADS_SPLINE_VELS
-extern void EG_getGeometryLen( const egObject *geom, int *nivec, int *nrvec );
+extern "C" void EG_getGeometryLen( const egObject *geom, int *nivec, int *nrvec );
 #endif
 
 namespace // private to this file (no-name namespace)
@@ -182,7 +216,7 @@ struct egSpline
   }
 };
 
-#ifdef SPLINE_TECPLOT_DEBUG
+#if defined(DEBUG) || defined(SPLINE_TECPLOT_DEBUG)
 static double value(double val)
 {
   return val;
@@ -193,18 +227,18 @@ static double value(SurrealS<N> valS)
 {
   return valS.value();
 }
+#endif
 
-void
-EG_tecplotSpline(int *header, SurrealS<1> *data, const char *file) {}
-
+#ifdef SPLINE_TECPLOT_DEBUG
 extern "C"
 int
 EG_spline2dEval(int *ivec, double *data, const double *uv, double *point);
 
-void
-EG_tecplotSpline(int *header, double *data, const char *filename)
+template<class T>
+static void
+EG_tecplotSpline(int *header, T *data, const char *filename)
 {
-  double uv[2], point[9];
+  T uv[2], point[9];
   int ideg  = header[1];
   int icp   = header[2];
   int iknot = header[3]-2*ideg;
@@ -215,9 +249,9 @@ EG_tecplotSpline(int *header, double *data, const char *filename)
   int imax  = iknot + ideg*(iknot-1);
   int jmax  = jknot + jdeg*(jknot-1);
 
-  double *knotu =  data+ideg;
-  double *knotv = &data[header[3]+ideg];
-  double *cp    = &data[header[3]+header[6]];
+  T *knotu =  data+ideg;
+  T *knotv = &data[header[3]+jdeg];
+  T *cp    = &data[header[3]+header[6]];
 
   printf( "Writing %s...\n", filename );
   FILE* fp = fopen( filename, "w" );
@@ -239,10 +273,10 @@ EG_tecplotSpline(int *header, double *data, const char *filename)
           EG_spline2dDeriv(header, data, 1, uv, point);
 
           for (int k = 0; k < 9; k++)
-            fprintf( fp, "%22.15e " , point[k] );
+            fprintf( fp, "%22.15e " , value(point[k]) );
 
-          fprintf( fp, "%22.15e " , uv[0] );
-          fprintf( fp, "%22.15e\n", uv[1] );
+          fprintf( fp, "%22.15e " , value(uv[0]) );
+          fprintf( fp, "%22.15e\n", value(uv[1]) );
         }
       }
     }
@@ -253,9 +287,9 @@ EG_tecplotSpline(int *header, double *data, const char *filename)
 
   for (int j = 0; j < jcp; j++) {
     for (int i = 0; i < icp; i++) {
-      fprintf( fp, "%22.15e ", cp[3*(i+j*icp)  ] );
-      fprintf( fp, "%22.15e ", cp[3*(i+j*icp)+1] );
-      fprintf( fp, "%22.15e ", cp[3*(i+j*icp)+2] );
+      fprintf( fp, "%22.15e ", value(cp[3*(i+j*icp)  ]) );
+      fprintf( fp, "%22.15e ", value(cp[3*(i+j*icp)+1]) );
+      fprintf( fp, "%22.15e ", value(cp[3*(i+j*icp)+2]) );
       for (int k = 0; k < 8; k++)
         fprintf( fp, "0 " );
       fprintf( fp, "\n" );
@@ -265,11 +299,11 @@ EG_tecplotSpline(int *header, double *data, const char *filename)
   fclose(fp);
 }
 
-void
+static void
 EG_tecplotSplinePoints(int imax, int jmax, const SurrealS<1> *xyz,
                        const char *filename) {}
 
-void
+static void
 EG_tecplotSplinePoints(int imax, int jmax, const double *xyzs,
                        const char *filename)
 {
@@ -294,7 +328,7 @@ EG_tecplotSplinePoints(int imax, int jmax, const double *xyzs,
 
 
 #ifdef DUMP_SECTIONS
-void
+static void
 EG_dumpSections(int nsec, const ego *secs, const char *filename)
 {
   int    stat = EGADS_SUCCESS;
@@ -359,7 +393,7 @@ cleanup:
 #endif
 
 
-int
+static int
 EG_findTE(int nstripe, ego *edges, int *te)
 {
   int    stat = EGADS_SUCCESS;
@@ -393,7 +427,7 @@ EG_findTE(int nstripe, ego *edges, int *te)
 /* knot sequence utility functions */
 
 template<class T>
-int
+static int
 EG_allocSeq(int nstripe, egSequ<T> **sequ)
 {
   int    i;
@@ -414,7 +448,7 @@ EG_allocSeq(int nstripe, egSequ<T> **sequ)
 
 
 template<class T>
-void
+static void
 EG_freeSeq(int nstripe, /*@only@*/ egSequ<T> *seq)
 {
   int i;
@@ -427,7 +461,7 @@ EG_freeSeq(int nstripe, /*@only@*/ egSequ<T> *seq)
 
 
 template<class T>
-int
+static int
 EG_mergeSeq(int stripe, egSequ<T> *seq, int n, T *nomulti)
 {
   int i;
@@ -473,13 +507,13 @@ EG_mergeSeq(int stripe, egSequ<T> *seq, int n, T *nomulti)
 
 
 template<class T>
-int
-EG_setSeq(int stripe, egSequ<T> *seq, int num,
+static int
+EG_setSeq(int stripe, egSequ<T> *seq, int num, int sens,
           T *range, /*@null@*/ int *iinfo, /*@null@*/ T *rinfo)
 {
   int stat = EGADS_SUCCESS;
   int i, nk, n, ndeg;
-  T   dt, *nomulti;
+  T   dt, *nomulti, *tmp;
 
   if ((iinfo == NULL) || (rinfo == NULL)) {
     /* not a spline */
@@ -530,6 +564,18 @@ EG_setSeq(int stripe, egSequ<T> *seq, int num,
       seq[stripe].nave = 0;
       seq[stripe].ncp  = num;
       return EGADS_SUCCESS;
+    } else if ( sens == -1 ) {
+
+      tmp = (T *) EG_alloc(n*sizeof(T));
+      if (tmp == NULL) return EGADS_MALLOC;
+      for (i = 0; i < n; i++)
+        tmp[i] = nomulti[i];
+      
+      /* reverse the spacing for a negative sense */
+      range[1] = nomulti[n-1];
+      for (i = 0; i < n; i++)
+        nomulti[i] = range[1] - tmp[n-1-i];
+      EG_free(tmp);
     }
 
     /* merge the current sequence with possibly existing one */
@@ -542,26 +588,30 @@ EG_setSeq(int stripe, egSequ<T> *seq, int num,
 
 
 #ifdef EGADS_SPLINE_VELS
-void setTrange(double *trange, double *trangeD, double *trangeD_dot)
+static void
+setTrange(double *trange, double *trangeD, double *trangeD_dot)
 {
   trange[0] = trangeD[0];
   trange[1] = trangeD[1];
 }
 
-void setTrange(SurrealS<1> *trange, double *trangeD, double *trangeD_dot)
+static void
+setTrange(SurrealS<1> *trange, double *trangeD, double *trangeD_dot)
 {
   trange[0].value() = trangeD[0]; trange[0].deriv() = trangeD_dot[0];
   trange[1].value() = trangeD[1]; trange[1].deriv() = trangeD_dot[1];
 }
 
-void setRinfo(int len, double **rvec, double *rvecD, double *rvecD_dot)
+static void
+setRinfo(int len, double **rvec, double *rvecD, double *rvecD_dot)
 {
   (*rvec) = (double*)EG_alloc(len*sizeof(double));
   for (int i = 0; i < len; i++)
     (*rvec)[i] = rvecD[i];
 }
 
-void setRinfo(int len, SurrealS<1> **rvec, double *rvecD, double *rvecD_dot)
+static void
+setRinfo(int len, SurrealS<1> **rvec, double *rvecD, double *rvecD_dot)
 {
   (*rvec) = (SurrealS<1>*)EG_alloc(len*sizeof(SurrealS<1>));
   for (int i = 0; i < len; i++) {
@@ -571,20 +621,25 @@ void setRinfo(int len, SurrealS<1> **rvec, double *rvecD, double *rvecD_dot)
 }
 #endif
 
+
 template<class T>
-int
-EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
+static int
+EG_setSequence(
+#ifdef EGADS_SPLINE_VELS
+    const egadsSplineVels *vels,
+#endif
+    int nsec, const ego *secs, int te, int nstripe,
                egSequ<T> **ncp_out)
 {
   int    i, j, k, n, jj, outLevel, stat = EGADS_SUCCESS;
-  int    oclass, mtype, nnode, *senses=NULL, *iinfo=NULL;
+  int    oclass, mtype, nnode, *senses=NULL, *iinfo=NULL, *itmp=NULL;
   double data[18];
 #ifdef EGADS_SPLINE_VELS
   double trangeD[2], trangeD_dot[2], *rinfoD, *rinfoD_dot;
   ego    top, prev, next;
 #endif
   T      *rinfo=NULL, trange[2];
-  ego    loop, ref, geom;
+  ego    loop=NULL, ref, geom;
   ego    *chldrn=NULL, *edges=NULL, *nodes=NULL;
   egSequ<T> *ncp=NULL;
 
@@ -608,7 +663,13 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
     } else if (oclass == FACE) {
       loop = chldrn[0];
     } else if (oclass == BODY) {
-      loop = chldrn[0];
+      if (mtype == WIREBODY) {
+        loop = chldrn[0];
+      } else if (mtype == FACEBODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &n, &chldrn,
+                              &senses);
+        loop = chldrn[0];
+      }
     } else {
       loop = secs[i];
     }
@@ -617,7 +678,7 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
     if (stat != EGADS_SUCCESS) continue;
     for (j = jj = 0; jj < n; jj++) {
       stat = EG_getTopology(edges[jj], &ref, &oclass, &mtype, data, &nnode,
-                            &nodes, &senses);
+                            &nodes, &itmp);
       if (stat != EGADS_SUCCESS) {
         if (outLevel > 0)
           printf(" EGADS Error: Section %d EDGE %d getTopo = %d (EG_setSequence)!\n",
@@ -627,17 +688,9 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
       if (mtype == DEGENERATE) continue;
 
 #ifdef EGADS_SPLINE_VELS
-      egadsEdge *pedge = (egadsEdge*)edges[jj]->blind;
-      if (pedge->filled == 1)
-      {
-        stat = EG_getRange(edges[jj], trange, &k);
-        if (stat != EGADS_SUCCESS) {
-          if (outLevel > 0)
-            printf(" EGADS Error: Sec %d Edge %d GetRange = %d (EG_setSequence)!\n",
-                   i+1, jj+1, stat);
-          goto cleanup;
-        }
-      } else if (vels != NULL && vels->velocityOfRange != NULL) {
+
+      if (vels != NULL && vels->velocityOfRange != NULL) {
+
         stat = (*(vels->velocityOfRange))(vels->usrData, secs, i, edges[jj],
                                           trangeD, trangeD_dot);
         if (stat != EGADS_SUCCESS) {
@@ -647,7 +700,19 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
           goto cleanup;
         }
         setTrange(trange, trangeD, trangeD_dot);
+
+      } else if (EG_hasGeometry_dot(edges[jj]) == EGADS_SUCCESS) {
+
+        stat = EG_getRange(edges[jj], trange, &k);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Sec %d Edge %d GetRange = %d (EG_setSequence)!\n",
+                   i+1, jj+1, stat);
+          goto cleanup;
+        }
+
       } else {
+
         stat = EG_getRange(edges[jj], trangeD, &k);
         if (stat != EGADS_SUCCESS) {
           if (outLevel > 0)
@@ -680,16 +745,7 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
         stat = EG_getInfo(geom, &oclass, &mtype, &top, &prev, &next);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
-        if (vels != NULL && vels->velocityOfBspline == NULL && EG_hasGeometry_dot(geom) == EGADS_NOTFOUND) {
-          double *rvec;
-          int ilen, len;
-          stat = EG_getGeometry(geom, &oclass, &mtype, &ref, &iinfo, &rvec);
-          if (stat != EGADS_SUCCESS) goto cleanup;
-          EG_getGeometryLen(geom, &ilen, &len);
-          rinfo = (T*)EG_alloc(len*sizeof(T));
-          for (k = 0; k < len; k++) rinfo[k] = rvec[k];
-          EG_free(rvec);
-        } else if (mtype == BSPLINE && vels != NULL && vels->velocityOfBspline != NULL) {
+        if (mtype == BSPLINE && vels != NULL && vels->velocityOfBspline != NULL) {
           stat = (*(vels->velocityOfBspline))(vels->usrData, secs, i, edges[jj], geom,
                                               &iinfo, &rinfoD, &rinfoD_dot);
           if (stat != EGADS_SUCCESS) {
@@ -711,9 +767,17 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
           setRinfo(len, &rinfo, rinfoD, rinfoD_dot);
           EG_free(rinfoD);     rinfoD = NULL;
           EG_free(rinfoD_dot); rinfoD_dot = NULL;
-
-        } else {
+        } else if (EG_hasGeometry_dot(geom) == EGADS_SUCCESS) {
           stat = EG_getGeometry(geom, &oclass, &mtype, &ref, &iinfo, &rinfo);
+        } else {
+          double *rvec;
+          int ilen, len;
+          stat = EG_getGeometry(geom, &oclass, &mtype, &ref, &iinfo, &rvec);
+          if (stat != EGADS_SUCCESS) goto cleanup;
+          EG_getGeometryLen(geom, &ilen, &len);
+          rinfo = (T*)EG_alloc(len*sizeof(T));
+          for (k = 0; k < len; k++) rinfo[k] = rvec[k];
+          EG_free(rvec);
         }
 #else
         stat = EG_getGeometry(geom, &oclass, &mtype, &ref, &iinfo, &rinfo);
@@ -729,32 +793,32 @@ EG_setSequence(int nsec, const ego *secs, int te, int nstripe,
 
       stat = EGADS_NOTFOUND;
       if (mtype == LINE) {
-        stat = EG_setSeq<T>(j, ncp, 3, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, 3, senses[jj], trange, NULL, NULL);
       } else if (mtype == CIRCLE) {
 /*      This fixes windtunnel6 and rule8 for OCC 7.4
         k = 36.*(value(trange[1])-value(trange[0]))/PI;
         if (k < 4) k = 4;
         stat = EG_setSeq<T>(j, ncp,  k, trange, NULL, NULL);
  */
-        stat = EG_setSeq<T>(j, ncp, 12, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, 12, senses[jj], trange, NULL, NULL);
       } else if (mtype == ELLIPSE) {
 /*      This fixes windtunnel6 and rule8 for OCC 7.4
         k = 36.*(value(trange[1])-value(trange[0]))/PI;
         if (k < 4) k = 4;
         stat = EG_setSeq<T>(j, ncp,  k, trange, NULL, NULL);
 */
-        stat = EG_setSeq<T>(j, ncp, 12, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, 12, senses[jj], trange, NULL, NULL);
       } else if (mtype == PARABOLA) {
-        stat = EG_setSeq<T>(j, ncp, 12, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, 12, senses[jj], trange, NULL, NULL);
       } else if (mtype == HYPERBOLA) {
-        stat = EG_setSeq<T>(j, ncp, 12, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, 12, senses[jj], trange, NULL, NULL);
       } else if (mtype == BEZIER) {
         k    = iinfo[2];
         if (k < 12) k = 12;
-        stat = EG_setSeq<T>(j, ncp, k, trange, NULL, NULL);
+        stat = EG_setSeq<T>(j, ncp, k, senses[jj], trange, NULL, NULL);
         EG_free(iinfo); iinfo = NULL;
       } else if (mtype == BSPLINE) {
-        stat = EG_setSeq<T>(j, ncp, 12, trange, iinfo, rinfo);
+        stat = EG_setSeq<T>(j, ncp, 12, senses[jj], trange, iinfo, rinfo);
         EG_free(iinfo); iinfo = NULL;
         EG_free(rinfo); rinfo = NULL;
       }
@@ -834,11 +898,11 @@ EG_checkDirs(ego edge, T t, T *pnt, T *dir2)
 
 
 template<class T>
-int
-EG_wingTipSpline(const int outLevel, const T ratio, ego sect, ego seci,
+static int
+EG_wingTipSpline(const int outLevel, const T &ratio, ego sect, ego seci,
                  double v, egSpline<T> **surfs, egSpline<T> *tipsurf)
 {
-  int    stat, i, j, k, kk, n, oclass, mtype, nLoop, nEdge, nNode, nKnotu, nKnotv;
+  int    stat, i, j, k, kk, n, oclass, mtype, nFace, nLoop, nEdge, nNode, nKnotu, nKnotv;
   int    *info, *senses, *lsenses=NULL, open, deg, iknot, nsub;
   double *gdata=NULL;
   double nlen, tol, limits[4], norm[3], snorm[3], xu[3], xv[3];
@@ -846,11 +910,11 @@ EG_wingTipSpline(const int outLevel, const T ratio, ego sect, ego seci,
   T      *data, *xyz=NULL, *uKnots=NULL, *vKnots=NULL;
   T      *west=NULL, *east=NULL, *snor=NULL, *nnor=NULL, results[18];
   ego    geom, rGeom, loop;
-  ego    *loops, *edges, *nodes;
+  ego    *faces, *loops, *edges, *nodes;
 
-  if (sect->oclass != FACE) {
+  if (sect->oclass != FACE && sect->mtype != FACEBODY) {
     if (outLevel > 0)
-      printf(" EGADS Error: Section is not a Face (EG_wingTip)!\n");
+      printf(" EGADS Error: Section is not a Face or FACEBODY (EG_wingTip)!\n");
     return EGADS_GEOMERR;
   }
 
@@ -863,6 +927,17 @@ EG_wingTipSpline(const int outLevel, const T ratio, ego sect, ego seci,
              stat);
     return EGADS_TOPOERR;
   }
+  if (oclass == BODY) {
+    stat = EG_getTopology(loops[0], &geom, &oclass, &mtype, limits, &nLoop,
+                          &loops, &senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: EG_getTopology = %d for Section (EG_wingTip)!\n",
+               stat);
+      return EGADS_TOPOERR;
+    }
+  }
+
 
   /* look at the loops */
   if (nLoop != 1) {
@@ -913,7 +988,16 @@ EG_wingTipSpline(const int outLevel, const T ratio, ego sect, ego seci,
   if (stat != EGADS_SUCCESS) goto cleanup;
 
   /* get the loop for the interior section */
-  if (seci->oclass == FACE) {
+  if (seci->oclass == BODY) {
+    stat = EG_getTopology(seci, &geom, &oclass, &mtype, limits, &nFace,
+                          &faces, &senses);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    stat = EG_getTopology(faces[0], &geom, &oclass, &mtype, limits, &nLoop,
+                          &loops, &senses);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    loop = loops[0];
+  } else  if (seci->oclass == FACE) {
     stat = EG_getTopology(seci, &geom, &oclass, &mtype, limits, &nLoop,
                           &loops, &senses);
     if (stat != EGADS_SUCCESS) goto cleanup;
@@ -1212,16 +1296,16 @@ EG_wingTipSpline(const int outLevel, const T ratio, ego sect, ego seci,
 
     for (int i = 0; i < nKnotv; i++) {
       for (int k = 0; k < 3; k++)
-        fprintf( fp, "%22.15e ", xyz[3*(i*nKnotu  )+k]);
+        fprintf( fp, "%22.15e ", value(xyz[3*(i*nKnotu  )+k]));
       for (int k = 0; k < 3; k++)
-        fprintf( fp, "%22.15e ", west[3*i+k]);
+        fprintf( fp, "%22.15e ", value(west[3*i+k]));
       fprintf( fp, "\n" );
     }
     for (int i = nKnotv-1; i >= 0; i--) {
       for (int k = 0; k < 3; k++)
-        fprintf( fp, "%22.15e ", xyz[3*(i*nKnotu+n)+k]);
+        fprintf( fp, "%22.15e ", value(xyz[3*(i*nKnotu+n)+k]));
       for (int k = 0; k < 3; k++)
-        fprintf( fp, "%22.15e ", east[3*i+k]);
+        fprintf( fp, "%22.15e ", value(east[3*i+k]));
       fprintf( fp, "\n" );
     }
 
@@ -1259,16 +1343,17 @@ cleanup:
 }
 
 
-int
+static int
 EG_getSecNodes(int outLevel, int inode, ego sec, int nstripe, ego *nodes)
 {
   int    stat;
-  int    nnode, nedge, oclass, mtype, *senses, *sens, j, closed;
+  int    nnode, nedge, nloop, nface, oclass, mtype, *senses, *sens, j, uclosed;
   double limits[4];
-  ego    *node = NULL, *edges, eref, loop;
+  ego    *node = NULL, *edges, *loops, *faces, eref, loop=NULL;
 
-  if (sec->oclass != FACE && sec->oclass != LOOP && sec->oclass != NODE) {
-    printf("EGADS Error: getSecNodes: sec is not a face, loop or node!\n");
+  if (!(sec->oclass == BODY && (sec->mtype == WIREBODY || sec->mtype == FACEBODY)) &&
+      sec->oclass != FACE && sec->oclass != LOOP && sec->oclass != NODE) {
+    printf("EGADS Error: getSecNodes: sec is not a FaceBody, WireBody, Face, Loop or Node!\n");
     return EGADS_GEOMERR;
   }
 
@@ -1276,12 +1361,33 @@ EG_getSecNodes(int outLevel, int inode, ego sec, int nstripe, ego *nodes)
     for (j = 0; j < nstripe+1; j++)
       nodes[j*inode] = sec;
     return EGADS_SUCCESS;
+  } else if (sec->oclass == BODY) {
+    if (sec->mtype == WIREBODY) {
+      // get the loop
+      stat = EG_getTopology(sec, &eref, &oclass, &mtype,
+                            limits, &nloop, &loops, &senses);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+      loop = loops[0];
+    } else if (sec->mtype == FACEBODY) {
+
+      // get the face
+      stat = EG_getTopology(sec, &eref, &oclass, &mtype,
+                            limits, &nface, &faces, &senses);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      // get the loop
+      stat = EG_getTopology(faces[0], &eref, &oclass, &mtype,
+                            limits, &nloop, &loops, &senses);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      loop = loops[0];
+    }
   } else if (sec->oclass == FACE) {
     // get the loop
     stat = EG_getTopology(sec, &eref, &oclass, &mtype,
-                          limits, &nedge, &edges, &senses);
+                          limits, &nloop, &loops, &senses);
     if (stat != EGADS_SUCCESS) goto cleanup;
-    loop = edges[0];
+    loop = loops[0];
   } else {
     loop = sec;
   }
@@ -1295,8 +1401,8 @@ EG_getSecNodes(int outLevel, int inode, ego sec, int nstripe, ego *nodes)
     goto cleanup;
   }
 
-  closed = 1;
-  if (mtype == OPEN) closed = 0;
+  uclosed = 1;
+  if (mtype == OPEN) uclosed = 0;
 
   for (j = 0; j < nedge; j++) {
     stat = EG_getTopology(edges[j], &eref, &oclass, &mtype,
@@ -1311,14 +1417,14 @@ EG_getSecNodes(int outLevel, int inode, ego sec, int nstripe, ego *nodes)
 
   nodes[nedge*inode] = NULL;
   if (node != NULL)
-    if (closed == 0) {
+    if (uclosed == 0) {
       /* set the last node if open */
       if (senses[nedge-1] == SFORWARD || mtype == ONENODE)
         nodes[nedge*inode] = node[1];
       else
         nodes[nedge*inode] = node[0];
     } else {
-      /* repeat the node for a closed loop */
+      /* repeat the node for a uclosed loop */
       nodes[nedge*inode] = nodes[0];
     }
 
@@ -1337,7 +1443,8 @@ EG_loft2spline(const int outLevel, const T *vknot, const int *vdata,
                const T **drnd, egSequ<T> *seq, int jmax, const T *xyz,
                double tol, int *header, T **data)
 {
-  int     i, j, imax;
+  int     status = EGADS_SUCCESS;
+  int     i, j, imax, freeNT = 0, freeST = 0;
   T       dist, dy;
   T       x0[3], x1[3], nnor[3], snor[3], *norT, *souT;
   const T *north, *south;
@@ -1404,10 +1511,15 @@ EG_loft2spline(const int outLevel, const T *vknot, const int *vdata,
   } else {
     if (drnd[1] != NULL)
       if (drnd[1][0] != 0.0) {
-        snor[0] = drnd[1][1]*drnd[1][0];
-        snor[1] = drnd[1][2]*drnd[1][0];
-        snor[2] = drnd[1][3]*drnd[1][0];
-        souT    = snor;
+        souT = (T*)EG_alloc(3*imax*sizeof(T));
+        if (souT == NULL) { status = EGADS_MALLOC; goto cleanup; }
+        freeST = 1;
+
+        for (i = 0; i < imax; i++) {
+          souT[3*i+0] = drnd[1][1]*drnd[1][0];
+          souT[3*i+1] = drnd[1][2]*drnd[1][0];
+          souT[3*i+2] = drnd[1][3]*drnd[1][0];
+        }
       }
   }
   i  = imax-1;
@@ -1467,31 +1579,43 @@ EG_loft2spline(const int outLevel, const T *vknot, const int *vdata,
   } else {
     if (drnd[3] != NULL)
       if (drnd[3][0] != 0.0) {
-        nnor[0] = drnd[3][1]*drnd[3][0];
-        nnor[1] = drnd[3][2]*drnd[3][0];
-        nnor[2] = drnd[3][3]*drnd[3][0];
-        norT    = nnor;
+        norT = (T*)EG_alloc(3*imax*sizeof(T));
+        if (norT == NULL) { status = EGADS_MALLOC; goto cleanup; }
+        freeNT = 1;
+
+        for (i = 0; i < imax; i++) {
+          norT[3*i+0] = drnd[3][1]*drnd[3][0];
+          norT[3*i+1] = drnd[3][2]*drnd[3][0];
+          norT[3*i+2] = drnd[3][3]*drnd[3][0];
+        }
       }
   }
 
   if (imax == 3) {
-    return EG_spline2dAppr<T>(1, imax, jmax, xyz, seq->knots, vknot, vdata,
-                              NULL, NULL, south, souT, north, norT,
-                              tol, header, data);
-
+    status = EG_spline2dAppr<T>(1, imax, jmax, xyz, seq->knots, vknot, vdata,
+                                NULL, NULL, south, souT, north, norT,
+                                tol, header, data);
   } else {
     /* blend2xy (x and/or y is "b") fails with 2 */
-    return EG_spline2dAppr<T>(1, imax, jmax, xyz, seq->knots, vknot, vdata,
-                              drnd[0], drnd[2], south, souT, north, norT,
-                              tol, header, data);
+    status = EG_spline2dAppr<T>(1, imax, jmax, xyz, seq->knots, vknot, vdata,
+                                drnd[0], drnd[2], south, souT, north, norT,
+                                tol, header, data);
 
   }
+
+cleanup:
+
+  if (freeST == 1) EG_free(souT);
+  if (freeNT == 1) EG_free(norT);
+
+  return status;
 }
 
 
 #ifdef EGADS_SPLINE_VELS
-int
-EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
+static int
+EG_secSplinePointsVels(const egadsSplineVels *vels,
+                       int outLevel, int lsec, int nsec, const ego *secs, int j,
                        egSequ<double> *ncp, int *planar, double *xyzs,
                        double* t1, double* tN)
 {
@@ -1500,10 +1624,11 @@ EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
 }
 
 
-int
-EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
+static int
+EG_secSplinePointsVels(const egadsSplineVels *vels,
+                       int outLevel, int lsec, int nsec, const ego *secs, int j,
                        egSequ< SurrealS<1> > *ncp, int *planar,
-                       SurrealS<1> *xyzs, SurrealS<1>* t1, SurrealS<1>* tN)
+                       SurrealS<1> *xyzs, SurrealS<1> *t1, SurrealS<1> *tN)
 {
   int         stat = EGADS_SUCCESS;
   int         i, jj, k, nn, npt, nchld, nedge, oclass, mtype;
@@ -1512,7 +1637,7 @@ EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
   double      xyz_dot[3], *ts=NULL, *ts_dot=NULL, *xs=NULL, *xs_dot=NULL;
   double      xyz[3], tbeg[3], tbeg_dot[3], tend[3], tend_dot[3];
   SurrealS<1> t=0, dt, point[6], v1[3], v2[3], trange[2];
-  ego         loop, ref, *chldrn, *edges;
+  ego         loop=NULL, ref, *chldrn, *edges;
 
 
   npt = *planar = 0;
@@ -1550,7 +1675,14 @@ EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
       loop = chldrn[0];
       if (ref->mtype != PLANE) *planar = 1;
     } else if (oclass == BODY) {
-      loop = chldrn[0];
+      if (mtype == WIREBODY) {
+        loop = chldrn[0];
+      } else if (mtype == FACEBODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                              &senses);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        loop = chldrn[0];
+      }
       if (EG_isPlanar(loop) != EGADS_SUCCESS) *planar = 1;
     } else {
       loop = secs[i];
@@ -1611,11 +1743,19 @@ EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
       }
       if (nn == j) {
         if (vels->velocityOfRange != NULL) {
-          stat = (*(vels->velocityOfRange))(vels->usrData, secs, i, edges[jj],
+          stat = (*(vels->velocityOfRange))(vels->usrData, secs, lsec+i, edges[jj],
                                             trangeD, trangeD_dot);
           if (stat != EGADS_SUCCESS) {
             if (outLevel > 0)
               printf(" EGADS Error: Sec %d Edge %d velocityOfRange = %d (EG_secKnotPointsVels)!\n",
+                     i+1, jj+1, stat);
+            goto cleanup;
+          }
+        } else if (EG_hasGeometry_dot(edges[jj]) == EGADS_SUCCESS) {
+          stat = EG_getRange_dot(edges[jj], trangeD, trangeD_dot, &k);
+          if (stat != EGADS_SUCCESS) {
+            if (outLevel > 0)
+              printf(" EGADS Error: Sec %d Edge %d GetRange = %d (EG_secKnotPointsVels)!\n",
                      i+1, jj+1, stat);
             goto cleanup;
           }
@@ -1663,23 +1803,6 @@ EG_secSplinePointsVels(int outLevel, int lsec, int nsec, const ego *secs, int j,
         }
 
         for (k = 0; k < ncp[j].ncp; k++, npt++) {
-          if ((k != 0) && (k != ncp[j].ncp-1) && (ref->mtype == LINE)) {
-            /* This makes lines consistent with finite differencing
-             * but is only needed if t-range sensitivities are not available
-             */
-            t = ncp[j].knots[k];
-            if (senses[jj] == 1) {
-              xyzs[3*npt  ] = v1[0]*(1-t) + v2[0]*t;
-              xyzs[3*npt+1] = v1[1]*(1-t) + v2[1]*t;
-              xyzs[3*npt+2] = v1[2]*(1-t) + v2[2]*t;
-            } else {
-              xyzs[3*npt  ] = v1[0]*t + v2[0]*(1-t);
-              xyzs[3*npt+1] = v1[1]*t + v2[1]*(1-t);
-              xyzs[3*npt+2] = v1[2]*t + v2[2]*(1-t);
-            }
-            continue;
-          }
-
           /* needed for EG_checkDirs */
           if (senses[jj] == 1) {
             t = trange[0] + ncp[j].knots[k]*dt;
@@ -1766,20 +1889,24 @@ cleanup:
 
 
 template<class T>
-int
-EG_secSplinePoints(int outLevel, int lsec, int nsec, const ego *secs, int j,
-                   egSequ<T> *ncp, int *planar, T *xyzs, T* t1, T* tN)
+static int
+EG_secSplinePoints(
+#ifdef EGADS_SPLINE_VELS
+    const egadsSplineVels *vels,
+#endif
+    int outLevel, int lsec, int nsec, const ego *secs, int j,
+                   egSequ<T> *ncp, int *planar, T *xyzs, T *t1, T *tN)
 {
   int    stat = EGADS_SUCCESS;
   int    i, jj, k, nn, npt, nchld, nedge, oclass, mtype;
   int    *senses, *iinfo=NULL;
   double data[18];
   T      t, point[18], v1[3], v2[3], trange[2], dt;
-  ego    loop, ref, *chldrn, *edges;
+  ego    loop=NULL, ref, *chldrn, *edges;
 
 #ifdef EGADS_SPLINE_VELS
   if (vels != NULL) {
-    return EG_secSplinePointsVels(outLevel, lsec, nsec, secs, j, ncp,
+    return EG_secSplinePointsVels(vels, outLevel, lsec, nsec, secs, j, ncp,
                                   planar, xyzs, t1, tN);
   }
 #endif
@@ -1809,7 +1936,13 @@ EG_secSplinePoints(int outLevel, int lsec, int nsec, const ego *secs, int j,
       loop = chldrn[0];
       if (ref->mtype != PLANE) *planar = 1;
     } else if (oclass == BODY) {
-      loop = chldrn[0];
+      if (mtype == WIREBODY) {
+        loop = chldrn[0];
+      } else if (mtype == FACEBODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                              &senses);
+        loop = chldrn[0];
+      }
       if (EG_isPlanar(loop) != EGADS_SUCCESS) *planar = 1;
     } else {
       loop = secs[i];
@@ -1858,25 +1991,6 @@ EG_secSplinePoints(int outLevel, int lsec, int nsec, const ego *secs, int j,
         }
         dt = trange[1] - trange[0];
         for (k = 0; k < ncp[j].ncp; k++, npt++) {
-#if 0
-          if ((k != 0) && (k != ncp[j].ncp-1) && (ref->mtype == LINE)) {
-            /* This makes lines consistent with finite differencing
-             * but is only needed if t-range sensitivities are not available
-             */
-            t = ncp[j].knots[k];
-            if (senses[jj] == 1) {
-              xyzs[3*npt  ] = v1[0]*(1-t) + v2[0]*t;
-              xyzs[3*npt+1] = v1[1]*(1-t) + v2[1]*t;
-              xyzs[3*npt+2] = v1[2]*(1-t) + v2[2]*t;
-            } else {
-              xyzs[3*npt  ] = v1[0]*t + v2[0]*(1-t);
-              xyzs[3*npt+1] = v1[1]*t + v2[1]*(1-t);
-              xyzs[3*npt+2] = v1[2]*t + v2[2]*(1-t);
-            }
-            continue;
-          }
-#endif
-
           if (senses[jj] == 1) {
             t = trange[0] + ncp[j].knots[k]*dt;
           } else {
@@ -1945,19 +2059,20 @@ cleanup:
 
 
 #ifdef EGADS_SPLINE_VELS
-int
-EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
-                     int nstripe, int closed,
-                     double *xyzs)
+static int
+EG_secKnotPointsVels(const egadsSplineVels *vels,
+                     int outLevel, int nsec, const ego *secs,
+                     int nstripe, int uclosed, double *xyzs)
 {
   printf("EGADS Internal Error: EG_secKnotPointsVels called with double!\n");
   return EGADS_GEOMERR;
 }
 
 
-int
-EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
-                     int nstripe, int closed, SurrealS<1> *xyzs)
+static int
+EG_secKnotPointsVels(const egadsSplineVels *vels,
+                     int outLevel, int nsec, const ego *secs,
+                     int nstripe, int uclosed, SurrealS<1> *xyzs)
 {
   int         stat = EGADS_SUCCESS;
   int         i, k, n, jj, n0, n1, nchld, npt, oclass, mtype;
@@ -1966,7 +2081,7 @@ EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
   double      ts[4], ts_dot[4], xs[3*4], xs_dot[3*4];
   double      tbeg[3], tbeg_dot[3], tend[3], tend_dot[3];
   SurrealS<1> point[18], t, trange[2];
-  ego         ref, loop, *edges, *chldrn;
+  ego         ref, loop=NULL, *edges, *chldrn;
 
   for (npt = i = 0; i < nsec; i++) {
     stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
@@ -1986,7 +2101,7 @@ EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
       point[1].value() = xyz[1]; point[1].deriv() = xyz_dot[1];
       point[2].value() = xyz[2]; point[2].deriv() = xyz_dot[2];
 
-      for (k = 0; k < 3*nstripe+1-closed; k++, npt++) {
+      for (k = 0; k < 3*nstripe+1-uclosed; k++, npt++) {
         xyzs[3*npt  ] = point[0];
         xyzs[3*npt+1] = point[1];
         xyzs[3*npt+2] = point[2];
@@ -1995,7 +2110,14 @@ EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
     } else if (oclass == FACE) {
       loop = chldrn[0];
     } else if (oclass == BODY) {
-      loop = chldrn[0];
+      if (mtype == WIREBODY) {
+        loop = chldrn[0];
+      } else if (mtype == FACEBODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                              &senses);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        loop = chldrn[0];
+      }
     } else {
       loop = secs[i];
     }
@@ -2021,6 +2143,14 @@ EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
                    i+1, jj+1, stat);
           goto cleanup;
         }
+      } else if (EG_hasGeometry_dot(edges[jj]) == EGADS_SUCCESS) {
+        stat = EG_getRange_dot(edges[jj], trangeD, trangeD_dot, &k);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Sec %d Edge %d GetRange = %d (EG_secKnotPointsVels)!\n",
+                   i+1, jj+1, stat);
+          goto cleanup;
+        }
       } else {
         stat = EG_getRange(edges[jj], trangeD, &k);
         if (stat != EGADS_SUCCESS) {
@@ -2036,7 +2166,7 @@ EG_secKnotPointsVels(int outLevel, int nsec, const ego *secs,
       trange[1].value() = trangeD[1]; trange[1].deriv() = trangeD_dot[1];
 
       n0 = 1;
-      if ((closed == 0) && (n1 == 0)) {
+      if ((uclosed == 0) && (n1 == 0)) {
         n1++;
         n0 = 0;
       }
@@ -2083,20 +2213,24 @@ cleanup:
 
 
 template<class T>
-int
-EG_secKnotPoints(int outLevel, int nsec, const ego *secs,
-                 int nstripe, int closed, T *xyzs)
+static int
+EG_secKnotPoints(
+#ifdef EGADS_SPLINE_VELS
+                 const egadsSplineVels *vels,
+#endif
+                 int outLevel, int nsec, const ego *secs,
+                 int nstripe, int uclosed, T *xyzs)
 {
   int    stat = EGADS_SUCCESS;
   int    i, k, n, jj, n0, n1, nchld, npt, oclass, mtype;
   int    *senses, *iinfo=NULL;
   double data[18];
   T      point[18], trange[2], t;
-  ego    ref, loop, *edges, *chldrn;
+  ego    ref, loop=NULL, *edges, *chldrn;
 
 #ifdef EGADS_SPLINE_VELS
   if (vels != NULL) {
-    return EG_secKnotPointsVels(outLevel, nsec, secs, nstripe, closed, xyzs);
+    return EG_secKnotPointsVels(vels, outLevel, nsec, secs, nstripe, uclosed, xyzs);
   }
 #endif
 
@@ -2106,7 +2240,7 @@ EG_secKnotPoints(int outLevel, int nsec, const ego *secs,
     if (stat != EGADS_SUCCESS) continue;
     if (oclass == NODE) {
       stat = EG_evaluate(secs[i], NULL, point);
-      for (k = 0; k < 3*nstripe+1-closed; k++, npt++) {
+      for (k = 0; k < 3*nstripe+1-uclosed; k++, npt++) {
         xyzs[3*npt  ] = point[0];
         xyzs[3*npt+1] = point[1];
         xyzs[3*npt+2] = point[2];
@@ -2115,7 +2249,13 @@ EG_secKnotPoints(int outLevel, int nsec, const ego *secs,
     } else if (oclass == FACE) {
       loop = chldrn[0];
     } else if (oclass == BODY) {
-      loop = chldrn[0];
+      if (mtype == WIREBODY) {
+        loop = chldrn[0];
+      } else if (mtype == FACEBODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                              &senses);
+        loop = chldrn[0];
+      }
     } else {
       loop = secs[i];
     }
@@ -2135,12 +2275,12 @@ EG_secKnotPoints(int outLevel, int nsec, const ego *secs,
       stat = EG_getRange(edges[jj], trange, &k);
       if (stat != EGADS_SUCCESS) {
         if (outLevel > 0)
-          printf(" EGADS Error: Sec %d Edge %d GetRange = %d (EG_secKnotPoints)!\n",
+          printf(" EGADS Error: Section %d Edge %d GetRange = %d (EG_secKnotPoints)!\n",
                  i+1, jj+1, stat);
         goto cleanup;
       }
       n0 = 1;
-      if ((closed == 0) && (n1 == 0)) {
+      if ((uclosed == 0) && (n1 == 0)) {
         n1++;
         n0 = 0;
       }
@@ -2153,7 +2293,7 @@ EG_secKnotPoints(int outLevel, int nsec, const ego *secs,
         stat = EG_evaluate(edges[jj], &t, point);
         if (stat != EGADS_SUCCESS) {
           if (outLevel > 0)
-            printf(" EGADS Error: Sec %d Edge %d eval = %d (EG_secKnotPoints)!\n",
+            printf(" EGADS Error: Section %d Edge %d eval = %d (EG_secKnotPoints)!\n",
                    i+1, jj+1, stat);
           goto cleanup;
         }
@@ -2168,15 +2308,132 @@ cleanup:
   return stat;
 }
 
+static int
+EG_getSecEdge(int outLevel, const ego sec, int stripe, ego *secEdge, int *sens)
+{
+  int    stat = EGADS_SUCCESS;
+  int    nchld, oclass, mtype;
+  int    *senses;
+  double data[18];
+  ego    ref, loop=NULL, *edges, *chldrn;
+
+  stat = EG_getTopology(sec, &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                        &senses);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+  if (oclass == NODE) {
+    *secEdge = sec;
+    *sens = 0;
+    return EGADS_SUCCESS;
+  } else if (oclass == FACE) {
+    loop = chldrn[0];
+  } else if (oclass == BODY) {
+    if (mtype == WIREBODY) {
+      loop = chldrn[0];
+    } else if (mtype == FACEBODY) {
+      stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nchld, &chldrn,
+                            &senses);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+      loop = chldrn[0];
+    }
+  } else {
+    loop = sec;
+  }
+  stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &nchld, &edges,
+                        &senses);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: GetTOPO = %d (EG_getSecEdge)!\n",
+             stat);
+    goto cleanup;
+  }
+
+  *secEdge = edges[stripe];
+  *sens = senses[stripe];
+
+cleanup:
+  return stat;
+}
+
+static int
+EG_secEquivEdge(int outLevel, const ego *secs, int stripe)
+{
+  int    stat = EGADS_SUCCESS;
+  int    i, sens;
+  ego    secEdges[2];
+
+  for (i = 0; i < 2; i++) {
+    stat = EG_getSecEdge(outLevel, secs[i], stripe, &secEdges[i], &sens);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  if (secEdges[0]->oclass != secEdges[1]->oclass) return EGADS_OUTSIDE;
+
+  /* check if the section Edges are equivalent */
+  stat = EG_isEquivalent(secEdges[0], secEdges[1]);
+
+cleanup:
+  return stat;
+}
+
+#ifdef EGADS_SPLINE_VELS
+static int
+EG_nodeVels(const egadsSplineVels *vels,
+            int outLevel, int lsec, const ego *secs, const ego node,
+            double *xyzs)
+{
+  return EG_evaluate(node, NULL, xyzs);
+}
+
+static int
+EG_nodeVels(const egadsSplineVels *vels,
+            int outLevel, int lsec, const ego *secs, const ego node,
+            SurrealS<1> *xyzs)
+{
+  int         stat = EGADS_SUCCESS;
+  double      xyz[3], xyz_dot[3];
+  SurrealS<1> point[3];
+
+  if (vels == NULL)
+    return EG_evaluate(node, NULL, xyzs);
+
+  stat = (*(vels->velocityOfNode))(vels->usrData, secs, lsec, node,
+      NULL, xyz, xyz_dot);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Section %d Node eval = %d (EG_nodeVels)!\n",
+             lsec+1, stat);
+    goto cleanup;
+  }
+  point[0].value() = xyz[0]; point[0].deriv() = xyz_dot[0];
+  point[1].value() = xyz[1]; point[1].deriv() = xyz_dot[1];
+  point[2].value() = xyz[2]; point[2].deriv() = xyz_dot[2];
+
+  /* set the node sensitivity */
+  stat = EG_setGeometry_dot(node, NODE, 0, NULL, point);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  xyzs[0] = point[0];
+  xyzs[1] = point[1];
+  xyzs[2] = point[2];
+
+cleanup:
+  return stat;
+}
+#endif
+
 
 template<class T>
-int
-EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
-               int nstripe, int closed, int planar,
+static int
+EG_blendSpline(
+#ifdef EGADS_SPLINE_VELS
+               const egadsSplineVels *vels,
+#endif
+               int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
+               int nstripe, int uclosed, int vclosed, int planar,
                int *nsecC0_out, ego **secsC0_out,
                ego **nodes_out, egSpline<T> **curvsU_out,
                egSpline<T> **curvsV_out, egSpline<T> **surfs_out,
-               int& tip, int& te, egSpline<T> *tipsurfs, egSpline<T> *tipcurvs)
+               int &tip, int &te, egSpline<T> *tipsurfs, egSpline<T> *tipcurvs)
 {
   int    stat = EGADS_SUCCESS;
   int    i, j, k, n, ii, jj, kk, outLevel, oclass, mtype, npt, isrf;
@@ -2189,7 +2446,7 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
   T      knotc[2*NTIPTE-1], *snor=NULL, *nnor=NULL, *xyzs=NULL;
   T      dx, dy, dz, dv, dv0, dv1, t, pointL[18], pointU[18], dX[3];
   T      d2xdt2L, d2ydt2L, d2zdt2L, d2sdt2L, d2xdt2R, d2ydt2R, d2zdt2R, d2sdt2R;
-  ego    loop, ref;
+  ego    loop=NULL, ref;
   ego    *chldrn=NULL, *edges=NULL, *nodes=NULL, *secsC0=NULL;
   egSequ<T> *ncp=NULL;
   egSpline<T> *surfs=NULL, *curvsV=NULL, *curvsU=NULL, *neigbr[2]={NULL,NULL};
@@ -2216,12 +2473,14 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
   /* look for tip treatment */
   ntip = 0;
   tip = 0;
-  if ((secs[     0]->oclass == FACE) && planar == 0 &&
+  if ((secs[     0]->oclass == FACE || secs[     0]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rc1 != NULL) && (rc1[0] == 0.0)) {
     tip += 1;
     ntip++;
   }
-  if ((secs[nsec-1]->oclass == FACE) && planar == 0 &&
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rcN != NULL) && (rcN[0] == 0.0)) {
     tip += 2;
     ntip++;
@@ -2239,7 +2498,7 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
   vdata   = (int *) EG_alloc(nsec*sizeof(int));
   vknotC0 = (T *)   EG_alloc(nsec*sizeof(T));
   aggC0   = (int *) EG_alloc(2*nsec*sizeof(int));
-  xyzs    = (T *)   EG_alloc(3*(3*nstripe+1-closed)*nsec*sizeof(T));
+  xyzs    = (T *)   EG_alloc(3*(3*nstripe+1-uclosed)*nsec*sizeof(T));
   secsC0  = (ego *) EG_alloc(nsec*sizeof(ego));
   if ((vknot == NULL)   || (xyzs == NULL)  || (vdata == NULL)   ||
       (vknotC0 == NULL) || (aggC0 == NULL) || (secsC0 == NULL)) {
@@ -2250,11 +2509,22 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
   }
   for (i = 0; i <   nsec; i++) secsC0[i] = NULL;
   for (i = 0; i < 2*nsec; i++) aggC0[i]  = 0;
-
-  stat = EG_secKnotPoints(outLevel, nsec, secs, nstripe, closed, xyzs);
+  
+#ifdef EGADS_SPLINE_VELS
+  /* Perform one redundant call to make sure the section is populated with dot information (if available) */
+  if (vels != NULL) {
+    stat = EG_secKnotPoints(vels, outLevel, nsec, secs, nstripe, uclosed, xyzs);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+#endif
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_secKnotPoints(vels, outLevel, nsec, secs, nstripe, uclosed, xyzs);
+#else
+  stat = EG_secKnotPoints(outLevel, nsec, secs, nstripe, uclosed, xyzs);
+#endif
   if (stat != EGADS_SUCCESS) goto cleanup;
 
-  n0 = 3*nstripe+1-closed;
+  n0 = 3*nstripe+1-uclosed;
   /* arc-length spaced */
   for (i = 0; i < nsec; i++) vknot[i] = 0.0;
   dz = n0;
@@ -2473,7 +2743,13 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
         } else if (oclass == FACE) {
           loop = chldrn[0];
         } else if (oclass == BODY) {
-          loop = chldrn[0];
+          if (mtype == WIREBODY) {
+            loop = chldrn[0];
+          } else if (mtype == FACEBODY) {
+            stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &n, &chldrn,
+                                  &senses);
+            loop = chldrn[0];
+          }
         } else {
           loop = secs[i];
         }
@@ -2493,7 +2769,11 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
   }
 
   /* get the sampling points for each stripe */
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_setSequence(vels, nsec, secs, te, nstripe, &ncp);
+#else
   stat = EG_setSequence(nsec, secs, te, nstripe, &ncp);
+#endif
   if (stat != EGADS_SUCCESS) goto cleanup;
 
   inode = nsecC0;
@@ -2616,9 +2896,8 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
       }
 
       if (j == nstripe-1) {
-        if (closed == 1) {
-          /* closed loop so first and last curves are the same */
-          curvsU[i+(j+1)*icrvU] = curvsU[i+0*icrvU];
+        if (uclosed == 1) {
+          /* uclosed loop so first and last curves are the same */
         } else {
           /* get the u = 1 curveU[i,j+1] */
           stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
@@ -2695,11 +2974,15 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
       sides[2] = NULL;
     }
 
-    sides[1] = begRC == 1 ? rc1 : NULL;
-    sides[3] = endRC == 1 ? rcN : NULL;
+    sides[1] = begRC > 0 ? rc1 : NULL;
+    sides[3] = endRC > 0 ? rcN : NULL;
 
     /* get the spline points across all sections for the current stripe */
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_secSplinePoints(vels, outLevel, 0, nsec, secs, j, ncp, &n, xyzs, t1, tN);
+#else
     stat = EG_secSplinePoints(outLevel, 0, nsec, secs, j, ncp, &n, xyzs, t1, tN);
+#endif
     if (stat != EGADS_SUCCESS) goto cleanup;
 
 #ifdef SPLINE_TECPLOT_DEBUG
@@ -2807,8 +3090,13 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
       }
 
       /* get the spline points across all sections for the current stripe */
+#ifdef EGADS_SPLINE_VELS
+      stat = EG_secSplinePoints(vels, outLevel, 0, nsec, secs, j, ncp, &n,
+                                &xyzs[3*ncp[j].ncp*ii], &t1[3*ii], &tN[3*ii]);
+#else
       stat = EG_secSplinePoints(outLevel, 0, nsec, secs, j, ncp, &n,
                                 &xyzs[3*ncp[j].ncp*ii], &t1[3*ii], &tN[3*ii]);
+#endif
       if (stat != EGADS_SUCCESS) goto cleanup;
 
       if (tip & 1) {
@@ -3102,10 +3390,10 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
       }
 
       /* get the sub-BSpline surface */
-      stat = EG_subSpline(blendsurfs[j].header, blendsurfs[j].data,
-                          1, blendsurfs[j].header[2]-1,
-                          aggC0[2*i], aggC0[2*i+1],
-                          surfs[i+j*isrf].header, &surfs[i+j*isrf].data);
+      stat = EG_subSpline2d(blendsurfs[j].header, blendsurfs[j].data,
+                            1, blendsurfs[j].header[2]-1,
+                            aggC0[2*i], aggC0[2*i+1],
+                            surfs[i+j*isrf].header, &surfs[i+j*isrf].data);
       if (stat != EGADS_SUCCESS) {
         if (outLevel > 0)
           printf(" EGADS Error: Strip %d splined = %d (EG_blend)!\n",
@@ -3173,9 +3461,8 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
       }
 
       if (j == nstripe-1) {
-        if (closed == 1) {
-          /* closed loop so first and last curves are the same */
-          curvsU[i+(j+1)*icrvU] = curvsU[i+0*icrvU];
+        if (uclosed == 1) {
+          /* uclosed loop so first and last curves are the same */
         } else {
           /* get the u = 1 curveU[i,j+1] */
           stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
@@ -3205,16 +3492,20 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
 
       /* get the v = 1 curveV[i+1,j] on the last section */
       if ( i == nsecC0-2 ) {
-        stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
-                           -1, surfs[i+j*isrf].header[5]-1,
-                           curvsV[(i+1)+j*icrvV].header,
-                           &curvsV[(i+1)+j*icrvV].data);
+        if (vclosed == 1) {
+          /* vclosed loop so first and last curves are the same */
+        } else {
+          stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                             -1, surfs[i+j*isrf].header[5]-1,
+                             curvsV[(i+1)+j*icrvV].header,
+                             &curvsV[(i+1)+j*icrvV].data);
 
-        if (stat != EGADS_SUCCESS) {
-          if (outLevel > 0)
-            printf(" EGADS Error: Edge %d/%d isoCurve+ = %d (EG_blend)!\n",
-                   j+1, i+1, stat);
-          goto cleanup;
+          if (stat != EGADS_SUCCESS) {
+            if (outLevel > 0)
+              printf(" EGADS Error: Edge %d/%d isoCurve+ = %d (EG_blend)!\n",
+                     j+1, i+1, stat);
+            goto cleanup;
+          }
         }
       }
     }
@@ -3225,6 +3516,11 @@ EG_blendSpline(int nsex, const ego *secs, T *rc1, T *rcN, int begRC, int endRC,
     /* get the nodes of this section */
     stat = EG_getSecNodes( outLevel, inode, secsC0[i], nstripe, &nodes[i] );
     if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  if (vclosed == 1) {
+    for (j = 0; j < nstripe+1; j++)
+      nodes[nsecC0-1+j*inode] = nodes[0+j*inode];
   }
 
   stat = EGADS_SUCCESS;
@@ -3264,8 +3560,12 @@ cleanup:
 
 
 template<class T>
-int
-EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
+static int
+EG_ruledSpline(
+#ifdef EGADS_SPLINE_VELS
+               const egadsSplineVels *vels,
+#endif
+               int nsec, const ego *secs, int nstripe, int uclosed, int vclosed,
                ego **nodes_out, egSpline<T> **curvsU_out,
                egSpline<T> **curvsV_out, egSpline<T> **surfs_out)
 {
@@ -3284,7 +3584,11 @@ EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
   outLevel = EG_outLevel(secs[0]);
 
   /* get the sampling points for each stripe */
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_setSequence(vels, nsec, secs, 0, nstripe, &ncp);
+#else
   stat = EG_setSequence(nsec, secs, 0, nstripe, &ncp);
+#endif
   if (stat != EGADS_SUCCESS) goto cleanup;
 
   inode = nsec;
@@ -3312,6 +3616,27 @@ EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
 
   for (j = 0; j < nnode; j++) nodes[j] = NULL;
 
+  for (i = 0; i < nsec; i++) {
+    /* get the nodes of this section */
+    stat = EG_getSecNodes( outLevel, inode, secs[i], nstripe, &nodes[i] );
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  /* propagate equivalent nodes */
+  for (j = 0; j < nstripe+1; j++) {
+    for (i = 0; i < nsec-1; i++) {
+      if (EG_isEquivalent(nodes[i+j*inode], nodes[i+1+j*inode]) == EGADS_SUCCESS) {
+        nodes[i+1+j*inode] = nodes[i+j*inode];
+      }
+    }
+  }
+
+  if (vclosed == 1) {
+    for (j = 0; j < nstripe+1; j++)
+      nodes[0+j*inode] = nodes[nsec-1+j*inode];
+  }
+
+
   for (j = 0; j < nstripe; j++) {
     xyzs = (T *) EG_alloc(6*ncp[j].ncp*sizeof(T));
     if (xyzs == NULL)  {
@@ -3322,11 +3647,22 @@ EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
       goto cleanup;
     }
 
+    /* first construct all surfaces (skipping degenerate ones) */
     for (i = 0; i < nsec-1; i++) {
 
+      /* skip multipicty of edges */
+      stat = EG_secEquivEdge(outLevel, &secs[i], j);
+      if (stat < EGADS_SUCCESS) goto cleanup;
+      if (stat == EGADS_SUCCESS) continue;
+
       /* get the spline points between pairs of sections for the current stripe */
+#ifdef EGADS_SPLINE_VELS
+      stat = EG_secSplinePoints(vels, outLevel, i, 2, &secs[i], j, ncp, &planar, xyzs,
+                                t1, tN);
+#else
       stat = EG_secSplinePoints(outLevel, i, 2, &secs[i], j, ncp, &planar, xyzs,
                                 t1, tN);
+#endif
       if (stat != EGADS_SUCCESS) goto cleanup;
 
       /* get the BSpline surface */
@@ -3355,23 +3691,33 @@ EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
         EG_tecplotSpline(surfs[i+j*isrf].header, surfs[i+j*isrf].data, filename);
       }
 #endif
+    }
 
-      /* get the u = 0 curveU[i,j] */
-      stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
-                         0, -1,
-                         curvsU[i+j*icrvU].header, &curvsU[i+j*icrvU].data);
+    /* construct the curves from the surfaces */
+    for (i = 0; i < nsec-1; i++) {
 
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Edge %d/%d isoCurve- = %d (EG_ruled)!\n",
-                 j+1, i+1, stat);
-        goto cleanup;
+      if (surfs[i+j*isrf].data == NULL) continue;
+
+      if ((nodes[i+j*inode] == nodes[i+1+j*inode]) ||
+          (nodes[i+j*inode] == nodes[0  +j*inode] && i == nsec-2 && vclosed == 1)) {
+        /* degenerate or periodic and degenerate */
+      } else {
+        /* get the u = 0 curveU[i,j] */
+        stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                           0, -1,
+                           curvsU[i+j*icrvU].header, &curvsU[i+j*icrvU].data);
+
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Edge %d/%d isoCurve- = %d (EG_ruled)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
       }
 
       if (j == nstripe-1) {
-        if (closed == 1) {
-          /* closed loop so first and last curves are the same */
-          curvsU[i+(j+1)*icrvU] = curvsU[i+0*icrvU];
+        if (uclosed == 1 || nodes[i+(j+1)*inode] == nodes[i+1+(j+1)*inode]) {
+          /* uclosed loop so first and last curves are the same, or the end is degenerate */
         } else {
           /* get the u = 1 curveU[i,j+1] */
           stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
@@ -3400,28 +3746,26 @@ EG_ruledSpline(int nsec, const ego *secs, int nstripe, int closed,
         goto cleanup;
       }
 
-      /* get the v = 1 curveV[i+1,j] on the last section */
-      if ( i == nsec-2 ) {
-        stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
-                           -1, surfs[i+j*isrf].header[5]-1,
-                           curvsV[(i+1)+j*icrvV].header,
-                           &curvsV[(i+1)+j*icrvV].data);
+      /* get the v = 1 curveV[i+1,j] on the last section, or if the next section is NULL */
+      if (i == nsec-2 || surfs[MIN((i+1),nsec-2)+j*isrf].data == NULL) {
+        if (vclosed == 1 && i == nsec-2) {
+          /* first and last section is the same to create uclosed geometry */
+        } else {
+          stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                             -1, surfs[i+j*isrf].header[5]-1,
+                             curvsV[(i+1)+j*icrvV].header,
+                             &curvsV[(i+1)+j*icrvV].data);
 
-        if (stat != EGADS_SUCCESS) {
-          if (outLevel > 0)
-            printf(" EGADS Error: Edge %d/%d isoCurve+ = %d (EG_ruled)!\n",
-                   j+1, i+1, stat);
-          goto cleanup;
+          if (stat != EGADS_SUCCESS) {
+            if (outLevel > 0)
+              printf(" EGADS Error: Edge %d/%d isoCurve+ = %d (EG_ruled)!\n",
+                     j+1, i+1, stat);
+            goto cleanup;
+          }
         }
       }
     }
     EG_free(xyzs); xyzs = NULL;
-  }
-
-  for (i = 0; i < nsec; i++) {
-    /* get the nodes of this section */
-    stat = EG_getSecNodes( outLevel, inode, secs[i], nstripe, &nodes[i] );
-    if (stat != EGADS_SUCCESS) goto cleanup;
   }
 
   stat = EGADS_SUCCESS;
@@ -3446,15 +3790,14 @@ cleanup:
 }
 
 
-int
-EG_splineGeom(int nsec, const ego *secs, int nstripe, int closed, int ncap,
-              int te, int tip, ego *nodes, egSpline<double> *splcurvsU,
+static int
+EG_splineGeom(int nsec, const ego *secs, int nstripe, int uclosed, int vclosed,
+              int ncap, int te, int tip, ego *nodes, egSpline<double> *splcurvsU,
               egSpline<double> *splcurvsV, egSpline<double> *splsurfs,
               int *ncurvV_out, ego **edgesU_out, ego **edgesV_out,
-              int *nface_out, ego **faces_out,
-              objStack *stack)
+              int *nface_out, ego **faces_out, objStack *stack)
 {
-  int    i, j, n, outLevel, stat;
+  int    i, j, n, outLevel, stat, degenSurf = 0;
   int    ncurvU=0, ncurvV=0, nface=0, inode, icrvU, icrvV, isrf;
   int    esens[4], lsens[1] = {SFORWARD};
   double data[18], ts[2];
@@ -3537,95 +3880,162 @@ EG_splineGeom(int nsec, const ego *secs, int nstripe, int closed, int ncap,
 
   /* construct ego geometry from spline information */
   for (j = 0; j < nstripe; j++) {
+    degenSurf = 0;
     for (i = 0; i < nsec-1; i++) {
 
-      stat = EG_makeGeometry(context, SURFACE, BSPLINE, NULL,
-                             splsurfs[i+j*isrf].header, splsurfs[i+j*isrf].data,
-                             &surfs[i+j*isrf]);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Surface %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
-                 j+1, i+1, stat);
+      if (splsurfs[i+j*isrf].data != NULL) {
+
+        stat = EG_makeGeometry(context, SURFACE, BSPLINE, NULL,
+                               splsurfs[i+j*isrf].header, splsurfs[i+j*isrf].data,
+                               &surfs[i+j*isrf]);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Surface %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
+                   j+1, i+1, stat);
 #ifdef SPLINE_TECPLOT_DEBUG
-        char filename[42];
-        sprintf(filename, "spline_%dx%d_fail.dat", i,j);
-        EG_tecplotSpline(splsurfs[i+j*isrf].header, splsurfs[i+j*isrf].data,
-                         filename);
+          char filename[42];
+          sprintf(filename, "spline_%dx%d_fail.dat", i,j);
+          EG_tecplotSpline(splsurfs[i+j*isrf].header, splsurfs[i+j*isrf].data,
+                           filename);
 #endif
-        goto cleanup;
+          goto cleanup;
+        }
+        stat = EG_stackPush(stack, surfs[i+j*isrf]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
       }
-      stat = EG_stackPush(stack, surfs[i+j*isrf]);
-      if (stat != EGADS_SUCCESS) goto cleanup;
 
-      /* make the curve that spans the sections */
-      stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
-                             splcurvsU[i+j*icrvU].header,
-                             splcurvsU[i+j*icrvU].data, &curvsU[i+j*icrvU]);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Curve %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
-                 j+1, i+1, stat);
-        goto cleanup;
+      /*-------------------------*/
+      /*      curvsU[i,j]        */
+      /*-------------------------*/
+
+      if (splcurvsU[i+j*icrvU].data == NULL) {
+
+        /* degenerate EDGE */
+        n = 1;
+        nds[0] = nodes[i+  j*inode];
+
+        /* make the edge on the u-constant curve */
+        stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE, ts, n,
+                               nds, NULL, &edgesU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Degenerate Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
+        stat = EG_stackPush(stack, edgesU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+
+      } else {
+
+        /* make the curve that spans the sections */
+        stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
+                               splcurvsU[i+j*icrvU].header,
+                               splcurvsU[i+j*icrvU].data, &curvsU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Curve %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
+        stat = EG_stackPush(stack, curvsU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+
+        n = 2;
+        nds[0] = nodes[i+  j*inode];
+        nds[1] = nodes[i+1+j*inode];
+
+        /* make the edge on the u-constant curve */
+        stat = EG_makeTopology(context, curvsU[i+j*isrf], EDGE, TWONODE, ts, n,
+                               nds, NULL, &edgesU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
+        stat = EG_stackPush(stack, edgesU[i+j*icrvU]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
       }
-      stat = EG_stackPush(stack, curvsU[i+j*icrvU]);
-      if (stat != EGADS_SUCCESS) goto cleanup;
 
-      n = 2;
-      nds[0] = nodes[i+  j*inode];
-      nds[1] = nodes[i+1+j*inode];
-
-      /* make the edge on the u-constant curve */
-      stat = EG_makeTopology(context, curvsU[i+j*isrf], EDGE, TWONODE, ts, n,
-                             nds, NULL, &edgesU[i+j*icrvU]);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
-                 j+1, i+1, stat);
-        goto cleanup;
-      }
-      stat = EG_stackPush(stack, edgesU[i+j*icrvU]);
-      if (stat != EGADS_SUCCESS) goto cleanup;
+      /*-------------------------*/
+      /*      curvsU[i,j+1]      */
+      /*-------------------------*/
 
       if (j == nstripe-1) {
-        if (closed == 1) {
-          /* closed loop so first and last curves are the same */
-          curvsU[i+(j+1)*icrvU] = curvsU[i+0*icrvU];
+        if (uclosed == 1) {
+          /* uclosed loop so first and last curves are the same */
           edgesU[i+(j+1)*icrvU] = edgesU[i+0*icrvU];
         } else {
-          /* make the last curve that spans the sections */
-          stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
-                                 splcurvsU[i+(j+1)*icrvU].header,
-                                 splcurvsU[i+(j+1)*icrvU].data,
-                                 &curvsU[i+(j+1)*icrvU]);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: Edge %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
-                     j+1, i+1, stat);
-            goto cleanup;
-          }
-          stat = EG_stackPush(stack, curvsU[i+(j+1)*icrvU]);
-          if (stat != EGADS_SUCCESS) goto cleanup;
 
-          n = 2;
-          nds[0] = nodes[i  +(j+1)*inode];
-          nds[1] = nodes[i+1+(j+1)*inode];
+          if (splcurvsU[i+(j+1)*icrvU].data == NULL) {
 
-          /* make the edge on the curve */
-          stat = EG_makeTopology(context, curvsU[i+(j+1)*icrvU], EDGE, TWONODE,
-                                 ts, n, nds, NULL, &edgesU[i+(j+1)*icrvU]);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
-                     j+1, i+1, stat);
-            goto cleanup;
+            /* degenerate EDGE */
+            n = 1;
+            nds[0] = nodes[i  +(j+1)*inode];
+
+            /* make the edge on the curve */
+            stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE,
+                                   ts, n, nds, NULL, &edgesU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf(" EGADS Error: Degnerate Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                       j+1, i+1, stat);
+              goto cleanup;
+            }
+            stat = EG_stackPush(stack, edgesU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) goto cleanup;
+
+          } else {
+            /* make the last curve that spans the sections */
+            stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
+                                   splcurvsU[i+(j+1)*icrvU].header,
+                                   splcurvsU[i+(j+1)*icrvU].data,
+                                   &curvsU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf(" EGADS Error: Edge %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
+                       j+1, i+1, stat);
+              goto cleanup;
+            }
+            stat = EG_stackPush(stack, curvsU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) goto cleanup;
+
+            n = 2;
+            nds[0] = nodes[i  +(j+1)*inode];
+            nds[1] = nodes[i+1+(j+1)*inode];
+
+            /* make the edge on the curve */
+            stat = EG_makeTopology(context, curvsU[i+(j+1)*icrvU], EDGE, TWONODE,
+                                   ts, n, nds, NULL, &edgesU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) {
+              if (outLevel > 0)
+                printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                       j+1, i+1, stat);
+              goto cleanup;
+            }
+            stat = EG_stackPush(stack, edgesU[i+(j+1)*icrvU]);
+            if (stat != EGADS_SUCCESS) goto cleanup;
           }
-          stat = EG_stackPush(stack, edgesU[i+(j+1)*icrvU]);
-          if (stat != EGADS_SUCCESS) goto cleanup;
         }
       }
 
+      if (splsurfs[i+j*isrf].data == NULL) {
+        /* degenerate surface: copy the edge from the previous surface */
+        edgesV[(i+1)+j*icrvV] = edgesV[i+j*icrvV];
+        if (vclosed && i == nsec-2) {
+          edgesV[0+j*icrvV] = edgesV[i+j*icrvV];
+        }
+        degenSurf++;
+        continue;
+      }
+
+      /*-------------------------*/
+      /*      curvsV[i,j]        */
+      /*-------------------------*/
+
       /* don't make v constant curves on the TE surface tips */
-      if ( !((j == te) && (i == 0     ) && (tip & 1)) ) {
+      if ( !((j == te) && (i == 0) && (tip & 1)) ) {
         /* make the curve on the current section/stripe */
         stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
                                splcurvsV[i+j*icrvV].header,
@@ -3653,7 +4063,7 @@ EG_splineGeom(int nsec, const ego *secs, int nstripe, int closed, int ncap,
                      j+1, i+1, stat);
             goto cleanup;
           }
-        } else if (nstripe == 1 && closed == 1) {
+        } else if (nstripe == 1 && uclosed == 1) {
           n = 1;
           nds[0] = nodes[i+ j   *inode];
 
@@ -3685,65 +4095,126 @@ EG_splineGeom(int nsec, const ego *secs, int nstripe, int closed, int ncap,
         if (stat != EGADS_SUCCESS) goto cleanup;
       }
 
+      /*-------------------------*/
+      /*      curvsV[i+1,j]      */
+      /*-------------------------*/
+
       if ( !((j == te) && (i == nsec-2) && (tip & 2)) ) {
         /* make the curve on the last section/stripe */
-        if ( i == nsec-2 ) {
-          stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
-                                 splcurvsV[(i+1)+j*icrvV].header,
-                                 splcurvsV[(i+1)+j*icrvV].data,
-                                   &curvsV[(i+1)+j*icrvV]);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: Edge %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
-                     j+1, i+1, stat);
-            goto cleanup;
-          }
-          stat = EG_stackPush(stack, curvsV[(i+1)+j*icrvV]);
-          if (stat != EGADS_SUCCESS) goto cleanup;
-
-          if (secs[i+1]->oclass == NODE) {
-            n = 1;
-            nds[0] = nodes[i+1+j*inode];
-
-            /* make the DEGENERATE edge on the node */
-            stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE, ts, n,
-                                   nds, NULL, &edgesV[(i+1)+j*icrvV]);
-            if (stat != EGADS_SUCCESS) {
-              if (outLevel > 0)
-                printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
-                       j+1, i+1, stat);
-              goto cleanup;
-            }
-          } else if (nstripe == 1 && closed == 1) {
-            n = 1;
-            nds[0] = nodes[i+1+ j   *inode];
-
-            /* make the ONENODE edge on the curve */
-            stat = EG_makeTopology(context, curvsV[(i+1)+j*icrvV], EDGE, ONENODE,
-                                   ts, n, nds, NULL, &edgesV[(i+1)+j*icrvV]);
-            if (stat != EGADS_SUCCESS) {
-              if (outLevel > 0)
-                printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
-                       j+1, i+1, stat);
-              goto cleanup;
-            }
+        if (i == nsec-2 || splsurfs[MIN((i+1),nsec-2)+j*isrf].data == NULL) {
+          if (vclosed == 1 && i == nsec-2) {
+            /* first and last sections are repeated to close the geometry */
+            edgesV[(i+1)+j*icrvV] = edgesV[0+j*icrvV];
           } else {
-            n = 2;
-            nds[0] = nodes[i+1+ j   *inode];
-            nds[1] = nodes[i+1+(j+1)*inode];
-
-            /* make the TWONODE edge on the curve */
-            stat = EG_makeTopology(context, curvsV[(i+1)+j*icrvV], EDGE, TWONODE,
-                                   ts, n, nds, NULL, &edgesV[(i+1)+j*icrvV]);
+            stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
+                                   splcurvsV[(i+1)+j*icrvV].header,
+                                   splcurvsV[(i+1)+j*icrvV].data,
+                                   &curvsV[(i+1)+j*icrvV]);
             if (stat != EGADS_SUCCESS) {
               if (outLevel > 0)
-                printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                printf(" EGADS Error: Edge %d/%d EG_makeGeometry = %d (EG_splineGeom)!\n",
                        j+1, i+1, stat);
               goto cleanup;
             }
+            stat = EG_stackPush(stack, curvsV[(i+1)+j*icrvV]);
+            if (stat != EGADS_SUCCESS) goto cleanup;
+
+            if (secs[i+1]->oclass == NODE) {
+              n = 1;
+              nds[0] = nodes[i+1+j*inode];
+
+              /* make the DEGENERATE edge on the node */
+              stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE, ts, n,
+                                     nds, NULL, &edgesV[(i+1)+j*icrvV]);
+              if (stat != EGADS_SUCCESS) {
+                if (outLevel > 0)
+                  printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                         j+1, i+1, stat);
+                goto cleanup;
+              }
+            } else if (nstripe == 1 && uclosed == 1) {
+              n = 1;
+              nds[0] = nodes[i+1+ j   *inode];
+
+              /* make the ONENODE edge on the curve */
+              stat = EG_makeTopology(context, curvsV[(i+1)+j*icrvV], EDGE, ONENODE,
+                                     ts, n, nds, NULL, &edgesV[(i+1)+j*icrvV]);
+              if (stat != EGADS_SUCCESS) {
+                if (outLevel > 0)
+                  printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                         j+1, i+1, stat);
+                goto cleanup;
+              }
+            } else {
+              n = 2;
+              nds[0] = nodes[i+1+ j   *inode];
+              nds[1] = nodes[i+1+(j+1)*inode];
+
+              /* make the TWONODE edge on the curve */
+              stat = EG_makeTopology(context, curvsV[(i+1)+j*icrvV], EDGE, TWONODE,
+                                     ts, n, nds, NULL, &edgesV[(i+1)+j*icrvV]);
+              if (stat != EGADS_SUCCESS) {
+                if (outLevel > 0)
+                  printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                         j+1, i+1, stat);
+                goto cleanup;
+              }
+            }
+            stat = EG_stackPush(stack, edgesV[(i+1)+j*icrvV]);
+            if (stat != EGADS_SUCCESS) goto cleanup;
           }
-          stat = EG_stackPush(stack, edgesV[(i+1)+j*icrvV]);
+        }
+      }
+    }
+
+    if (degenSurf > 0) {
+      if (degenSurf == nsec-1) {
+        i = nsec-2;
+        int esens;
+        /* all surfaces are degenerate, use the edge from the first section */
+        stat = EG_getSecEdge(outLevel, secs[0], j, &ref, &esens);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        if (ref->oclass != EDGE) {
+          stat = EGADS_TOPOERR;
+          if (outLevel > 0)
+            printf(" EGADS Error: Stripe %d section 1 is not and Edge (EG_splineGeom)!\n",
+                   j+1);
+          goto cleanup;
+        }
+        egadsEdge *pedge = (egadsEdge *) ref->blind;
+
+        if (esens >= SFORWARD) {
+          nds[0] = nodes[i+1+ j   *inode];
+          nds[1] = nodes[i+1+(j+1)*inode];
+        } else {
+          nds[0] = nodes[i+1+(j+1)*inode];
+          nds[1] = nodes[i+1+ j   *inode];
+        }
+        n = 2;
+
+        /* make the TWONODE edge on the curve */
+        stat = EG_makeTopology(context, pedge->curve, EDGE, TWONODE,
+                               pedge->trange, n, nds, NULL, &edgesV[(i+1)+j*icrvV]);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Edge %d/%d EG_makeTopology = %d (EG_splineGeom)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
+        stat = EG_stackPush(stack, edgesV[(i+1)+j*icrvV]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        
+        if (esens <= SREVERSE) {
+          ego edge = edgesV[(i+1)+j*icrvV];
+          stat = EG_flipObject(edge, &edgesV[(i+1)+j*icrvV]);
           if (stat != EGADS_SUCCESS) goto cleanup;
+        }
+      }
+
+      /* copy over edgesV for degenerate surfaces */
+      for (i = nsec-2; i >= 0; i--) {
+        if (splsurfs[i+j*isrf].data == NULL) {
+          edgesV[i+j*icrvV] = edgesV[(i+1)+j*icrvV];
         }
       }
     }
@@ -3791,6 +4262,8 @@ EG_splineGeom(int nsec, const ego *secs, int nstripe, int closed, int ncap,
   /* construct faces */
   for (j = 0; j < nstripe; j++) {
     for (i = 0; i < nsec-1; i++) {
+
+      if (surfs[i+j*isrf] == NULL) continue;
 
       /* skip trailing edge face here */
       if ((j == te) && (i == 0     ) && (tip & 1)) continue;
@@ -3855,9 +4328,9 @@ cleanup:
 }
 
 
-int
-EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
-                  int ncap, int te, int tip, ego *nodes,
+static int
+EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe,
+                  int uclosed, int vclosed, int ncap, int te, int tip, ego *nodes,
                   egSpline< SurrealS<1> > *splcurvsU,
                   egSpline< SurrealS<1> > *splcurvsV,
                   egSpline< SurrealS<1> > *splsurfs)
@@ -4018,10 +4491,10 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
       if (stat != EGADS_SUCCESS) goto cleanup;
 
       /* set the sensitivity for the t-range of the edge */
-      stat = EG_setGeometry_dot(edges[iedge[UMIN]], EDGE, TWONODE, NULL, ts);
+      stat = EG_setRange_dot(edges[iedge[UMIN]], EDGE, ts);
       if (stat != EGADS_SUCCESS) goto cleanup;
 
-      if (j == nstripe-1 && closed == 0) {
+      if (j == nstripe-1 && uclosed == 0) {
         /* get the curv for the u = 1 edge */
         stat = EG_getTopology(edges[iedge[UMAX]], &curv, &oclass, &mtype, data,
                               &nchldrn, &nds, &senses);
@@ -4034,7 +4507,7 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
         if (stat != EGADS_SUCCESS) goto cleanup;
 
         /* set the sensitivity for the t-range of the edge */
-        stat = EG_setGeometry_dot(edges[iedge[UMAX]], EDGE, TWONODE, NULL, ts);
+        stat = EG_setRange_dot(edges[iedge[UMAX]], EDGE, ts);
         if (stat != EGADS_SUCCESS) goto cleanup;
       }
 
@@ -4053,7 +4526,7 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
         }
 
         /* copy the last node on the section if it's open */
-        if (j == nstripe-1 && closed == 0) {
+        if (j == nstripe-1 && uclosed == 0) {
           stat = EG_copyGeometry_dot(nodes[i+(j+1)*inode], NULL, NULL, nds[1]);
           if (stat != EGADS_SUCCESS) goto cleanup;
         }
@@ -4067,12 +4540,12 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
         }
 
         /* set the sensitivity for the t-range of the edge */
-        stat = EG_setGeometry_dot(edges[iedge[VMIN]], EDGE, edges[iedge[VMIN]]->mtype, NULL, ts);
+        stat = EG_setRange_dot(edges[iedge[VMIN]], EDGE, ts);
         if (stat != EGADS_SUCCESS) goto cleanup;
       }
 
       if ( !((j == te) && (i == nsec-2) && (tip & 2)) ) {
-        if (i == nsec-2) {
+        if (i == nsec-2 && vclosed == 0) {
           /* get the curv for the v = 1 edge on the last section */
           stat = EG_getTopology(edges[iedge[VMAX]], &curv, &oclass, &mtype, data,
                                 &nchldrn, &nds, &senses);
@@ -4086,7 +4559,7 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
           }
 
           /* copy the last node on the section if it's open */
-          if (j == nstripe-1 && closed == 0) {
+          if (j == nstripe-1 && uclosed == 0) {
             stat = EG_copyGeometry_dot(nodes[i+1+(j+1)*inode], NULL, NULL,
                                        nds[1]);
             if (stat != EGADS_SUCCESS) goto cleanup;
@@ -4101,7 +4574,7 @@ EG_splineGeom_dot(ego body, int nsec, const ego *secs, int nstripe, int closed,
           }
 
           /* set the sensitivity for the t-range of the edge */
-          stat = EG_setGeometry_dot(edges[iedge[VMAX]], EDGE, edges[iedge[VMAX]]->mtype, NULL, ts);
+          stat = EG_setRange_dot(edges[iedge[VMAX]], EDGE, ts);
           if (stat != EGADS_SUCCESS) goto cleanup;
         }
       }
@@ -4118,6 +4591,1039 @@ cleanup:
 
   return stat;
 }
+
+
+template<class T>
+static int
+EG_blendNodeSpline(
+#ifdef EGADS_SPLINE_VELS
+               const egadsSplineVels *vels,
+#endif
+               int nsex, const ego *secs, int vclosed,
+               int *nsecC0_out, ego **secsC0_out,
+               ego **nodes_out, egSpline<T> **curvsU_out)
+{
+  int    stat = EGADS_SUCCESS;
+  int    i, j, k, n, jj, outLevel;
+  int    fixed, nsecC0=0, ncurvU=0;
+  int    nsec, rite, left, *vdata=NULL;
+  int    *vdataTE=NULL, *aggC0=NULL;
+  T      *xyzs=NULL, *vknot=NULL, *vknotC0=NULL, *vknotTE=NULL, max2;
+  T      dx, dy;
+  T      d2xdt2L, d2ydt2L, d2zdt2L, d2sdt2L, d2xdt2R, d2ydt2R, d2zdt2R, d2sdt2R;
+  ego    *nodes=NULL, *secsC0=NULL;
+  egSpline<T> *curvsU=NULL;
+#ifdef BLEND_SPLIT_CONSTRUCTION
+  int nC0, iC0;
+#else
+  egSpline<T> blendcurve;
+#endif
+
+  *nsecC0_out = 0;
+  *secsC0_out = NULL;
+  *nodes_out  = NULL;
+  *curvsU_out = NULL;
+
+  outLevel = EG_outLevel(secs[0]);
+  fixed    = EG_fixedKnots(secs[0]);
+
+  nsec = nsex;
+  if (nsec < 0) nsec = -nsec;
+
+  /* set the knots in the loft direction */
+  vknot   = (T *)   EG_alloc(  nsec*sizeof(T));
+  vdata   = (int *) EG_alloc(  nsec*sizeof(int));
+  vknotC0 = (T *)   EG_alloc(  nsec*sizeof(T));
+  aggC0   = (int *) EG_alloc(2*nsec*sizeof(int));
+  xyzs    = (T *)   EG_alloc(3*nsec*sizeof(T));
+  secsC0  = (ego *) EG_alloc(  nsec*sizeof(ego));
+  nodes   = (ego *) EG_alloc(  nsec*sizeof(ego));
+  if ((vknot == NULL)   || (xyzs == NULL)  || (vdata == NULL)   ||
+      (vknotC0 == NULL) || (aggC0 == NULL) || (secsC0 == NULL)  ||
+      (nodes == NULL)) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Allocation for (EG_blend)!\n");
+    stat = EGADS_MALLOC;
+    goto cleanup;
+  }
+  for (i = 0; i <   nsec; i++) secsC0[i] = NULL;
+  for (i = 0; i < 2*nsec; i++) aggC0[i]  = 0;
+
+  for (i = 0; i < nsec; i++) {
+    /* get the node of this section */
+    stat = EG_getSecNodes( outLevel, 1, secs[i], 0, &nodes[i] );
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  if (vclosed == 1) {
+    nodes[nsec-1] = nodes[0];
+  }
+
+  /* get the spline points across all sections */
+  for (i = 0; i < nsec; i++) {
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_nodeVels(vels, outLevel, i, secs, nodes[i], &xyzs[3*i]);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+#else
+    stat = EG_evaluat(nodes[j  ], NULL, &xyzs[3*i]);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+#endif
+  }
+
+  /* arc-length spaced */
+  for (i = 0; i < nsec; i++) vknot[i] = 0.0;
+
+  dy = 0.0;
+  for (j = 1; j < nsec; j++) {
+    dy += sqrt((xyzs[3*j  ]-xyzs[3*(j-1)  ])*
+               (xyzs[3*j  ]-xyzs[3*(j-1)  ]) +
+               (xyzs[3*j+1]-xyzs[3*(j-1)+1])*
+               (xyzs[3*j+1]-xyzs[3*(j-1)+1]) +
+               (xyzs[3*j+2]-xyzs[3*(j-1)+2])*
+               (xyzs[3*j+2]-xyzs[3*(j-1)+2]));
+  }
+  dx = 0.0;
+  for (j = 1; j < nsec; j++) {
+    dx += sqrt((xyzs[3*j  ]-xyzs[3*(j-1)  ])*
+               (xyzs[3*j  ]-xyzs[3*(j-1)  ]) +
+               (xyzs[3*j+1]-xyzs[3*(j-1)+1])*
+               (xyzs[3*j+1]-xyzs[3*(j-1)+1]) +
+               (xyzs[3*j+2]-xyzs[3*(j-1)+2])*
+               (xyzs[3*j+2]-xyzs[3*(j-1)+2]))/dy;
+    vknot[j] += dx;
+  }
+
+  for (n = j = 1; j < nsec; j++)
+    if (vknot[j] < vknot[j-1]) n++;
+
+  if ((n == 1) && (fixed == 0)) {
+    for (j = 0; j < nsec; j++) vknot[j] /= dx;
+  } else {
+    /* equally spaced */
+    for (jj = j = 0; j < nsec-1; j++)
+      if (secs[j] != secs[j+1]) jj++;
+    for (k = j = 0; j < nsec-1; j++) {
+      dy       = k;
+      vknot[j] = dy/jj;
+      if (secs[j] != secs[j+1]) k++;
+    }
+    vknot[nsec-1] = 1.;
+  }
+
+  /* always starts with the first section */
+  nsecC0    = 1;
+  secsC0[0] = secs[0];
+#ifdef BLEND_SPLIT_CONSTRUCTION
+  aggC0[0]  = 0;
+#else
+  aggC0[0]  = 1;
+#endif
+  vdata[0] = vdata[nsec-1] = 1;
+  for (j = 1; j < nsec-1; j++) {
+    if ((j < nsec-3) && (vknot[j] == vknot[j+1]) && (vknot[j] == vknot[j+2])) {
+      if ((j < nsec-4) && (vknot[j] == vknot[j+3])) {
+        printf("EG_blend: Multiplicity > 3 at %d\n", j);
+        goto cleanup;
+      }
+#ifdef DEBUG
+      printf("repeated vknot at j=%d, %d, and %d\n", j, j+1, j+2);
+#endif
+      if (nsex > 0) {
+#ifdef BLEND_SPLIT_CONSTRUCTION
+        aggC0[2*nsecC0-1] = j+1;
+        aggC0[2*nsecC0  ] = j+2;
+#else
+        aggC0[2*nsecC0-1] = j+2;
+        aggC0[2*nsecC0  ] = j+3;
+#endif
+        secsC0[nsecC0++ ] = secs[j];
+        vdata[j++] = 1;
+        vdata[j++] = 1;
+        vdata[j  ] = 1;
+      } else {
+        vdata[j++] = -3;
+        vdata[j++] =  1;
+        vdata[j  ] = +3;
+      }
+    } else if (vknot[j] == vknot[j+1]) {
+#ifdef DEBUG
+      printf("repeated vknot at j=%d and %d\n", j, j+1);
+#endif
+      vdata[j++] = -2;
+      vdata[j  ] = +2;
+    } else {
+      vdata[j  ] =  1;
+    }
+#ifdef DEBUG
+  printf("after pass 1\n");
+  for (j = 0; j < nsec; j++)
+    printf("vdata[%2d]=%2d   %lf\n", j, vdata[j], value(vknot[j]));
+#endif
+  }
+
+  /* and cap of the last section */
+#ifdef BLEND_SPLIT_CONSTRUCTION
+  aggC0[2*nsecC0-1] = nsec;
+#else
+  aggC0[2*nsecC0-1] = nsec+1;
+#endif
+  secsC0[nsecC0++ ] = secs[nsec-1];
+
+  /* for all multiplicity 2 knots, determine where the flat spot is */
+  for (j = 1; j < nsec-1; j++)
+    if ((vdata[j] == -2) && (vdata[j+1] == +2)) {
+      if (j < 2) {
+        /* flat on left */
+        vdata[j+1] = 1;
+      } else if (j > nsec-4) {
+        /* flat on right */
+        vdata[j  ] = 1;
+      } else if ((vknot[j-1] == vknot[j-2]) && (vknot[j+3] == vknot[j+2])) {
+        /* flat on both sides */
+        printf("EG_blend: C1 -- Too few sections on either side of %d and %d\n",
+               j, j+1);
+        stat = EGADS_DEGEN;
+        goto cleanup;
+      } else if (vknot[j-1] == vknot[j-2]) {
+        /* flat on left because of another multiplicity 2 too close */
+#ifdef DEBUG
+        printf("flat on left at %d and %d due to close data\n", j, j+1);
+#endif
+        vdata[j+1] = 1;
+      } else if (vknot[j+3] == vknot[j+2]) {
+        /* flat on right because of another multiplicity 2 too close */
+#ifdef DEBUG
+        printf("flat on right at %d and %d due to close data\n", j, j+1);
+#endif
+        vdata[j  ] = 1;
+      } else {
+        /* find second derivatives on both sides */
+        left = rite = 0;
+        d2xdt2L = ((xyzs[3*(j  )  ]-
+                    xyzs[3*(j-1)  ])/(vknot[j  ]-vknot[j-1])
+                -  (xyzs[3*(j-1)  ]-
+                    xyzs[3*(j-2)  ])/(vknot[j-1]-vknot[j-2]))
+                / (vknot[j  ]-vknot[j-2]);
+        d2ydt2L = ((xyzs[3*(j  )+1]-
+                    xyzs[3*(j-1)+1])/(vknot[j  ]-vknot[j-1])
+                -  (xyzs[3*(j-1)+1]-
+                    xyzs[3*(j-2)+1])/(vknot[j-1]-vknot[j-2]))
+                / (vknot[j  ]-vknot[j-2]);
+        d2zdt2L = ((xyzs[3*(j  )+2]-
+                    xyzs[3*(j-1)+2])/(vknot[j  ]-vknot[j-1])
+                -  (xyzs[3*(j-1)+2]-
+                    xyzs[3*(j-2)+2])/(vknot[j-1]-vknot[j-2]))
+                / (vknot[j  ]-vknot[j-2]);
+
+        d2xdt2R = ((xyzs[3*(j+3)  ]-
+                    xyzs[3*(j+2)  ])/(vknot[j+3]-vknot[j+2])
+                -  (xyzs[3*(j+2)  ]-
+                    xyzs[3*(j+1)  ])/(vknot[j+2]-vknot[j+1]))
+                / (vknot[j+3]-vknot[j+1]);
+        d2ydt2R = ((xyzs[3*(j+3)+1]-
+                    xyzs[3*(j+2)+1])/(vknot[j+3]-vknot[j+2])
+                -  (xyzs[3*(j+2)+1]-
+                    xyzs[3*(j+1)+1])/(vknot[j+2]-vknot[j+1]))
+                / (vknot[j+3]-vknot[j+1]);
+        d2zdt2R = ((xyzs[3*(j+3)+2]-
+                    xyzs[3*(j+2)+2])/(vknot[j+3]-vknot[j+2])
+                -  (xyzs[3*(j+2)+2]-
+                    xyzs[3*(j+1)+2])/(vknot[j+2]-vknot[j+1]))
+                / (vknot[j+3]-vknot[j+1]);
+
+        d2sdt2L = d2xdt2L*d2xdt2L + d2ydt2L*d2ydt2L + d2zdt2L*d2zdt2L;
+        d2sdt2R = d2xdt2R*d2xdt2R + d2ydt2R*d2ydt2R + d2zdt2R*d2zdt2R;
+        max2    = fabs(d2sdt2L);
+        if (max2 < fabs(d2sdt2R)) max2 = fabs(d2sdt2R);
+        if (max2 == 0.0) {
+          left++;
+        } else if (fabs(d2sdt2L-d2sdt2R)/max2 < 1.e-6) {
+          left++;
+        } else if (d2sdt2L > d2sdt2R) {
+          rite++;
+        } else {
+          left++;
+        }
+
+        if (rite > left) {
+          /* flat on right because left curvature is smaller */
+#ifdef DEBUG
+          printf("flat on right %d %d\n", left, rite);
+#endif
+          vdata[j  ] = 1;
+        } else {
+          /* flat on left because right curvture is smaller  */
+#ifdef DEBUG
+          printf("flat on left %d %d\n", left, rite);
+#endif
+          vdata[j+1] = 1;
+        }
+      }
+      j++;
+    }
+#ifdef DEBUG
+  printf("after pass 2\n");
+  for (j = 0; j < nsec; j++)
+    printf("vdata[%2d]=%2d\n", j, vdata[j]);
+#endif
+
+
+#ifdef BLEND_SPLIT_CONSTRUCTION
+  for (iC0 = 0; iC0 < nsecC0-1; iC0++) {
+    nC0 = aggC0[2*iC0+1]-aggC0[2*iC0];
+
+    /* normalize the knots based on the C0 sections */
+    dy = vknot[aggC0[2*iC0+1]-1]-vknot[aggC0[2*iC0]];
+    for (i = 0; i < nC0; i++) {
+      vknotC0[i] = (vknot[i+aggC0[2*iC0]] - vknot[aggC0[2*iC0]])/dy;
+    }
+
+    for (j = 0; j < nstripe; j++) {
+      xyzs = (T *) EG_alloc(3*(ncp[j].ncp+2)*nC0*sizeof(T));
+      if (xyzs == NULL) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Allocation for %dX%d points (EG_blend)!\n",
+                 ncp[j].ncp, nC0);
+        stat = EGADS_MALLOC;
+        goto cleanup;
+      }
+      t1 = &xyzs[3* ncp[j].ncp   *nC0];
+      tN = &xyzs[3*(ncp[j].ncp+1)*nC0];
+
+      /* get the spline points between the two C0 sections for the current stripe */
+      stat = EG_secSplinePoints(outLevel, nC0, &secs[aggC0[2*iC0]], j, ncp,
+                                &planar, xyzs, t1, tN);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      /* index now based on the C0 sections */
+      i = iC0;
+
+#ifdef SPLINE_TECPLOT_DEBUG
+      {
+        char filename[42];
+        sprintf(filename, "blendSplinePoints_%d.dat", j);
+        EG_tecplotSplinePoints(ncp[j].ncp, nC0, xyzs, filename);
+      }
+#endif
+
+      if (nC0 == 2 && iC0 > 0 && iC0 < nsecC0-2 ) {
+        /* single ruled spline */
+        if ((planar == 1) || (ncp[j].ncp == 3)) {
+          stat = EG_spline2dAppr<T>(1, ncp[j].ncp, 2, xyzs, ncp[j].knots, NULL,
+                                    NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+                                    1.e-8, surfs[i+j*isrf].header,
+                                    &surfs[i+j*isrf].data);
+        } else {
+          stat = EG_spline2dAppr<T>(1, ncp[j].ncp, 2, xyzs, ncp[j].knots, NULL,
+                                    NULL, t1, tN, NULL, NULL, NULL, NULL,
+                                    1.e-8, surfs[i+j*isrf].header,
+                                    &surfs[i+j*isrf].data);
+        }
+      } else {
+
+        if (planar == 0) {
+          sides[0] = t1;
+          sides[2] = tN;
+        } else {
+          sides[0] = NULL;
+          sides[2] = NULL;
+        }
+
+        sides[1] = iC0 == 0 ? rc1 : NULL;
+        sides[3] = iC0 == nsecC0-2 ? rcN : NULL;
+
+        /* get the BSpline surface */
+        stat = EG_loft2spline(outLevel, vknotC0, &vdata[aggC0[2*iC0]],
+                              sides, &ncp[j], nC0, xyzs, 1.e-8,
+                              surfs[i+j*isrf].header, &surfs[i+j*isrf].data);
+      }
+      EG_free(xyzs); xyzs = NULL;
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Strip %d splined = %d (EG_blend)!\n", j+1, stat);
+        goto cleanup;
+      }
+
+#ifdef SPLINE_TECPLOT_DEBUG
+      {
+        char filename[42];
+        sprintf(filename, "blendSpline_%dx%d.dat", i,j);
+        EG_tecplotSpline(surfs[i+j*isrf].header, surfs[i+j*isrf].data, filename);
+      }
+#endif
+
+      /* get the u = 0 curveU[i,j] */
+      stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                         0, -1,
+                         curvsU[i+j*icrvU].header, &curvsU[i+j*icrvU].data);
+
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Edge %d/%d isoCurve- = %d (EG_blend)!\n",
+                 j+1, i+1, stat);
+        goto cleanup;
+      }
+
+      if (j == nstripe-1) {
+        if (uclosed == 1) {
+          /* uclosed loop so first and last curves are the same */
+        } else {
+          /* get the u = 1 curveU[i,j+1] */
+          stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                             surfs[i+j*isrf].header[2]-1, -1,
+                             curvsU[i+(j+1)*icrvU].header,
+                             &curvsU[i+(j+1)*icrvU].data);
+
+          if (stat != EGADS_SUCCESS) {
+            if (outLevel > 0)
+              printf(" EGADS Error: Edge %d/%d isoCurve- = %d (EG_blend)!\n",
+                     j+1, i+1, stat);
+            goto cleanup;
+          }
+        }
+      }
+
+      /* get the v = 0 curveV[i,j] */
+      stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                         -1, 0,
+                         curvsV[i+j*icrvV].header, &curvsV[i+j*icrvV].data);
+
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Edge %d/%d isoCurve- = %d (EG_blend)!\n",
+                 j+1, i+1, stat);
+        goto cleanup;
+      }
+
+      /* get the v = 1 curveV[i+1,j] on the last section */
+      if ( i == nsecC0-2 ) {
+        stat = EG_isoCurve(surfs[i+j*isrf].header, surfs[i+j*isrf].data,
+                           -1, surfs[i+j*isrf].header[5]-1,
+                           curvsV[(i+1)+j*icrvV].header,
+                           &curvsV[(i+1)+j*icrvV].data);
+
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Edge %d/%d isoCurve+ = %d (EG_blend)!\n",
+                   j+1, i+1, stat);
+          goto cleanup;
+        }
+      }
+    }
+  }
+
+#else
+
+  /* get the BSpline curve */
+  stat = EG_spline1dFit( 1, nsec, xyzs,
+                         vknot, 1.e-8, blendcurve.header,
+                         &blendcurve.data );
+  EG_free(xyzs); xyzs = NULL;
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Curve spline = %d (EG_blend)!\n", stat);
+    goto cleanup;
+  }
+
+
+  ncurvU = nsecC0-1;
+
+  nodes  = (ego*)EG_reall( nodes, nsecC0 *sizeof(ego));
+  curvsU = new egSpline<T>[ncurvU];
+  if ((nodes == NULL) || (curvsU == NULL)) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Allocation (EG_blend)!\n");
+    stat = EGADS_MALLOC;
+    goto cleanup;
+  }
+
+  /* get nodes for C0 sections */
+  for (i = 0; i < nsecC0; i++) {
+    /* get the node of this section */
+    stat = EG_getSecNodes( outLevel, 1, secsC0[i], 0, &nodes[i] );
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  if (vclosed == 1) {
+    nodes[nsecC0-1] = nodes[0];
+  }
+
+  /* make curves */
+  for (i = 0; i < nsecC0-1; i++) {
+
+    /* get the sub-BSpline curve */
+    stat = EG_subSpline1d(blendcurve.header, blendcurve.data,
+                          aggC0[2*i], aggC0[2*i+1],
+                          curvsU[i].header, &curvsU[i].data);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: subSpline1d = %d (EG_blend)!\n",
+               stat);
+      goto cleanup;
+    }
+  }
+#endif
+
+  stat = EGADS_SUCCESS;
+
+cleanup:
+  /* clean up all of our temps */
+  EG_free(aggC0);
+  EG_free(vknot);
+  EG_free(vknotC0);
+  EG_free(vknotTE);
+  EG_free(vdata);
+  EG_free(vdataTE);
+  EG_free(xyzs);
+
+  if (stat != EGADS_SUCCESS) {
+    EG_free(secsC0);
+    EG_free(nodes);
+    delete [] curvsU;
+  } else {
+    *nsecC0_out = nsecC0;
+    *secsC0_out = secsC0;
+    *nodes_out = nodes;
+    *curvsU_out = curvsU;
+  }
+
+  return stat;
+}
+
+
+template<class T>
+static int
+EG_ruledNodeSpline(
+#ifdef EGADS_SPLINE_VELS
+               const egadsSplineVels *vels,
+#endif
+               int nsec, const ego *secs, int vclosed,
+               ego **nodes_out, egSpline<T> **curvsU_out)
+{
+  int    i, outLevel, stat;
+  int    nnode=0, ncurvU=0;
+  ego    *nodes=NULL;
+  egSpline<T> *curvsU=NULL;
+
+  *nodes_out  = NULL;
+  *curvsU_out = NULL;
+
+  outLevel = EG_outLevel(secs[0]);
+
+  nnode  = nsec;
+  ncurvU = nsec-1;
+
+  /* make a nodes, curves, and surfaces */
+  nodes = (ego*)EG_alloc( nnode *sizeof(ego));
+  curvsU = new egSpline<T>[ncurvU];
+  if ((nodes == NULL) || (curvsU == NULL)) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Allocation (EG_ruled)!\n");
+    stat = EGADS_MALLOC;
+    goto cleanup;
+  }
+
+  for (i = 0; i < nsec; i++) {
+    /* get the node of this section */
+    stat = EG_getSecNodes( outLevel, 1, secs[i], 0, &nodes[i] );
+    if (stat != EGADS_SUCCESS) goto cleanup;
+  }
+
+  if (vclosed == 1) {
+    nodes[0] = nodes[nsec-1];
+  }
+
+  /* first construct all surfaces (skipping degenerate ones) */
+  for (i = 0; i < nsec-1; i++) {
+
+    /* skip multipicty of nodes */
+    stat = EG_isEquivalent(nodes[i], nodes[i+1]);
+    if (stat < EGADS_SUCCESS) goto cleanup;
+    if (stat == EGADS_SUCCESS) {
+      nodes[i+1] = nodes[i];
+      continue;
+    }
+
+    /* create the spline data */
+    curvsU[i].header[0] = 0; /* Bit flag */
+    curvsU[i].header[1] = 1; /* Degree */
+    curvsU[i].header[2] = 2; /* nCP */
+    curvsU[i].header[3] = 4; /* nKnots */
+
+    curvsU[i].data = (T*)EG_alloc((4+3*2)*sizeof(T));
+    if (curvsU[i].data == NULL) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Allocation (EG_ruled)!\n");
+      stat = EGADS_MALLOC;
+      goto cleanup;
+    }
+
+    curvsU[i].data[0] = 0; /* first knot points */
+    curvsU[i].data[1] = 0;
+
+    curvsU[i].data[2] = 1; /* last knot points */
+    curvsU[i].data[3] = 1;
+
+    /* evaluate the node coordinates */
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_nodeVels(vels, outLevel, i  , secs, nodes[i  ], curvsU[i].data+4);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_nodeVels(vels, outLevel, i+1, secs, nodes[i+1], curvsU[i].data+7);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+#else
+    stat = EG_evaluat(nodes[i  ], NULL, curvsU[i].data+4);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    stat = EG_evaluat(nodes[i+1], NULL, curvsU[i].data+7);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+#endif
+  }
+
+  stat = EGADS_SUCCESS;
+
+cleanup:
+  /* clean up all of our temps */
+  if (stat != EGADS_SUCCESS) {
+    EG_free(nodes);
+    delete [] curvsU;
+  } else {
+    *nodes_out  = nodes;
+    *curvsU_out = curvsU;
+  }
+
+  return stat;
+}
+
+
+static int
+EG_splineNodeGeom(int nsec, const ego *secs, int vclosed,
+                  ego *nodes, egSpline<double> *splcurvsU,
+                  ego **edgesU_out, objStack *stack)
+{
+  int    i, n, outLevel, stat;
+  int    ncurvU=0;
+  double ts[2];
+  ego    context, nds[2];
+  ego    *curvsU=NULL;
+  ego    *edgesU=NULL;
+
+  *edgesU_out = NULL;
+
+  /* Geometric entities are laid out as follows
+   *
+   *  sec[i+1]  nodes[i+1]
+   *              |
+   *              |
+   *              |
+   *  curvsU[i]   |   v
+   *              |   ^
+   *              |   |
+   *              |   +--> u
+   *              |
+   *  sec[i]    nodes[i]
+   *
+   */
+
+  outLevel = EG_outLevel(secs[0]);
+  context  = EG_context(secs[0]);
+  if (context == NULL) return EGADS_NOTCNTX;
+
+  ncurvU = nsec-1;
+
+  curvsU = (ego *) EG_alloc(ncurvU*sizeof(ego));
+  edgesU = (ego *) EG_alloc(ncurvU*sizeof(ego));
+  if ((curvsU == NULL) ||
+      (edgesU == NULL)) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Allocation (EG_splineNodeGeom)!\n");
+    stat = EGADS_MALLOC;
+    goto cleanup;
+  }
+
+  for (i = 0; i < ncurvU; i++) {
+    curvsU[i] = NULL;
+    edgesU[i] = NULL;
+  }
+
+  ts[0] = 0.0;
+  ts[1] = 1.0;
+
+  /* construct ego geometry from spline information */
+  for (i = 0; i < nsec-1; i++) {
+
+    /*-------------------------*/
+    /*      curvsU[i]          */
+    /*-------------------------*/
+
+    /* make the curve that spans the sections */
+    stat = EG_makeGeometry(context, CURVE, BSPLINE, NULL,
+                           splcurvsU[i].header,
+                           splcurvsU[i].data, &curvsU[i]);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Curve %d EG_makeGeometry = %d (EG_splineNodeGeom)!\n",
+               i+1, stat);
+      goto cleanup;
+    }
+    stat = EG_stackPush(stack, curvsU[i]);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    n = 2;
+    nds[0] = nodes[i  ];
+    nds[1] = nodes[i+1];
+
+    /* make the edge on the u-constant curve */
+    stat = EG_makeTopology(context, curvsU[i], EDGE, TWONODE, ts, n,
+                           nds, NULL, &edgesU[i]);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Edge %d EG_makeTopology = %d (EG_splineNodeGeom)!\n",
+               i+1, stat);
+      goto cleanup;
+    }
+    stat = EG_stackPush(stack, edgesU[i]);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+    ncurvU++;
+  }
+
+  /* set outputs */
+  *edgesU_out = edgesU; edgesU = NULL;
+
+  stat = EGADS_SUCCESS;
+
+cleanup:
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: exit with status = %d (EG_splineNodeGeom)!\n", stat);
+  }
+
+  /* clean up all of our temps */
+  EG_free(edgesU);
+  EG_free(curvsU);
+
+  return stat;
+}
+
+
+static int
+EG_splineNodeGeom_dot(ego body, int nsec, const ego *secs,
+                      ego *nodes, egSpline< SurrealS<1> > *splcurvsU)
+{
+  int    i, outLevel, stat, oclass, mtype;
+  int    nchldrn, nedge, icurvU;
+  int    *senses;
+  SurrealS<1> ts[2] = {0, 1};
+  double data[4];
+  ego    curv, loop, ref;
+  ego    *chldrn, *nds, *edges;
+
+  outLevel = EG_outLevel(body);
+
+  /* clear any old sensitivities */
+  stat = EG_setGeometry_dot(body, BODY, 0, NULL, NULL, NULL);
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: getTopology = %d (EG_splineNodeGeom_dot)!\n", stat);
+    goto cleanup;
+  }
+
+  /* get the loop */
+  stat = EG_getTopology(body, &ref, &oclass, &mtype, data, &nchldrn, &chldrn,
+                        &senses);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+  if (mtype != WIREBODY) {
+    if (outLevel > 0)
+      printf(" EGADS Error: body is not a WIREBODY (EG_splineNodeGeom_dot)!\n");
+    goto cleanup;
+  }
+
+  /* get the edges from the loop */
+  loop = chldrn[0];
+  stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &nedge, &edges,
+                        &senses);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+
+  icurvU = 0;
+  for (i = 0; i < nsec-1; i++) {
+
+    if (splcurvsU[i].data == NULL) continue;
+
+    /* get the curv and nodes for the u = 0 edge */
+    stat = EG_getTopology(edges[icurvU], &curv, &oclass, &mtype, data,
+                          &nchldrn, &nds, &senses);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* set the sensitivity for the curve */
+    stat = EG_setGeometry_dot(curv, CURVE, BSPLINE,
+                              splcurvsU[icurvU].header,
+                              splcurvsU[icurvU].data);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* set the sensitivity for the t-range of the edge */
+    stat = EG_setRange_dot(edges[icurvU], EDGE, ts);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    /* copy over node sensitivities */
+    stat = EG_copyGeometry_dot(nodes[i], NULL, NULL, nds[0]);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    if (icurvU == nedge-1) {
+      stat = EG_copyGeometry_dot(nodes[i+1], NULL, NULL, nds[1]);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+    }
+
+    icurvU++;
+  }
+
+  stat = EGADS_SUCCESS;
+
+cleanup:
+  if (stat != EGADS_SUCCESS) {
+    if (outLevel > 0)
+      printf(" EGADS Error: status = %d (EG_splineNodeGeom_dot)!\n", stat);
+  }
+
+  return stat;
+}
+
+
+static int
+EG_checkSections(int nsec, const ego *secs, const char *func,
+                 int &nstripe, int &ncap, int &bodyType, int &planar,
+                 int &uclosed, int &vclosed, int &allNodes)
+{
+  int    i, j, k, jj, n, stat, oclass, mtype, outLevel;
+  int    *senses=NULL;
+  double data[18];
+  ego    context, loop, ref, geom, loopBeg=NULL, loopEnd=NULL;
+  ego    *chldrn, *edges;
+
+  outLevel = EG_outLevel(secs[0]);
+  context  = EG_context(secs[0]);
+
+  /* check for excess multiplicity */
+  for (n = i = 0; i < nsec-1; i++) {
+    if (EG_isEquivalent(secs[i], secs[i+1]) != EGADS_SUCCESS) {
+      n = 0;
+    }
+    n++;
+    if (n > 3) {
+      printf(" EGADS Error:: Section %d has multiplicity > 3 (%s)\n", i, func);
+      return EGADS_TOPOCNT;
+    }
+    if (n > 2 && (i == 0 || i == nsec-2)) {
+      printf(" EGADS Error:: Section %d has multiplicity > 2 (%s)\n", i, func);
+      return EGADS_TOPOCNT;
+    }
+  }
+
+  /* look at the input and check to see if OK */
+  uclosed = 1;
+  bodyType = SOLIDBODY;
+  ncap = nstripe = vclosed = planar = 0;
+  allNodes = 1;
+
+  /* first check if all sections are Nodes */
+  for (i = 0; i < nsec; i++) {
+    if (secs[i] == NULL) {
+      if (outLevel > 0)
+        printf(" EGADS Error: NULL Section Object %d (%s)!\n", i+1, func);
+      return EGADS_NULLOBJ;
+    }
+    if (secs[i]->magicnumber != MAGIC) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d is not an EGO (%s)!\n", i+1, func);
+      return EGADS_NOTOBJ;
+    }
+    if (secs[i]->blind == NULL) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d has no data (%s)!\n", i+1, func);
+      return EGADS_NODATA;
+    }
+    if (EG_context(secs[i]) != context) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d Context Mismatch (%s)!\n", i+1, func);
+      return EGADS_MIXCNTX;
+    }
+    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
+                          &senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d getTopology = %d (%s)!\n",
+               i+1, stat, func);
+      return stat;
+    }
+
+    loop = NULL;
+    if (oclass == FACE) {
+      allNodes = 0;
+    } else if (oclass == LOOP) {
+      loop = secs[i];
+    } else if (oclass == BODY) {
+      if (secs[i]->mtype == WIREBODY) {
+        loop = chldrn[0];
+        if ((i == 0) || (i == nsec-1)) bodyType = SHEETBODY;
+      } else {
+        allNodes = 0;
+      }
+    } else if (oclass != NODE){
+      allNodes = 0;
+    }
+
+    if (loop == NULL) continue;
+    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
+                          &senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d Loop getTopology = %d (%s)!\n",
+               i+1, stat, func);
+      return stat;
+    }
+    if (mtype != DEGENERATE) allNodes = 0;
+  }
+
+  if (allNodes == 1) {
+    /* check if closed in v-direction */
+    if (EG_isEquivalent(secs[0], secs[nsec-1]) == EGADS_SUCCESS) {
+      vclosed = 1;
+      ncap = 0;
+    }
+    bodyType = WIREBODY;
+    return EGADS_SUCCESS;
+  }
+
+  /* at least one section has edges, check for consistency */
+  for (i = 0; i < nsec; i++) {
+    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
+                          &senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d getTopology = %d (%s)!\n",
+               i+1, stat, func);
+      return stat;
+    }
+    if (oclass == NODE) {
+      if ((i != 0) && (i != nsec-1)) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Section %d is Node and not Bound (%s)!\n",
+                 i+1, func);
+        return EGADS_NOTTOPO;
+      }
+      loop = NULL;
+    } else if (oclass == FACE) {
+      if (n != 1) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Section %d is Face with %d Loops (%s)!\n",
+                 i+1, n, func);
+        return EGADS_TOPOERR;
+      }
+      loop = chldrn[0];
+      if ((i == 0) || (i == nsec-1)) ncap++;
+    } else if (oclass == BODY) {
+      if (secs[i]->mtype == WIREBODY) {
+        loop = chldrn[0];
+        if ((i == 0) || (i == nsec-1)) bodyType = SHEETBODY;
+      } else if (secs[i]->mtype == FACEBODY) {
+
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &n, &chldrn,
+                              &senses);
+        if (n != 1 || stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: Section %d is FaceBody with %d Loops (%s)!\n",
+                   i+1, n, func);
+          return EGADS_TOPOERR;
+        }
+        loop = chldrn[0];
+        if ((i == 0) || (i == nsec-1)) ncap++;
+      } else {
+        if (outLevel > 0)
+          printf(" EGADS Error: Section %d is Not a WireBody or FaceBody (%s)!\n",
+                 i+1, func);
+        return EGADS_NOTTOPO;
+      }
+    } else if (oclass == LOOP) {
+      loop = secs[i];
+      if ((i == 0) || (i == nsec-1)) bodyType = SHEETBODY;
+    } else {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d is Not a Loop (%s)!\n", i+1, func);
+      return EGADS_NOTTOPO;
+    }
+
+    if (loop == NULL) continue;
+    if (i == 0     ) loopBeg = loop;
+    if (i == nsec-1) loopEnd = loop;
+    if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
+    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
+                          &senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Section %d Loop getTopology = %d (%s)!\n",
+               i+1, stat, func);
+      return stat;
+    }
+    if (mtype == OPEN) { uclosed = 0; bodyType = SHEETBODY; }
+    for (n = j = 0; j < jj; j++) {
+      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
+                            &senses);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Section %d Edge %d getTopo = %d (%s)!\n",
+                 i+1, j+1, stat, func);
+        return stat;
+      }
+      if (mtype != DEGENERATE) n++;
+    }
+    if (nstripe == 0) {
+      nstripe = n;
+    } else {
+      if (n != nstripe) {
+        if (outLevel > 0)
+          printf(" EGADS Error: Section %d has %d Edges -- prev = %d (%s)!\n",
+                 i+1, n, nstripe, func);
+        return EGADS_TOPOERR;
+      }
+    }
+  }
+  if (nstripe == 0) {
+    if (outLevel > 0)
+      printf(" EGADS Error: Zero Edges found (%s)!\n", func);
+    return EGADS_TOPOERR;
+  }
+  if (uclosed == 0) ncap = 0;
+
+  /* check if closed in v-direction */
+  if ((loopBeg != NULL) && (loopEnd != NULL) &&
+      (EG_isEquivalent(loopBeg, loopEnd) == EGADS_SUCCESS)) {
+    vclosed = 1;
+    ncap = 0;
+  }
+  if ((uclosed == 1) && (vclosed == 1)) bodyType = SOLIDBODY;
+
+  return EGADS_SUCCESS;
+}
+
+
+static int
+EG_uniqueSections(int nsec_in, const ego *secs_in,
+                  int &nsec, ego **secs)
+{
+  int i;
+  *secs = (ego*)EG_alloc(nsec_in*sizeof(ego));
+  if (*secs == NULL) return EGADS_MALLOC;
+
+  /* get the unique sections */
+  nsec = 0;
+  for (i = 0; i < nsec_in-1; i++) {
+    if (EG_isEquivalent(secs_in[i], secs_in[i+1]) == EGADS_SUCCESS) continue;
+    (*secs)[nsec++] = secs_in[i];
+  }
+  if (EG_isEquivalent(secs_in[nsec_in-2], secs_in[nsec_in-1]) != EGADS_SUCCESS)
+    (*secs)[nsec++] = secs_in[nsec_in-1];
+
+  return EGADS_SUCCESS;
+}
+
 } // namespace
 
 
@@ -4126,16 +5632,16 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
                                     /*@null@*/ double *rcN, ego *result)
 {
   typedef double T;
-  int    i, j, k, n, m, jj, mm, outLevel, stat, nstripe, ncap, cap, ntip;
-  int    oclass, mtype, attrint, te, deg, iknotc, header[4], vknotN;
-  int    solid, closed, tip, nface=0, icrvU, icrvV, ncurvV=0, isrf=0, inode=0;
+  int    i, j, k, n, m, mm, outLevel, stat, nstripe, ncap, cap, ntip;
+  int    oclass, mtype, attrint, te, deg, iknotc, header[4], vknotN, inode=0;
+  int    bodyType, uclosed, vclosed, allNodes, tip, nface=0, icrvU, icrvV, ncurvV=0, isrf=0;
   int    *senses, planar, *csens=NULL, tsens[8], lsens[1] = {SFORWARD};
   int    nsec, nsecC0, nedge, begRC, endRC, tips[2], tipsec[2], bstrp[2];
   double data[MAX(18,NTIPTE+2+2*NTIPTE)], ts[2], mknot, vknot[2], *sknotv;
   double knotc[2*NTIPTE-1], rc1S[8], rcNS[8], *rc1s=NULL, *rcNs=NULL, len;
-  ego    context, surf, loop, ref, geom, shell, body;
-  ego    tedges[16], pcurvs[5], tnodes[3], tipcurv, tipnodes[2], tipedges[4];
-  ego    *chldrn=NULL, *secsC0=NULL, *nodes=NULL, *edges=NULL, *edgesU=NULL;
+  ego    context, surf, loop, ref, shell, body;
+  ego    tedges[16]={NULL}, pcurvs[5], tnodes[3], tipcurv, tipnodes[2], tipedges[4];
+  ego    *chldrn=NULL, *secsC0=NULL, *nodes=NULL, *edgesU=NULL;
   ego    *edgesV=NULL, *faces=NULL, *cedges=NULL;
   objStack    stack;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
@@ -4153,134 +5659,94 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
   context  = EG_context(secs[0]);
   if (context == NULL)               return EGADS_NOTCNTX;
 
-#if !defined(__APPLE__) && !defined(WIN32) && defined(BLEND_FPE)
+#if !defined(WIN32) && defined(BLEND_FPE)
   feenableexcept(FE_INVALID | FE_OVERFLOW | FE_DIVBYZERO);
 #endif
 
+  /* create stack for gracefully cleaning up objects */
+  stat  = EG_stackInit(&stack);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
   /* look at the input and check to see if OK */
-  begRC    = endRC  = -1;
-  solid    = closed =  1;
-  planar   = 0;
-  ncap     = 0;
-  for (nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_blend)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_blend)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_blend)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_blend)!\n", i+1);
-      return EGADS_MIXCNTX;
-    }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
+  stat = EG_checkSections(nsec, secs, "EG_blend",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_blendNodeSpline(NULL, nsex, secs, vclosed,
+                              &nsecC0, &secsC0, &nodes, &splcurvsU);
+#else
+    stat = EG_blendNodeSpline(nsex, secs, vclosed,
+                              &nsecC0, &secsC0, &nodes, &splcurvsU);
+#endif
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_blend)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_blend)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (i == 0) {
-        begRC = 0;
-        if (rc1 != NULL) begRC = 1;
-      }
-      if (i == nsec-1) {
-        endRC = 0;
-        if (rcN != NULL) endRC = 1;
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face and not Bound (EG_blend)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_blend)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-      if (ref->mtype != PLANE) planar = 1;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_blend)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if ((i == 0) || (i == nsec-1)) solid = 0;
-      loop = chldrn[0];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else if (oclass == LOOP) {
-      if ((i == 0) || (i == nsec-1)) solid = 0;
-      loop = secs[i];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_blend)!\n", i+1);
-      return EGADS_NOTTOPO;
+        printf(" EGADS Error: blendNodeSpline = %d (EG_blend)!\n", stat);
+      goto cleanup;
     }
 
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
+    stat = EG_splineNodeGeom(nsecC0, secsC0, vclosed, nodes, splcurvsU,
+                             &edgesU, &stack);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_blend)!\n",
-               i+1, stat);
-      return stat;
+        printf(" EGADS Error: splineNodeGeom = %d (EG_blend)!\n", stat);
+      goto cleanup;
     }
-    if (mtype == OPEN) closed = solid = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_blend)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype != DEGENERATE) n++;
+
+    senses = (int*)EG_alloc((nsecC0-1)*sizeof(int));
+    if (senses == NULL) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Allocation (EG_blend)!\n");
+      stat = EGADS_MALLOC;
+      goto cleanup;
     }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_blend)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
+    for (i = 0; i < nsecC0-1; i++) senses[i] = SFORWARD;
+
+    stat = EG_makeTopology(context, NULL, LOOP, vclosed == 1 ? CLOSED : OPEN, NULL,
+                           nsecC0-1, edgesU, senses, &loop);
+    EG_free(senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeTopo Loop = %d (EG_blend)!\n", stat);
+      goto cleanup;
     }
+    stat = EG_stackPush(&stack, loop);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    body = NULL;
+    stat = EG_makeTopology(context, NULL, BODY, WIREBODY, NULL, 1,
+                           &loop, NULL, &body);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeTopo WireBody = %d (EG_blend)!\n", stat);
+      if (body != NULL) EG_deleteObject(body);
+      goto cleanup;
+    }
+
+    stat = EGADS_SUCCESS;
+    *result = body;
+    goto cleanup;
   }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_blend)!\n");
-    return EGADS_TOPOERR;
+
+  /* sections with edges */
+
+  /* check end conditions */
+  begRC = endRC  = -1;
+  if (rc1 != NULL) {
+    i = 0;
+    if (secs[i]->oclass == NODE) begRC = 1; /* nose treatment */
+    else if (rc1[0] != 0       ) begRC = 2; /* tangencey */
   }
-  if (closed == 0) ncap = 0;
+  if (rcN != NULL) {
+    i = nsec-1;
+    if (secs[i]->oclass == NODE) endRC = 1; /* nose treatment */
+    else if (rcN[0] != 0       ) endRC = 2; /* tangencey */
+  }
   if (((begRC == 1) || (endRC == 1)) && (nsec <= 2)) {
     if (outLevel > 0)
       printf(" EGADS Error: nsec must be > 2 for Nose Treatment (EG_blend)!\n");
@@ -4296,7 +5762,7 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
   EG_dumpSections(nsec, secs, "EG_blend_secs.egads");
 #endif
 
-  /* extract nose treatmentment */
+  /* extract nose treatment */
   if (begRC == 1) {
     for (i = 0; i < 8; i++) {
       rc1S[i] = rc1[i];
@@ -4354,15 +5820,31 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
     rcNs = rcNS;
   }
 
+  /* extract tangency treatment */
+  if (begRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rc1S[i] = rc1[i];
+    }
+    rc1s = rc1S;
+  }
+  if (endRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rcNS[i] = rcN[i];
+    }
+    rcNs = rcNS;
+  }
+
   /* extract tip treatment */
-  if ((secs[     0]->oclass == FACE) && planar == 0 &&
+  if ((secs[     0]->oclass == FACE || secs[     0]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rc1 != NULL) && (rc1[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rc1S[i] = rc1[i];
     }
     rc1s = rc1S;
   }
-  if ((secs[nsec-1]->oclass == FACE) && planar == 0 &&
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rcN != NULL) && (rcN[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rcNS[i] = rcN[i];
@@ -4370,21 +5852,24 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
     rcNs = rcNS;
   }
 
-  /* create stack for gracefully cleaning up objects */
-  stat  = EG_stackInit(&stack);
-  if (stat != EGADS_SUCCESS) goto cleanup;
-
-  stat = EG_blendSpline<T>(nsex, secs, rc1s, rcNs, begRC, endRC,
-                           nstripe, closed, planar, &nsecC0, &secsC0,
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_blendSpline<T>(NULL, nsex, secs, rc1s, rcNs, begRC, endRC,
+                           nstripe, uclosed, vclosed, planar, &nsecC0, &secsC0,
                            &nodes, &splcurvsU, &splcurvsV, &splsurfs,
                            tip, te, tipsurfs, tipcurvs);
+#else
+  stat = EG_blendSpline<T>(nsex, secs, rc1s, rcNs, begRC, endRC,
+                           nstripe, uclosed, vclosed, planar, &nsecC0, &secsC0,
+                           &nodes, &splcurvsU, &splcurvsV, &splsurfs,
+                           tip, te, tipsurfs, tipcurvs);
+#endif
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
       printf(" EGADS Error: blendSpline = %d (EG_blend)!\n", stat);
     goto cleanup;
   }
 
-  stat = EG_splineGeom(nsecC0, secsC0, nstripe, closed, ncap, te, tip,
+  stat = EG_splineGeom(nsecC0, secsC0, nstripe, uclosed, vclosed, ncap, te, tip,
                        nodes, splcurvsU, splcurvsV, splsurfs,
                        &ncurvV, &edgesU, &edgesV, &nface, &faces, &stack);
   if (stat != EGADS_SUCCESS) {
@@ -4417,92 +5902,99 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
       if ((tip & 1) && (k == 0)) { cap++; continue; }
       if ((tip & 2) && (k == 1)) { cap++; continue; }
       i = (k == 0) ? 0 : nsecC0-1;
-      stat = EG_getTopology(secsC0[i], &ref, &oclass, &mtype, data, &n,
-                            &chldrn, &senses);
-      if ((stat == EGADS_SUCCESS) && (oclass == FACE)) {
-        /* grab the spline edges on the cap */
-        for (j = 0; j < nstripe; j++) cedges[j] = edgesV[i+j*icrvV];
-
-        if (ref->mtype == PLANE) {
-
-          /* make the loop (no need for surface with planar) */
-          stat = EG_makeTopology(context, NULL, LOOP, CLOSED, NULL, nstripe,
-                                 cedges, csens, &loop);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: makeTopo Cap %d Planar Loop = %d (EG_blend)!\n",
-                     cap, stat);
-            goto cleanup;
-          }
-
-        } else {
-
-          /* make PCurves for the loop */
-          for (j = 0; j < nstripe; j++) {
-            /* construct pcurves on the surface */
-            double eps = 1.e-7;
-            EG_tolerance(cedges[j], &eps);
-            if (eps < 1.e-7) eps = 1.e-7;
-            for (int jj = 0; jj < 2; jj++) {
-              stat = EG_otherCurve(ref, cedges[j], eps, &cedges[j+nstripe]);
-              if (stat != EGADS_SUCCESS) {
-                if (jj == 0) {
-                  eps *= 100.0;
-                  continue;
-                }
-                if (outLevel > 0)
-                  printf(" EGADS Error: %d otherCurve First = %d (EG_blend)!\n",
-                         j, stat);
-                goto cleanup;
-              }
-            }
-            stat = EG_stackPush(&stack, cedges[j+nstripe]);
-            if (stat != EGADS_SUCCESS) goto cleanup;
-          }
-
-          /* make the loop with the original surface */
-          stat = EG_makeTopology(context, ref, LOOP, CLOSED, NULL, nstripe,
-                                 cedges, csens, &loop);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: makeTopo Cap %d Loop = %d (EG_blend)!\n",
-                     cap, stat);
-            goto cleanup;
-          }
-        }
-        stat = EG_stackPush(&stack, loop);
+      stat = EG_getTopology(secsC0[i], &ref, &oclass, &mtype, data,
+                            &n, &chldrn, &senses);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+      if (oclass == BODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data,
+                              &n, &chldrn, &senses);
         if (stat != EGADS_SUCCESS) goto cleanup;
+      }
+      if (oclass != FACE) continue;
 
-        /* make the face */
-        stat = EG_makeTopology(context, ref, FACE, secsC0[i]->mtype,
-                               NULL, 1, &loop, csens, &faces[nface-ncap+cap]);
+      /* grab the spline edges on the cap */
+      for (j = 0; j < nstripe; j++) cedges[j] = edgesV[i+j*icrvV];
+
+      if (ref->mtype == PLANE) {
+
+        /* make the loop (no need for surface with planar) */
+        stat = EG_makeTopology(context, NULL, LOOP, CLOSED, NULL, nstripe,
+                               cedges, csens, &loop);
         if (stat != EGADS_SUCCESS) {
           if (outLevel > 0)
-            printf(" EGADS Error: makeTopo Cap %d Face = %d (EG_blend)!\n",
+            printf(" EGADS Error: makeTopo Cap %d Planar Loop = %d (EG_blend)!\n",
                    cap, stat);
           goto cleanup;
         }
-        stat = EG_stackPush(&stack, faces[nface-ncap+cap]);
-        if (stat != EGADS_SUCCESS) goto cleanup;
 
-        EG_attributeDup(secs[i], faces[nface-ncap+cap]);
+      } else {
 
-        attrint = -(k+3);
-        stat    = EG_attributeAdd(faces[nface-ncap+cap], ".blendStrip", ATTRINT,
-                                  1, &attrint, NULL, NULL);
-        if (stat != EGADS_SUCCESS)
+        /* make PCurves for the loop */
+        for (j = 0; j < nstripe; j++) {
+          /* construct pcurves on the surface */
+          double eps = 1.e-7;
+          EG_tolerance(cedges[j], &eps);
+          if (eps < 1.e-7) eps = 1.e-7;
+          for (int jj = 0; jj < 2; jj++) {
+            stat = EG_otherCurve(ref, cedges[j], eps, &cedges[j+nstripe]);
+            if (stat != EGADS_SUCCESS) {
+              if (jj == 0) {
+                eps *= 100.0;
+                continue;
+              }
+              if (outLevel > 0)
+                printf(" EGADS Error: %d otherCurve First = %d (EG_blend)!\n",
+                       j, stat);
+              goto cleanup;
+            }
+          }
+          stat = EG_stackPush(&stack, cedges[j+nstripe]);
+          if (stat != EGADS_SUCCESS) goto cleanup;
+        }
+
+        /* make the loop with the original surface */
+        stat = EG_makeTopology(context, ref, LOOP, CLOSED, NULL, nstripe,
+                               cedges, csens, &loop);
+        if (stat != EGADS_SUCCESS) {
           if (outLevel > 0)
-            printf(" EGADS Warning: Strip %d blendStrip = %d (EG_blend)!\n",
-                   attrint, stat);
-        cap++;
+            printf(" EGADS Error: makeTopo Cap %d Loop = %d (EG_blend)!\n",
+                   cap, stat);
+          goto cleanup;
+        }
       }
+      stat = EG_stackPush(&stack, loop);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      /* make the face */
+      stat = EG_makeTopology(context, ref, FACE, mtype,
+                             NULL, 1, &loop, lsens, &faces[nface-ncap+cap]);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: makeTopo Cap %d Face = %d (EG_blend)!\n",
+                 cap, stat);
+        goto cleanup;
+      }
+      stat = EG_stackPush(&stack, faces[nface-ncap+cap]);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      EG_attributeDup(secsC0[i], faces[nface-ncap+cap]);
+
+      attrint = -(k+3);
+      stat    = EG_attributeAdd(faces[nface-ncap+cap], ".blendStrip", ATTRINT,
+                                1, &attrint, NULL, NULL);
+      if (stat != EGADS_SUCCESS)
+        if (outLevel > 0)
+          printf(" EGADS Warning: Strip %d blendStrip = %d (EG_blend)!\n",
+                 attrint, stat);
+      cap++;
     }
   }
 
   /* extract special wing tip treatment */
   cap  = 0;
   ntip = 0;
-  if ((secs[0]->oclass == FACE) && (planar == 0) &&
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rc1 != NULL) && (rc1[0] == 0.0)) {
     bstrp[0]  = -1;
     tips[0]   = nface-ncap+cap;
@@ -4511,9 +6003,11 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
     ntip++;
   }
 
-  if ((secs[0]->oclass == FACE) && (planar == 0) && (ntip == 0)) cap++;
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) &&
+      (planar == 0) && (ntip == 0)) cap++;
 
-  if ((secs[nsec-1]->oclass == FACE) && (planar == 0) &&
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rcN != NULL) && (rcN[0] == 0.0)) {
     bstrp[1]  = -2;
     tips[1]   = nface-ncap+cap;
@@ -4530,8 +6024,8 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
     tsens[1] = SFORWARD;
     tsens[2] = SFORWARD;
     tsens[3] = SFORWARD;
-    tsens[4] = SFORWARD;
-    tsens[5] = SFORWARD;
+    tsens[4] = SREVERSE;
+    tsens[5] = SREVERSE;
 
     data[0] =  0.0; data[1] =  0.0;
     data[2] =  0.0; data[3] =  1.0; /* u == 0 */
@@ -4620,23 +6114,24 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
       } else {
         nedge = 5;
 
-        for (n = j = 0; j < nstripe; j++, n++) {
-          if (j == te) continue;
-          tedges[n]   = cedges[j];
-          tedges[5+n] = pcurvs[n];
+        /* grab edges depending on which one is the te edge */
+        int js[3][2] = {{1,2}, {2,0}, {0,1}};
+        n = 0; j = js[te][0];
+        tedges[n]   = cedges[j];
+        tedges[5+n] = pcurvs[n];
 
-          if (j+1 != te) {
-            n++;
-            stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE, ts, 1,
-                                   &nodes[tipsec[k]+(j+1)*inode], NULL,
-                                   &tedges[n]);
-            if (stat != EGADS_SUCCESS) goto cleanup;
-            stat = EG_stackPush(&stack, tedges[n]);
-            if (stat != EGADS_SUCCESS) goto cleanup;
+        n = 1; j = js[te][0];
+        stat = EG_makeTopology(context, NULL, EDGE, DEGENERATE, ts, 1,
+                               &nodes[tipsec[k]+(j+1)*inode], NULL,
+                               &tedges[n]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        stat = EG_stackPush(&stack, tedges[n]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+        tedges[5+n] = pcurvs[n];
 
-            tedges[5+n] = pcurvs[n];
-          }
-        }
+        n = 2; j = js[te][1];
+        tedges[n]   = cedges[j];
+        tedges[5+n] = pcurvs[n];
 
         /* get the midpoint knot value for the TE tip curve */
         mknot = tipcurvs[k].data[tipcurvs[k].header[3]/2];
@@ -4678,7 +6173,7 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
 
         data[0] = data[1] = 0.0;
         data[2] = data[3] = mknot; /* v == 0 */
-        data[4] = 0.   ; data[5] = 0.0;
+        data[4] = 0.0;   data[5] = 0.0;
         data[6] = mknot; data[7] = 0.0;
         stat = EG_makeGeometry(context, PCURVE, BSPLINE, NULL, header, data,
                                &pcurvs[3]);
@@ -4700,7 +6195,7 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
         data[0] = data[1] = mknot;
         data[2] = data[3] = 1.0; /* v == 0 */
         data[4] = mknot; data[5] = 0.0;
-        data[6] = 1.0  ; data[7] = 0.0;
+        data[6] = 1.0;   data[7] = 0.0;
         stat = EG_makeGeometry(context, PCURVE, BSPLINE, NULL, header, data,
                                &pcurvs[4]);
         if (stat != EGADS_SUCCESS) goto cleanup;
@@ -4981,7 +6476,7 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
             data[NTIPTE+2 + 2*n  ] = 0.0;
             /* knots from the surface (reversed) */
             data[NTIPTE+2 + 2*n+1] = sknotv[NTIPTE-1-n+vknotN];
-             
+
           }
           stat = EG_makeGeometry(context, PCURVE, BSPLINE, NULL, header, data,
                                  &tedges[k+2+nedge]);
@@ -5051,35 +6546,47 @@ EG_blend(int nsex, const ego *secs, /*@null@*/ double *rc1,
     }
   }
 
-  /* put all the faces together */
-  stat = EG_makeTopology(context, NULL, SHELL, solid == 1 ? CLOSED : OPEN,
-      NULL, nface, faces, NULL, &shell);
-  if (stat != EGADS_SUCCESS) {
-    if (outLevel > 0)
-      printf(" EGADS Error: makeTopo Shell = %d (EG_blend)!\n", stat);
-    goto cleanup;
-  }
-  stat = EG_stackPush(&stack, shell);
-  if (stat != EGADS_SUCCESS) goto cleanup;
-
-  body = NULL;
-  if (solid == 1) {
-    stat = EG_makeTopology(context, NULL, BODY, SOLIDBODY, NULL, 1,
-                           &shell, NULL, &body);
+  if (nface == 1 && bodyType == SHEETBODY) {
+    stat = EG_makeTopology(context, NULL, BODY, FACEBODY, NULL, 1,
+                           &faces[0], NULL, &body);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: makeTopo SolidBody = %d (EG_blend)!\n", stat);
+        printf(" EGADS Error: makeTopo FaceBody = %d (EG_blend)!\n", stat);
       if (body != NULL) EG_deleteObject(body);
       goto cleanup;
     }
   } else {
-    stat = EG_makeTopology(context, NULL, BODY, SHEETBODY, NULL, 1,
-                           &shell, NULL, &body);
+
+    /* put all the faces together */
+    stat = EG_makeTopology(context, NULL, SHELL, bodyType == SOLIDBODY ? CLOSED : OPEN,
+        NULL, nface, faces, NULL, &shell);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: makeTopo SheetBody = %d (EG_blend)!\n", stat);
-      if (body != NULL) EG_deleteObject(body);
+        printf(" EGADS Error: makeTopo Shell = %d (EG_blend)!\n", stat);
       goto cleanup;
+    }
+    stat = EG_stackPush(&stack, shell);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    body = NULL;
+    if (bodyType == SOLIDBODY) {
+      stat = EG_makeTopology(context, NULL, BODY, SOLIDBODY, NULL, 1,
+                             &shell, NULL, &body);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: makeTopo SolidBody = %d (EG_blend)!\n", stat);
+        if (body != NULL) EG_deleteObject(body);
+        goto cleanup;
+      }
+    } else {
+      stat = EG_makeTopology(context, NULL, BODY, SHEETBODY, NULL, 1,
+                             &shell, NULL, &body);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: makeTopo SheetBody = %d (EG_blend)!\n", stat);
+        if (body != NULL) EG_deleteObject(body);
+        goto cleanup;
+      }
     }
   }
 
@@ -5125,14 +6632,14 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
              /*@null@*/ double *rcN, /*@null@*/ double *rcN_dot)
 {
   typedef SurrealS<1> T;
-  int    i, j, k, n, jj, kk, outLevel, stat, nstripe, ncap, cap, oclass, mtype;
-  int    closed, tip, te, isrf, inode, nface=0, nloop, nedge, data_dot;
-  int    *senses, planar, nchldrn=0, ntip;
-  int    nsec, nsecC0, begRC, endRC, tips[2], tipsec[2], iedge[2], found;
+  int    i, j, k, kk, outLevel, stat, nstripe, ncap, cap, oclass, mtype;
+  int    bodyType, uclosed, vclosed, allNodes, tip, te, isrf, inode, nface=0, nloop, nedge;
+  int    *senses, planar, nchldrn=0, ntip, data_dot;
+  int    nsec, nsecC0, begRC, endRC, tips[2]={0,0}, tipsec[2]={0,0}, iedge[2], found;
   double data[18], trange[2];
   T      rc1S[8], rcNS[8], *rc1s=NULL, *rcNs=NULL, result[3], mknot, ts[2], len;
-  ego    context, surf, sec_surf, cap_surf, curv, loop, ref, geom, shell;
-  ego    *chldrn, *secsC0, *nodes, *edges, *faces=NULL, *loops, *tedges, *nds;
+  ego    context, surf, sec_surf, cap_surf, curv, ref, shell, *tedges, *nds;
+  ego    *chldrn, *secsC0=NULL, *nodes=NULL, *edges, *faces=NULL, *loops;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
   egSpline<T> tipsurfs[2], tipcurvs[4];
 #ifdef PCURVE_SENSITIVITY
@@ -5153,155 +6660,64 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
   if (context == NULL)               return EGADS_NOTCNTX;
 
   /* look at the input and check to see if OK */
+  stat = EG_checkSections(nsec, secs, "EG_blend_dot",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* check data_dot */
   data_dot = 1;
-  begRC    = endRC = -1;
-  closed   = 1;
-  planar   = 0;
-  ncap     = 0;
-  tips[0]  = tips[1] = 0;
-  for (nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
+  for (i = 0; i < nsec; i++) {
+    if (EG_hasGeometry_dot(secs[i]) == EGADS_NOTFOUND) {
+      data_dot = 0;
       if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_blend_dot)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_blend_dot)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_blend_dot)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_blend_dot)!\n",
+        printf(" EGADS Error: Section %d without data_dot (EG_blend_dot)!\n",
                i+1);
-      return EGADS_MIXCNTX;
     }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
+  }
+
+  if (data_dot == 0) return EGADS_NODATA;
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_blendNodeSpline(NULL, nsex, secs, vclosed,
+                              &nsecC0, &secsC0, &nodes, &splcurvsU);
+#else
+    stat = EG_blendNodeSpline(nsex, secs, vclosed, &nodes, &splcurvsU);
+#endif
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_blend_dot)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_blend_dot)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (i == 0) {
-        begRC = 0;
-        if (rc1 != NULL) begRC = 1;
-      }
-      if (i == nsec-1) {
-        endRC = 0;
-        if (rcN != NULL) endRC = 1;
-      }
-      if (EG_hasGeometry_dot(secs[i]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node without data_dot (EG_blend_dot)!\n",
-                 i+1);
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face and not Bound (EG_blend_dot)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_blend_dot)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      if (EG_hasGeometry_dot(ref) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Surface no data_dot (EG_blend_dot)!\n",
-                 i+1);
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-      if (ref->mtype != PLANE) planar = 1;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_blend_dot)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (EG_hasGeometry_dot(secs[i]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d WireBody no data_dot (EG_blend_dot)!\n",
-                 i+1);
-      }
-      loop = chldrn[0];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else if (oclass == LOOP) {
-      loop = secs[i];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_blend_dot)!\n", i+1);
-      return EGADS_NOTTOPO;
+        printf(" EGADS Error: ruledNodeSpline = %d (EG_blend_dot)!\n", stat);
+      goto cleanup;
     }
 
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
+    stat = EG_splineNodeGeom_dot(body, nsecC0, secsC0, nodes, splcurvsU);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_blend_dot)!\n",
-               i+1, stat);
-      return stat;
+        printf(" EGADS Error: splineNodeGeom_dot = %d (EG_blend_dot)!\n", stat);
+      goto cleanup;
     }
-    if (mtype == OPEN) closed = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_blend_dot)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype == DEGENERATE) continue;
-      n++;
-      if (EG_hasGeometry_dot(edges[j]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d no data_dot (EG_blend_dot)!\n",
-                 i+1, j+1);
-      }
-    }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_blend_dot)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
-    }
+
+    stat = EGADS_SUCCESS;
+    goto cleanup;
   }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_blend_dot)!\n");
-    return EGADS_TOPOERR;
+
+  /* sections with edges */
+
+  /* check end conditions */
+  begRC = endRC  = -1;
+  if (rc1 != NULL) {
+    i = 0;
+    if (secs[i]->oclass == NODE) begRC = 1; /* nose treatment */
+    else if (rc1[0] != 0       ) begRC = 2; /* tangencey */
   }
-  if (closed == 0) ncap = 0;
+  if (rcN != NULL) {
+    i = nsec-1;
+    if (secs[i]->oclass == NODE) endRC = 1; /* nose treatment */
+    else if (rcN[0] != 0       ) endRC = 2; /* tangencey */
+  }
   if (((begRC == 1) || (endRC == 1)) && (nsec <= 2)) {
     if (outLevel > 0)
       printf(" EGADS Error: nsec must be > 2 for Nose Treatment (EG_blend_dot)!\n");
@@ -5312,8 +6728,6 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
       printf(" EGADS Error: nsec must be > 3 for 2Nose Treatment (EG_blend_dot)!\n");
     return EGADS_GEOMERR;
   }
-
-  if (data_dot == 0) return EGADS_NODATA;
 
   if ((rc1 != NULL) && (rc1_dot == NULL)) {
     if (outLevel > 0)
@@ -5331,7 +6745,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
   EG_dumpSections(nsec, secs, "EG_blend_dot_secs.egads");
 #endif
 
-  /* extract nose treatmentment */
+  /* extract nose treatment */
   if (begRC == 1) {
     for (i = 0; i < 8; i++) {
       rc1S[i].value() = rc1[i];
@@ -5391,8 +6805,25 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
     rcNs = rcNS;
   }
 
+  /* extract tangency treatment */
+  if (begRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rc1S[i].value() = rc1[i];
+      rc1S[i].deriv() = rc1_dot[i];
+    }
+    rc1s = rc1S;
+  }
+  if (endRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rcNS[i].value() = rcN[i];
+      rcNS[i].deriv() = rcN_dot[i];
+    }
+    rcNs = rcNS;
+  }
+
   /* extract tip treatment */
-  if ((secs[     0]->oclass == FACE) && planar == 0 &&
+  if ((secs[     0]->oclass == FACE || secs[     0]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rc1 != NULL) && (rc1[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rc1S[i].value() = rc1[i];
@@ -5400,7 +6831,8 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
     }
     rc1s = rc1S;
   }
-  if ((secs[nsec-1]->oclass == FACE) && planar == 0 &&
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rcN != NULL) && (rcN[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rcNS[i].value() = rcN[i];
@@ -5409,17 +6841,25 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
     rcNs = rcNS;
   }
 
-  stat = EG_blendSpline<T>(nsex, secs, rc1s, rcNs, begRC, endRC,
-                           nstripe, closed, planar, &nsecC0, &secsC0,
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_blendSpline<T>(NULL, nsex, secs, rc1s, rcNs, begRC, endRC,
+                           nstripe, uclosed, vclosed, planar, &nsecC0, &secsC0,
                            &nodes, &splcurvsU, &splcurvsV, &splsurfs,
                            tip, te, tipsurfs, tipcurvs);
+#else
+  stat = EG_blendSpline<T>(nsex, secs, rc1s, rcNs, begRC, endRC,
+                           nstripe, uclosed, vclosed, planar, &nsecC0, &secsC0,
+                           &nodes, &splcurvsU, &splcurvsV, &splsurfs,
+                           tip, te, tipsurfs, tipcurvs);
+#endif
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
       printf(" EGADS Error: blendSpline = %d (EG_blend_dot)!\n", stat);
     goto cleanup;
   }
 
-  stat = EG_splineGeom_dot(body, nsecC0, secsC0, nstripe, closed, ncap, te, tip,
+  stat = EG_splineGeom_dot(body, nsecC0, secsC0, nstripe, uclosed, vclosed,
+                           ncap, te, tip,
                            nodes, splcurvsU, splcurvsV, splsurfs);
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
@@ -5446,16 +6886,18 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
   /* extract special wing tip treatment */
   cap  = 0;
   ntip = 0;
-  if ((secs[0]->oclass == FACE) && (rc1 != NULL) && (rc1[0] == 0.0)) {
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) &&
+      (rc1 != NULL) && (rc1[0] == 0.0)) {
     tips[0]   = nface-ncap+cap;
     tipsec[0] = 0;
     cap++;
     ntip++;
   }
 
-  if ((secs[0]->oclass == FACE) && (ntip == 0)) cap++;
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) && (ntip == 0)) cap++;
 
-  if ((secs[nsec-1]->oclass == FACE) && (rcN != NULL) && (rcN[0] == 0.0)) {
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (rcN != NULL) && (rcN[0] == 0.0)) {
     tips[1]   = nface-ncap+cap;
     tipsec[1] = nsecC0-1;
     cap++;
@@ -5468,11 +6910,15 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
       if ((tip & 1) && (k == 0)) continue;
       if ((tip & 2) && (k == 1)) continue;
       i = (k == 0) ? 0 : nsecC0-1;
-      if ((secsC0[i]->oclass != FACE)) continue;
-
       stat = EG_getTopology(secsC0[i], &sec_surf, &oclass, &mtype, data,
-                            &nloop, &loops, &senses);
+                            &nchldrn, &chldrn, &senses);
       if (stat != EGADS_SUCCESS) goto cleanup;
+      if (oclass == BODY) {
+        stat = EG_getTopology(chldrn[0], &sec_surf, &oclass, &mtype, data,
+                              &nchldrn, &chldrn, &senses);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+      }
+      if (oclass != FACE) continue;
 
       stat = EG_getTopology(faces[nface-ncap+cap], &cap_surf, &oclass, &mtype,
                             data, &nloop, &loops, &senses);
@@ -5572,7 +7018,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
         if (tedges[kk]->mtype == DEGENERATE) {
           ts[0] = 0.0;
           ts[1] = 1.0;
-          stat = EG_setGeometry_dot(tedges[kk], EDGE, tedges[kk]->mtype, NULL, ts);
+          stat = EG_setRange_dot(tedges[kk], EDGE, ts);
           if (stat != EGADS_SUCCESS) goto cleanup;
         }
       }
@@ -5669,7 +7115,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
         sdata[0] = sdata[1] = mknot;
         sdata[2] = sdata[3] = 1.0; /* v == 0 */
         sdata[4] = mknot; sdata[5] = 0.0;
-        sdata[6] = 1.0  ; sdata[7] = 0.0;
+        sdata[6] = 1.0;   sdata[7] = 0.0;
         stat = EG_setGeometry_dot(tedges[iedge[0]+nedge], PCURVE, BSPLINE,
                                   header, sdata);
         if (stat != EGADS_SUCCESS) goto cleanup;
@@ -5678,7 +7124,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
         /* set the sensitivity for the t-range of the edge */
         ts[0] = mknot;
         ts[1] = 1.0;
-        stat = EG_setGeometry_dot(tedges[iedge[0]], EDGE, TWONODE, NULL, ts);
+        stat = EG_setRange_dot(tedges[iedge[0]], EDGE, ts);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
 
@@ -5704,7 +7150,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
 
         sdata[0] = sdata[1] = 0.0;
         sdata[2] = sdata[3] = mknot; /* v == 0 */
-        sdata[4] = 0.   ; sdata[5] = 0.0;
+        sdata[4] = 0.0;   sdata[5] = 0.0;
         sdata[6] = mknot; sdata[7] = 0.0;
         stat = EG_setGeometry_dot(tedges[iedge[1]+nedge], PCURVE, BSPLINE,
                                   header, sdata);
@@ -5713,7 +7159,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
         /* set the sensitivity for the t-range of the edge */
         ts[0] = 0.0;
         ts[1] = mknot;
-        stat = EG_setGeometry_dot(tedges[iedge[1]], EDGE, TWONODE, NULL, ts);
+        stat = EG_setRange_dot(tedges[iedge[1]], EDGE, ts);
         if (stat != EGADS_SUCCESS) goto cleanup;
       }
     }
@@ -5748,7 +7194,7 @@ EG_blend_dot(ego body, int nsex, const ego *secs,
           /* set the sensitivity for the t-range of the edge */
           ts[0] = trange[0];
           ts[1] = trange[1];
-          stat = EG_setGeometry_dot(edges[kk], EDGE, edges[kk]->mtype, NULL, ts);
+          stat = EG_setRange_dot(edges[kk], EDGE, ts);
           if (stat != EGADS_SUCCESS) goto cleanup;
         }
 
@@ -5783,151 +7229,118 @@ cleanup:
 
 
 extern "C" int
-EG_ruled(int nsec, const ego *secs, ego *result)
+EG_ruled(int nsec_in, const ego *secs_in, ego *result)
 {
   typedef double T;
-  int    i, j, k, n, jj, outLevel, stat, nstripe, oclass, mtype, solid;
-  int    icrvV, ncurvV=0, nface=0;
-  int    closed, cap, ncap, *senses=NULL, *csens=NULL;
+  int    i, j, k, n, outLevel, stat, nstripe, oclass, mtype, bodyType, planar;
+  int    nsec, inode, icrvV, ncurvV=0, nface=0, degenclosed;
+  int    uclosed, vclosed, allNodes, cap, ncap, *senses=NULL, *csens=NULL, lsens[1] = {SFORWARD};
   double data[18];
-  ego    context, loop, ref, geom, shell, body;
-  ego    *chldrn, *edges;
+  ego    context, loop, ref, shell, body;
+  ego    *secs=NULL, *chldrn;
   ego    *nodes=NULL, *edgesU=NULL, *edgesV=NULL, *faces=NULL, *cedges=NULL;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
   objStack    stack;
 
   *result = NULL;
-  if (nsec <= 1)                     return EGADS_EMPTY;
-  if (secs == NULL)                  return EGADS_NULLOBJ;
-  if (secs[0] == NULL)               return EGADS_NULLOBJ;
-  if (secs[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (EG_sameThread(secs[0]))        return EGADS_CNTXTHRD;
-  outLevel = EG_outLevel(secs[0]);
-  context  = EG_context(secs[0]);
-  if (context == NULL)               return EGADS_NOTCNTX;
-
-  /* look at the input and check to see if OK */
-  closed = solid = 1;
-  for (ncap = nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_ruled)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_ruled)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_ruled)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_ruled)!\n", i+1);
-      return EGADS_MIXCNTX;
-    }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_ruled)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_ruled)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_ruled)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_ruled)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) solid = 0;
-    } else if (oclass == LOOP) {
-      loop = secs[i];
-      if ((i == 0) || (i == nsec-1)) solid = 0;
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_ruled)!\n", i+1);
-      return EGADS_NOTTOPO;
-    }
-
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_ruled)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (mtype == OPEN) closed = solid = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_ruled)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype != DEGENERATE) n++;
-    }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_ruled)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
-    }
-  }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_ruled)!\n");
-    return EGADS_TOPOERR;
-  }
-  if (closed == 0) ncap = 0;
-
-#ifdef DUMP_SECTIONS
-  EG_dumpSections(nsec, secs, "EG_ruled_secs.egads");
-#endif
+  if (nsec_in <= 1)                     return EGADS_EMPTY;
+  if (secs_in == NULL)                  return EGADS_NULLOBJ;
+  if (secs_in[0] == NULL)               return EGADS_NULLOBJ;
+  if (secs_in[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (EG_sameThread(secs_in[0]))        return EGADS_CNTXTHRD;
+  outLevel = EG_outLevel(secs_in[0]);
+  context  = EG_context(secs_in[0]);
+  if (context == NULL)                  return EGADS_NOTCNTX;
 
   /* create stack for gracefully cleaning up objects */
   stat  = EG_stackInit(&stack);
   if (stat != EGADS_SUCCESS) goto cleanup;
 
-  stat = EG_ruledSpline(nsec, secs, nstripe, closed, &nodes, &splcurvsU,
+  /* look at the input and check to see if OK */
+  stat = EG_checkSections(nsec_in, secs_in, "EG_ruled",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+#ifdef DUMP_SECTIONS
+  EG_dumpSections(nsec, secs, "EG_ruled_secs.egads");
+#endif
+
+  stat = EG_uniqueSections(nsec_in, secs_in, nsec, &secs);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_ruledNodeSpline(NULL, nsec, secs, vclosed, &nodes, &splcurvsU);
+#else
+    stat = EG_ruledNodeSpline(nsec, secs, vclosed, &nodes, &splcurvsU);
+#endif
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: ruledNodeSpline = %d (EG_ruled)!\n", stat);
+      goto cleanup;
+    }
+
+    stat = EG_splineNodeGeom(nsec, secs, vclosed, nodes, splcurvsU,
+                             &edgesU, &stack);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: splineNodeGeom = %d (EG_ruled)!\n", stat);
+      goto cleanup;
+    }
+
+    senses = (int*)EG_alloc((nsec-1)*sizeof(int));
+    if (senses == NULL) {
+      if (outLevel > 0)
+        printf(" EGADS Error: Allocation (EG_ruled)!\n");
+      stat = EGADS_MALLOC;
+      goto cleanup;
+    }
+    for (i = 0; i < nsec-1; i++) senses[i] = SFORWARD;
+    
+    stat = EG_makeTopology(context, NULL, LOOP, vclosed == 1 ? CLOSED : OPEN, NULL,
+                           nsec-1, edgesU, senses, &loop);
+    EG_free(senses);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeTopo Loop = %d (EG_ruled)!\n", stat);
+      goto cleanup;
+    }
+    stat = EG_stackPush(&stack, loop);
+    if (stat != EGADS_SUCCESS) goto cleanup;
+
+    body = NULL;
+    stat = EG_makeTopology(context, NULL, BODY, WIREBODY, NULL, 1,
+                           &loop, NULL, &body);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: makeTopo WireBody = %d (EG_ruled)!\n", stat);
+      if (body != NULL) EG_deleteObject(body);
+      goto cleanup;
+    }
+
+    stat = EGADS_SUCCESS;
+    *result = body;
+    goto cleanup;
+  }
+
+  /* sections with edges */
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_ruledSpline(NULL, nsec, secs, nstripe, uclosed, vclosed, &nodes, &splcurvsU,
                         &splcurvsV, &splsurfs);
+#else
+  stat = EG_ruledSpline(nsec, secs, nstripe, uclosed, vclosed, &nodes, &splcurvsU,
+                        &splcurvsV, &splsurfs);
+#endif
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
       printf(" EGADS Error: ruledSpline = %d (EG_ruled)!\n", stat);
     goto cleanup;
   }
 
-  stat = EG_splineGeom(nsec, secs, nstripe, closed, ncap, -1, 0,
+  stat = EG_splineGeom(nsec, secs, nstripe, uclosed, vclosed, ncap, -1, 0,
                        nodes, splcurvsU, splcurvsV, splsurfs,
                        &ncurvV, &edgesU, &edgesV, &nface, &faces, &stack);
   if (stat != EGADS_SUCCESS) {
@@ -5936,6 +7349,7 @@ EG_ruled(int nsec, const ego *secs, ego *result)
     goto cleanup;
   }
 
+  inode = nsec;
   icrvV = nsec;
 
   /* add cap faces if necessary */
@@ -5957,82 +7371,87 @@ EG_ruled(int nsec, const ego *secs, ego *result)
       i = (k == 0) ? 0 : nsec-1;
       stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n,
                             &chldrn, &senses);
-      if ((stat == EGADS_SUCCESS) && (oclass == FACE)) {
-
-        /* grab the spline edges on the cap */
-        for (j = 0; j < nstripe; j++) cedges[j] = edgesV[i+j*icrvV];
-
-        if (ref->mtype == PLANE) {
-
-          /* make the loop (no need for surface with planar) */
-          stat = EG_makeTopology(context, NULL, LOOP, CLOSED, NULL, nstripe,
-                                 cedges, csens, &loop);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: makeTopo Cap %d Planar Loop = %d (EG_ruled)!\n",
-                     cap, stat);
-            goto cleanup;
-          }
-
-        } else {
-
-          /* make PCurves for the loop */
-          for (j = 0; j < nstripe; j++) {
-            /* construct pcurves on the surface */
-            double eps = 1.e-7;
-            EG_tolerance(cedges[j], &eps);
-            if (eps < 1.e-7) eps = 1.e-7;
-            for (int jj = 0; jj < 2; jj++) {
-              stat = EG_otherCurve(ref, cedges[j], eps, &cedges[j+nstripe]);
-              if (stat != EGADS_SUCCESS) {
-                if (jj == 0) {
-                  eps *= 100.0;
-                  continue;
-                }
-                if (outLevel > 0)
-                  printf(" EGADS Error: %d otherCurve First = %d (EG_ruled)!\n",
-                         j, stat);
-                 goto cleanup;
-              }
-            }
-            stat = EG_stackPush(&stack, cedges[j+nstripe]);
-            if (stat != EGADS_SUCCESS) goto cleanup;
-          }
-
-          /* make the loop with the original surface */
-          stat = EG_makeTopology(context, ref, LOOP, CLOSED, NULL, nstripe,
-                                 cedges, csens, &loop);
-          if (stat != EGADS_SUCCESS) {
-            if (outLevel > 0)
-              printf(" EGADS Error: makeTopo Cap %d Loop = %d (EG_ruled)!\n",
-                     cap, stat);
-            goto cleanup;
-          }
-          for (j = nstripe; j < 2*nstripe; j++) cedges[j] = NULL;
-        }
-        stat = EG_stackPush(&stack, loop);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+      if (oclass == BODY) {
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &n,
+                              &chldrn, &senses);
         if (stat != EGADS_SUCCESS) goto cleanup;
+      }
+      if (oclass != FACE) continue;
 
-        /* make the face */
-        stat = EG_makeTopology(context, ref, FACE, secs[i]->mtype,
-                               NULL, 1, &loop, csens, &faces[nface-ncap+cap]);
+      /* grab the spline edges on the cap */
+      for (j = 0; j < nstripe; j++) cedges[j] = edgesV[i+j*icrvV];
+
+      if (ref->mtype == PLANE) {
+
+        /* make the loop (no need for surface with planar) */
+        stat = EG_makeTopology(context, NULL, LOOP, CLOSED, NULL, nstripe,
+                               cedges, csens, &loop);
         if (stat != EGADS_SUCCESS) {
           if (outLevel > 0)
-            printf(" EGADS Error: makeTopo Cap %d Face = %d (EG_ruled)!\n",
+            printf(" EGADS Error: makeTopo Cap %d Planar Loop = %d (EG_ruled)!\n",
                    cap, stat);
           goto cleanup;
         }
-        stat = EG_stackPush(&stack, faces[nface-ncap+cap]);
-        if (stat != EGADS_SUCCESS) goto cleanup;
 
-        EG_attributeDup(secs[i], faces[nface-ncap+cap]);
-        cap++;
+      } else {
+
+        /* make PCurves for the loop */
+        for (j = 0; j < nstripe; j++) {
+          /* construct pcurves on the surface */
+          double eps = 1.e-7;
+          EG_tolerance(cedges[j], &eps);
+          if (eps < 1.e-7) eps = 1.e-7;
+          for (int jj = 0; jj < 2; jj++) {
+            stat = EG_otherCurve(ref, cedges[j], eps, &cedges[j+nstripe]);
+            if (stat != EGADS_SUCCESS) {
+              if (jj == 0) {
+                eps *= 100.0;
+                continue;
+              }
+              if (outLevel > 0)
+                printf(" EGADS Error: %d otherCurve First = %d (EG_ruled)!\n",
+                       j, stat);
+              goto cleanup;
+            }
+          }
+          stat = EG_stackPush(&stack, cedges[j+nstripe]);
+          if (stat != EGADS_SUCCESS) goto cleanup;
+        }
+
+        /* make the loop with the original surface */
+        stat = EG_makeTopology(context, ref, LOOP, CLOSED, NULL, nstripe,
+                               cedges, csens, &loop);
+        if (stat != EGADS_SUCCESS) {
+          if (outLevel > 0)
+            printf(" EGADS Error: makeTopo Cap %d Loop = %d (EG_ruled)!\n",
+                   cap, stat);
+          goto cleanup;
+        }
+        for (j = nstripe; j < 2*nstripe; j++) cedges[j] = NULL;
       }
+      stat = EG_stackPush(&stack, loop);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      /* make the face */
+      stat = EG_makeTopology(context, ref, FACE, mtype,
+                             NULL, 1, &loop, lsens, &faces[nface-ncap+cap]);
+      if (stat != EGADS_SUCCESS) {
+        if (outLevel > 0)
+          printf(" EGADS Error: makeTopo Cap %d Face = %d (EG_ruled)!\n",
+                 cap, stat);
+        goto cleanup;
+      }
+      stat = EG_stackPush(&stack, faces[nface-ncap+cap]);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+
+      EG_attributeDup(secs[i], faces[nface-ncap+cap]);
+      cap++;
     }
   }
 
   body = NULL;
-  if (nface == 1) {
+  if (nface == 1 && bodyType == SHEETBODY) {
     stat = EG_makeTopology(context, NULL, BODY, FACEBODY, NULL, 1,
                            &faces[0], NULL, &body);
     if (stat != EGADS_SUCCESS) {
@@ -6042,8 +7461,27 @@ EG_ruled(int nsec, const ego *secs, ego *result)
       goto cleanup;
     }
   } else {
+
+    /* remove any degenerate (NULL) faces */
+    j = 0;
+    for (i = 0; i < nface; i++) {
+      if (faces[i] == NULL) continue;
+      faces[j++] = faces[i];
+    }
+    nface = j;
+
+    /* check if degeneracies creates a closed solid */
+    degenclosed = 1;
+    for (i = 0; i < nsec-1; i++) {
+      j = 0;
+      if (nodes[i+1+j*inode] != nodes[i+j*inode]) degenclosed = 0;
+      j = nstripe;
+      if (nodes[i+1+j*inode] != nodes[i+j*inode]) degenclosed = 0;
+    }
+    if (vclosed && degenclosed) bodyType = SOLIDBODY;
+
     /* put all the faces together */
-    stat = EG_makeTopology(context, NULL, SHELL, solid == 1 ? CLOSED : OPEN,
+    stat = EG_makeTopology(context, NULL, SHELL, bodyType == SOLIDBODY ? CLOSED : OPEN,
                            NULL, nface, faces, NULL, &shell);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
@@ -6053,7 +7491,7 @@ EG_ruled(int nsec, const ego *secs, ego *result)
     stat = EG_stackPush(&stack, shell);
     if (stat != EGADS_SUCCESS) goto cleanup;
 
-    if (solid == 1) {
+    if (bodyType == SOLIDBODY) {
       stat = EG_makeTopology(context, NULL, BODY, SOLIDBODY, NULL, 1,
                              &shell, NULL, &body);
       if (stat != EGADS_SUCCESS) {
@@ -6093,6 +7531,7 @@ cleanup:
   }
   EG_stackFree(&stack);
 
+  EG_free(secs);
   EG_free(faces);
   EG_free(edgesU);
   EG_free(edgesV);
@@ -6109,14 +7548,14 @@ cleanup:
 
 
 extern "C" int
-EG_ruled_dot(ego body, int nsec, const ego *secs)
+EG_ruled_dot(ego body, int nsec_in, const ego *secs_in)
 {
   typedef SurrealS<1> T;
-  int    i, j, k, n, jj, outLevel, stat, nstripe, oclass, mtype;
-  int    closed, data_dot, ncap, cap, nchldrn, nface, *senses;
+  int    i, k, outLevel, stat, nstripe, oclass, mtype, bodyType, planar;
+  int    nsec, uclosed, vclosed, allNodes, data_dot, ncap, cap, nchldrn, nface, *senses;
   double data[18];
-  ego    context, loop, ref, geom, shell, sec_surf, cap_surf;
-  ego    *chldrn, *nodes=NULL, *edges, *faces;
+  ego    context, ref, shell, sec_surf, cap_surf;
+  ego    *secs=NULL, *chldrn, *nodes=NULL, *faces;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
 #ifdef PCURVE_SENSITIVITY
   int    ilen, rlen, *ivec=NULL, nedge, header[4];
@@ -6124,161 +7563,82 @@ EG_ruled_dot(ego body, int nsec, const ego *secs)
   T      *svec=NULL;
 #endif
 
-  if (nsec <= 1)                     return EGADS_EMPTY;
-  if (secs == NULL)                  return EGADS_NULLOBJ;
-  if (secs[0] == NULL)               return EGADS_NULLOBJ;
-  if (secs[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (EG_sameThread(secs[0]))        return EGADS_CNTXTHRD;
-  outLevel = EG_outLevel(secs[0]);
-  context  = EG_context(secs[0]);
-  if (context == NULL)               return EGADS_NOTCNTX;
+  if (nsec_in <= 1)                     return EGADS_EMPTY;
+  if (secs_in == NULL)                  return EGADS_NULLOBJ;
+  if (secs_in[0] == NULL)               return EGADS_NULLOBJ;
+  if (secs_in[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (EG_sameThread(secs_in[0]))        return EGADS_CNTXTHRD;
+  outLevel = EG_outLevel(secs_in[0]);
+  context  = EG_context(secs_in[0]);
+  if (context == NULL)                  return EGADS_NOTCNTX;
 
-  /* check input and that it has data_dot */
+  /* look at the input and check to see if OK */
+  stat = EG_checkSections(nsec_in, secs_in, "EG_ruled_dot",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* check input has data_dot */
   data_dot = 1;
-  closed = 1;
-  for (ncap = nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
+  for (i = 0; i < nsec_in; i++) {
+    if (EG_hasGeometry_dot(secs_in[i]) == EGADS_NOTFOUND) {
+      data_dot = 0;
       if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_ruled_dot)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_ruled_dot)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_ruled_dot)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_ruled_dot)!\n",
+        printf(" EGADS Error: Section %d no data_dot (EG_ruled_dot)!\n",
                i+1);
-      return EGADS_MIXCNTX;
-    }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_ruled_dot)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_ruled_dot)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (EG_hasGeometry_dot(secs[i]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node without data_dot (EG_ruled_dot)!\n",
-                 i+1);
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_ruled_dot)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      if (EG_hasGeometry_dot(ref) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Surface no data_dot (EG_ruled_dot)!\n",
-                 i+1);
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_ruled_dot)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (EG_hasGeometry_dot(secs[i]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d WireBody no data_dot (EG_ruled_dot)!\n",
-                 i+1);
-      }
-      loop = chldrn[0];
-    } else if (oclass == LOOP) {
-      loop = secs[i];
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_ruled_dot)!\n", i+1);
-      return EGADS_NOTTOPO;
-    }
-
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_ruled_dot)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (mtype == OPEN) closed = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_ruled_dot)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype == DEGENERATE) continue;
-      n++;
-      if (EG_hasGeometry_dot(edges[j]) == EGADS_NOTFOUND) {
-        data_dot = 0;
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d no data_dot (EG_ruled_dot)!\n",
-                 i+1, j+1);
-      }
-    }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_ruled_dot)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
     }
   }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_ruled_dot)!\n");
-    return EGADS_TOPOERR;
-  }
-  if (closed == 0) ncap = 0;
 
   if (data_dot == 0) return EGADS_NODATA;
 
 #ifdef DUMP_SECTIONS
-  EG_dumpSections(nsec, secs, "EG_ruled_dot_secs.egads");
+  EG_dumpSections(nsec_in, secs_in, "EG_ruled_dot_secs.egads");
 #endif
 
-  stat = EG_ruledSpline(nsec, secs, nstripe, closed, &nodes, &splcurvsU,
+  stat = EG_uniqueSections(nsec_in, secs_in, nsec, &secs);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+#ifdef EGADS_SPLINE_VELS
+    stat = EG_ruledNodeSpline(NULL, nsec, secs, vclosed, &nodes, &splcurvsU);
+#else
+    stat = EG_ruledNodeSpline(nsec, secs, vclosed, &nodes, &splcurvsU);
+#endif
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: ruledNodeSpline = %d (EG_ruled_dot)!\n", stat);
+      goto cleanup;
+    }
+
+    stat = EG_splineNodeGeom_dot(body, nsec, secs, nodes, splcurvsU);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: splineNodeGeom_dot = %d (EG_ruled_dot)!\n", stat);
+      goto cleanup;
+    }
+
+    stat = EGADS_SUCCESS;
+    goto cleanup;
+  }
+
+  /* sections with edges */
+#ifdef EGADS_SPLINE_VELS
+  stat = EG_ruledSpline(NULL, nsec, secs, nstripe, uclosed, vclosed, &nodes, &splcurvsU,
                         &splcurvsV, &splsurfs);
+#else
+  stat = EG_ruledSpline(nsec, secs, nstripe, uclosed, vclosed, &nodes, &splcurvsU,
+                        &splcurvsV, &splsurfs);
+#endif
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
       printf(" EGADS Error: ruledSpline = %d (EG_ruled_dot)!\n", stat);
     goto cleanup;
   }
 
-  stat = EG_splineGeom_dot(body, nsec, secs, nstripe, closed, ncap, -1, 0,
-                           nodes, splcurvsU, splcurvsV, splsurfs);
+  stat = EG_splineGeom_dot(body, nsec, secs, nstripe, uclosed, vclosed, ncap,
+                           -1, 0, nodes, splcurvsU, splcurvsV, splsurfs);
   if (stat != EGADS_SUCCESS) {
      if (outLevel > 0)
        printf(" EGADS Error: splineGeom_dot = %d (EG_ruled_dot)!\n", stat);
@@ -6302,11 +7662,15 @@ EG_ruled_dot(ego body, int nsec, const ego *secs)
     cap = 0;
     for (k = 0; k < 2; k++) {
       i = (k == 0) ? 0 : nsec-1;
-      if ((secs[i]->oclass != FACE)) continue;
-
       stat = EG_getTopology(secs[i], &sec_surf, &oclass, &mtype, data,
                             &nchldrn, &chldrn, &senses);
       if (stat != EGADS_SUCCESS) goto cleanup;
+      if (oclass == BODY) {
+        stat = EG_getTopology(chldrn[0], &sec_surf, &oclass, &mtype, data,
+                              &nchldrn, &chldrn, &senses);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+      }
+      if (oclass != FACE) continue;
 
       stat = EG_getTopology(faces[nface-ncap+cap], &cap_surf, &oclass, &mtype,
                             data, &nchldrn, &chldrn, &senses);
@@ -6318,8 +7682,8 @@ EG_ruled_dot(ego body, int nsec, const ego *secs)
 #ifdef PCURVE_SENSITIVITY
       if (sec_surf->mtype != PLANE) {
         /* get the edges for the loop */
-        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nedge, &edges,
-                              &senses);
+        stat = EG_getTopology(chldrn[0], &ref, &oclass, &mtype, data, &nedge,
+                              &edges, &senses);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
         /* set P-curve sensitivities to zero (though it's not really correct
@@ -6357,6 +7721,7 @@ cleanup:
   EG_free(svec);
 #endif
 
+  EG_free(secs);
   EG_free(nodes);
   delete [] splsurfs;
   delete [] splcurvsU;
@@ -6373,19 +7738,18 @@ int EG_blend_vels( int nsex, const ego *secs,
                    /*@null@*/ const double *rc1_dot,
                    /*@null@*/ const double *rcN,
                    /*@null@*/ const double *rcN_dot,
-                   egadsSplineVels *vels_in,
-                   ego body )
+                   egadsSplineVels *vels, ego body )
 {
   typedef SurrealS<1> T;
-  int    i, j, k, n, jj, kk, outLevel, stat, nstripe, ncap, cap, oclass, mtype;
-  int    closed, tip, te, isrf, inode, nface=0, nloop, nedge;
+  int    i, j, k, jj, kk, outLevel, stat, nstripe, ncap, cap, oclass, mtype, bodyType;
+  int    uclosed, vclosed, allNodes, tip, te, isrf, inode, nface=0, nloop, nedge;
   int    *senses, planar, nchldrn=0, ntip, *ivec=NULL, ilen, rlen;
-  int    nsec, nsecC0, begRC, endRC, tips[2], tipsec[2], iedge[2], found;
+  int    nsec, nsecC0, begRC, endRC, tips[2]={0,0}, tipsec[2]={0,0}, iedge[2], found;
   double data[18], *rvec=NULL;
-  T      rc1S[8], rcNS[8], *rc1s=NULL, *rcNs=NULL, result[3], mknot, len;
+  T      rc1S[8], rcNS[8], *rc1s=NULL, *rcNs=NULL, result[3], mknot, ts[2], len;
   T      *rinfo=NULL;
-  ego    context, surf, curv, loop, ref, geom, shell, sec_surf, cap_surf;
-  ego    *chldrn, *secsC0=NULL, *nodes=NULL, *edges=NULL, *faces=NULL;
+  ego    context, surf, curv, ref, shell, sec_surf, cap_surf;
+  ego    *chldrn, *secsC0=NULL, *nodes=NULL, *faces=NULL;
   ego    *loops, *tedges, *nds;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
   egSpline<T> tipsurfs[2], tipcurvs[4];
@@ -6394,7 +7758,7 @@ int EG_blend_vels( int nsex, const ego *secs,
   if (nsec < 0) nsec = -nsec;
   if (nsec <= 1)                     return EGADS_EMPTY;
   if (secs == NULL)                  return EGADS_NULLOBJ;
-  if (vels_in == NULL)               return EGADS_NULLOBJ;
+  if (vels == NULL)                  return EGADS_NULLOBJ;
   if (secs[0] == NULL)               return EGADS_NULLOBJ;
   if (secs[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
   if (EG_sameThread(secs[0]))        return EGADS_CNTXTHRD;
@@ -6402,159 +7766,74 @@ int EG_blend_vels( int nsex, const ego *secs,
   context  = EG_context(secs[0]);
   if (context == NULL)               return EGADS_NOTCNTX;
 
-  if (vels != NULL) {
-    printf(" EGADS Error: global egadsSplineVels pointer already set!\n");
-    printf("              EG_blend_vels is not thread safe!\n");
-  }
-  /* store the global vels pointer */
-  vels = vels_in;
-
   /* look at the input and check to see if OK */
-  begRC     = endRC     = -1;
-  closed    = 1;
-  planar    = 0;
-  ncap      = 0;
-  tips[0]   = tips[1]   =  0;
-  tipsec[0] = tipsec[1] =  0;
-  for (nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_blend_vels)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_blend_vels)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_blend_vels)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_blend_vels)!\n",
-               i+1);
-      return EGADS_MIXCNTX;
-    }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
+  stat = EG_checkSections(nsec, secs, "EG_blend_vels",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+    stat = EG_blendNodeSpline(vels, nsex, secs, vclosed,
+                              &nsecC0, &secsC0, &nodes, &splcurvsU);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_blend_vels)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_blend_vels)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (i == 0) {
-        begRC = 0;
-        if (rc1 != NULL) begRC = 1;
-      }
-      if (i == nsec-1) {
-        endRC = 0;
-        if (rcN != NULL) endRC = 1;
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face and not Bound (EG_blend_vels)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_blend_vels)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-      if (ref->mtype != PLANE) planar = 1;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_blend_vels)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      loop = chldrn[0];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else if (oclass == LOOP) {
-      loop = secs[i];
-      if (EG_isPlanar(loop) != EGADS_SUCCESS) planar = 1;
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_blend_vels)!\n", i+1);
-      return EGADS_NOTTOPO;
+        printf(" EGADS Error: ruledNodeSpline = %d (EG_blend_vels)!\n", stat);
+      goto cleanup;
     }
 
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
+    stat = EG_splineNodeGeom_dot(body, nsecC0, secsC0, nodes, splcurvsU);
     if (stat != EGADS_SUCCESS) {
       if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_blend_vels)!\n",
-               i+1, stat);
-      return stat;
+        printf(" EGADS Error: splineNodeGeom_dot = %d (EG_blend_vels)!\n", stat);
+      goto cleanup;
     }
-    if (mtype == OPEN) closed = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_blend_vels)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype == DEGENERATE) continue;
-      n++;
+
+    /* remove any temporary sensitivities from the sections */
+    for (i = 0; i < nsec; i++) {
+      stat = EG_setGeometry_dot(secs[i], 0, 0, NULL, NULL);
+      if (stat != EGADS_SUCCESS) goto cleanup;
     }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_blend_vels)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
-    }
+
+    stat = EGADS_SUCCESS;
+    goto cleanup;
   }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_blend_vels)!\n");
-    return EGADS_TOPOERR;
+
+  /* sections with edges */
+
+  /* check end conditions but not data_dot*/
+  begRC = endRC  = -1;
+  if (rc1 != NULL) {
+    i = 0;
+    if (secs[i]->oclass == NODE) begRC = 1; /* nose treatment */
+    else if (rc1[0] != 0       ) begRC = 2; /* tangencey */
   }
-  if (closed == 0) ncap = 0;
+  if (rcN != NULL) {
+    i = nsec-1;
+    if (secs[i]->oclass == NODE) endRC = 1; /* nose treatment */
+    else if (rcN[0] != 0       ) endRC = 2; /* tangencey */
+  }
   if (((begRC == 1) || (endRC == 1)) && (nsec <= 2)) {
     if (outLevel > 0)
-      printf(" EGADS Error: nsec must be > 2 for Nose Treatment (EG_blend_vels)!\n");
+      printf(" EGADS Error: nsec must be > 2 for Nose Treatment (EG_blend_dot)!\n");
     return EGADS_GEOMERR;
   }
   if ((begRC == 1) && (endRC == 1) && (nsec <= 3)) {
     if (outLevel > 0)
-      printf(" EGADS Error: nsec must be > 3 for 2Nose Treatment (EG_blend_vels)!\n");
+      printf(" EGADS Error: nsec must be > 3 for 2Nose Treatment (EG_blend_dot)!\n");
     return EGADS_GEOMERR;
   }
 
   if ((rc1 != NULL) && (rc1_dot == NULL)) {
     if (outLevel > 0)
-      printf(" EGADS Error: rc1 != NULL but rc1_dot == NULL (EG_blend_vels)!\n");
+      printf(" EGADS Error: rc1 != NULL but rc1_dot == NULL (EG_blend_dot)!\n");
     return EGADS_NODATA;
   }
 
   if ((rcN != NULL) && (rcN_dot == NULL)) {
     if (outLevel > 0)
-      printf(" EGADS Error: rcN != NULL but rcN_dot == NULL (EG_blend_vels)!\n");
+      printf(" EGADS Error: rcN != NULL but rcN_dot == NULL (EG_blend_dot)!\n");
     return EGADS_NODATA;
   }
 
@@ -6562,7 +7841,7 @@ int EG_blend_vels( int nsex, const ego *secs,
   EG_dumpSections(nsec, secs, "EG_blend_vels_secs.egads");
 #endif
 
-  /* extract nose treatmentment */
+  /* extract nose treatment */
   if (begRC == 1) {
     for (i = 0; i < 8; i++) {
       rc1S[i].value() = rc1[i];
@@ -6622,8 +7901,25 @@ int EG_blend_vels( int nsex, const ego *secs,
     rcNs = rcNS;
   }
 
+  /* extract tangency treatment */
+  if (begRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rc1S[i].value() = rc1[i];
+      rc1S[i].deriv() = rc1_dot[i];
+    }
+    rc1s = rc1S;
+  }
+  if (endRC == 2) {
+    for (i = 0; i < 4; i++) {
+      rcNS[i].value() = rcN[i];
+      rcNS[i].deriv() = rcN_dot[i];
+    }
+    rcNs = rcNS;
+  }
+
   /* extract tip treatment */
-  if ((secs[     0]->oclass == FACE) && planar == 0 &&
+  if ((secs[     0]->oclass == FACE || secs[     0]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rc1 != NULL) && (rc1[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rc1S[i].value() = rc1[i];
@@ -6631,7 +7927,8 @@ int EG_blend_vels( int nsex, const ego *secs,
     }
     rc1s = rc1S;
   }
-  if ((secs[nsec-1]->oclass == FACE) && planar == 0 &&
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (planar == 0) &&
       (rcN != NULL) && (rcN[0] == 0.0)) {
     for (i = 0; i < 2; i++) {
       rcNS[i].value() = rcN[i];
@@ -6640,8 +7937,8 @@ int EG_blend_vels( int nsex, const ego *secs,
     rcNs = rcNS;
   }
 
-  stat = EG_blendSpline<T>(nsex, secs, rc1s, rcNs, begRC, endRC,
-                           nstripe, closed, planar, &nsecC0, &secsC0,
+  stat = EG_blendSpline<T>(vels, nsex, secs, rc1s, rcNs, begRC, endRC,
+                           nstripe, uclosed, vclosed, planar, &nsecC0, &secsC0,
                            &nodes, &splcurvsU, &splcurvsV, &splsurfs,
                            tip, te, tipsurfs, tipcurvs);
   if (stat != EGADS_SUCCESS) {
@@ -6650,8 +7947,8 @@ int EG_blend_vels( int nsex, const ego *secs,
     goto cleanup;
   }
 
-  stat = EG_splineGeom_dot(body, nsecC0, secsC0, nstripe, closed, ncap, te, tip,
-                           nodes, splcurvsU, splcurvsV, splsurfs);
+  stat = EG_splineGeom_dot(body, nsecC0, secsC0, nstripe, uclosed, vclosed, ncap,
+                           te, tip, nodes, splcurvsU, splcurvsV, splsurfs);
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
       printf(" EGADS Error: splineGeom = %d (EG_blend_vels)!\n", stat);
@@ -6677,16 +7974,18 @@ int EG_blend_vels( int nsex, const ego *secs,
   /* extract special wing tip treatment */
   cap  = 0;
   ntip = 0;
-  if ((secs[0]->oclass == FACE) && (rc1 != NULL) && (rc1[0] == 0.0)) {
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) &&
+      (rc1 != NULL) && (rc1[0] == 0.0)) {
     tips[0]   = nface-ncap+cap;
     tipsec[0] = 0;
     cap++;
     ntip++;
   }
 
-  if ((secs[0]->oclass == FACE) && (ntip == 0)) cap++;
+  if ((secs[0]->oclass == FACE || secs[0]->mtype == FACEBODY) && (ntip == 0)) cap++;
 
-  if ((secs[nsec-1]->oclass == FACE) && (rcN != NULL) && (rcN[0] == 0.0)) {
+  if ((secs[nsec-1]->oclass == FACE || secs[nsec-1]->mtype == FACEBODY) &&
+      (rcN != NULL) && (rcN[0] == 0.0)) {
     tips[1]   = nface-ncap+cap;
     tipsec[1] = nsecC0-1;
     cap++;
@@ -6699,11 +7998,15 @@ int EG_blend_vels( int nsex, const ego *secs,
       if ((tip & 1) && (k == 0)) continue;
       if ((tip & 2) && (k == 1)) continue;
       i = (k == 0) ? 0 : nsecC0-1;
-      if ((secsC0[i]->oclass != FACE)) continue;
-
       stat = EG_getTopology(secsC0[i], &sec_surf, &oclass, &mtype, data,
-                            &nloop, &loops, &senses);
+                            &nchldrn, &chldrn, &senses);
       if (stat != EGADS_SUCCESS) goto cleanup;
+      if (oclass == BODY) {
+        stat = EG_getTopology(chldrn[0], &sec_surf, &oclass, &mtype, data,
+                              &nchldrn, &chldrn, &senses);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+      }
+      if (oclass != FACE) continue;
 
       stat = EG_getTopology(faces[nface-ncap+cap], &cap_surf, &oclass, &mtype,
                             data, &nloop, &loops, &senses);
@@ -6714,7 +8017,8 @@ int EG_blend_vels( int nsex, const ego *secs,
         stat = EG_copyGeometry_dot(sec_surf, NULL, NULL, cap_surf);
         if (stat != EGADS_SUCCESS) goto cleanup;
       } else {
-        /* set sensitivity to INFTY so EG_hasGeometry_dot and EG_copyGeometry_dot work */
+        /* set sensitivity to INFTY so EG_hasGeometry_dot  and
+                                       EG_copyGeometry_dot work */
         stat = EG_getGeometry(cap_surf, &oclass, &mtype, &ref, &ivec, &rvec);
         if (stat != EGADS_SUCCESS) goto cleanup;
         EG_getGeometryLen(cap_surf, &ilen, &rlen);
@@ -6726,15 +8030,14 @@ int EG_blend_vels( int nsex, const ego *secs,
         stat = EG_setGeometry_dot(cap_surf, oclass, mtype, ivec, rinfo);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
-        EG_free(ivec); ivec=NULL;
-        EG_free(rvec); rvec=NULL;
+        EG_free(ivec);  ivec=NULL;
+        EG_free(rvec);  rvec=NULL;
         EG_free(rinfo); rinfo=NULL;
       }
 
       cap++;
     }
   }
-
 
   /* set sensitivities for cap Faces with wingTips */
   if ((ntip != 0) && (faces != NULL)) {
@@ -6827,7 +8130,7 @@ int EG_blend_vels( int nsex, const ego *secs,
         }
 
 
-        /* first edge */
+        /*** the 1st edge ***/
         stat = EG_getTopology(tedges[iedge[0]], &curv, &oclass, &mtype, data,
                               &nchldrn, &nds, &senses);
         if (stat != EGADS_SUCCESS) goto cleanup;
@@ -6851,7 +8154,14 @@ int EG_blend_vels( int nsex, const ego *secs,
                                    nds[1]);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
-        /* the 2nd edge */
+        /* set the sensitivity for the t-range of the edge */
+        ts[0] = mknot;
+        ts[1] = 1.0;
+        stat = EG_setRange_dot(tedges[iedge[0]], EDGE, ts);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+
+
+        /*** the 2nd edge ***/
         stat = EG_getTopology(tedges[iedge[1]], &curv, &oclass, &mtype, data,
                               &nchldrn, &nds, &senses);
         if (stat != EGADS_SUCCESS) goto cleanup;
@@ -6862,6 +8172,12 @@ int EG_blend_vels( int nsex, const ego *secs,
 
         stat = EG_copyGeometry_dot(nodes[tipsec[k]+(te+1)*inode], NULL, NULL,
                                    nds[0]);
+        if (stat != EGADS_SUCCESS) goto cleanup;
+
+        /* set the sensitivity for the t-range of the edge */
+        ts[0] = 0.0;
+        ts[1] = mknot;
+        stat = EG_setRange_dot(tedges[iedge[1]], EDGE, ts);
         if (stat != EGADS_SUCCESS) goto cleanup;
       }
     }
@@ -6900,7 +8216,6 @@ cleanup:
   }
 
   /* clean up all of our temps */
-  vels = NULL;
   EG_free(nodes);
   EG_free(secsC0);
   EG_free(ivec);
@@ -6916,144 +8231,69 @@ cleanup:
 
 
 extern "C"
-int EG_ruled_vels(int nsec, const ego *secs, egadsSplineVels *vels_in, ego body)
+int EG_ruled_vels(int nsec_in, const ego *secs_in, egadsSplineVels *vels, ego body)
 {
   typedef SurrealS<1> T;
-  int    i, j, k, n, jj, outLevel, stat, nstripe, oclass, mtype;
-  int    closed, ncap, cap, nchldrn, nface, *senses, *ivec=NULL, ilen, rlen;
+  int    i, k, jj, outLevel, stat, nstripe, oclass, mtype, bodyType, planar, rlen;
+  int    nsec=0, uclosed, vclosed, allNodes, ncap, cap, nchldrn, nface, *senses, *ivec=NULL, ilen;
   double data[18], *rvec=NULL;
   T      *rinfo=NULL;
-  ego    context, loop, ref, geom, shell, sec_surf, cap_surf;
-  ego    *chldrn, *nodes=NULL, *edges, *faces;
+  ego    *secs=NULL, context, ref, shell, sec_surf, cap_surf;
+  ego    *chldrn, *nodes=NULL, *faces;
   egSpline<T> *splsurfs=NULL, *splcurvsU=NULL, *splcurvsV=NULL;
 
-  if (nsec <= 1)                     return EGADS_EMPTY;
-  if (secs == NULL)                  return EGADS_NULLOBJ;
-  if (vels_in == NULL)               return EGADS_NULLOBJ;
-  if (secs[0] == NULL)               return EGADS_NULLOBJ;
-  if (secs[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
-  if (EG_sameThread(secs[0]))        return EGADS_CNTXTHRD;
-  outLevel = EG_outLevel(secs[0]);
-  context  = EG_context(secs[0]);
-  if (context == NULL)               return EGADS_NOTCNTX;
+  if (nsec_in <= 1)                     return EGADS_EMPTY;
+  if (secs_in == NULL)                  return EGADS_NULLOBJ;
+  if (vels == NULL)                     return EGADS_NULLOBJ;
+  if (secs_in[0] == NULL)               return EGADS_NULLOBJ;
+  if (secs_in[0]->magicnumber != MAGIC) return EGADS_NOTOBJ;
+  if (EG_sameThread(secs_in[0]))        return EGADS_CNTXTHRD;
+  outLevel = EG_outLevel(secs_in[0]);
+  context  = EG_context(secs_in[0]);
+  if (context == NULL)                  return EGADS_NOTCNTX;
 
-  if (vels != NULL) {
-    printf(" EGADS Error: global egadsSplineVels pointer already set!\n");
-    printf("              EG_ruled_vels is not thread safe!\n");
-  }
-  /* store the global vels pointer */
-  vels = vels_in;
-
-  /* check input and that it has data_dot */
-  closed = 1;
-  for (ncap = nstripe = i = 0; i < nsec; i++) {
-    if (secs[i] == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: NULL Section Object %d (EG_ruled_vels)!\n", i+1);
-      return EGADS_NULLOBJ;
-    }
-    if (secs[i]->magicnumber != MAGIC) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is not an EGO (EG_ruled_vels)!\n", i+1);
-      return EGADS_NOTOBJ;
-    }
-    if (secs[i]->blind == NULL) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d has no data (EG_ruled_vels)!\n", i+1);
-      return EGADS_NODATA;
-    }
-    if (EG_context(secs[i]) != context) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Context Mismatch (EG_ruled_vels)!\n",
-               i+1);
-      return EGADS_MIXCNTX;
-    }
-    stat = EG_getTopology(secs[i], &ref, &oclass, &mtype, data, &n, &chldrn,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d getTopology = %d (EG_ruled_vels)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (oclass == NODE) {
-      if ((i != 0) && (i != nsec-1)) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Node and not Bound (EG_ruled_vels)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      loop = NULL;
-    } else if (oclass == FACE) {
-      if (n != 1) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Face with %d Loops (EG_ruled_vels)!\n",
-                 i+1, n);
-        return EGADS_TOPOERR;
-      }
-      loop = chldrn[0];
-      if ((i == 0) || (i == nsec-1)) ncap++;
-    } else if (oclass == BODY) {
-      if (secs[i]->mtype != WIREBODY) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d is Not a WireBody (EG_ruled_vels)!\n",
-                 i+1);
-        return EGADS_NOTTOPO;
-      }
-      loop = chldrn[0];
-    } else if (oclass == LOOP) {
-      loop = secs[i];
-    } else {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d is Not a Loop (EG_ruled_vels)!\n", i+1);
-      return EGADS_NOTTOPO;
-    }
-
-    if (loop == NULL) continue;
-    stat = EG_getTopology(loop, &ref, &oclass, &mtype, data, &jj, &edges,
-                          &senses);
-    if (stat != EGADS_SUCCESS) {
-      if (outLevel > 0)
-        printf(" EGADS Error: Section %d Loop getTopology = %d (EG_ruled_vels)!\n",
-               i+1, stat);
-      return stat;
-    }
-    if (mtype == OPEN) closed = 0;
-    for (n = j = 0; j < jj; j++) {
-      stat = EG_getTopology(edges[j], &geom, &oclass, &mtype, data, &k, &chldrn,
-                            &senses);
-      if (stat != EGADS_SUCCESS) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Section %d Edge %d getTopo = %d (EG_ruled_vels)!\n",
-                 i+1, j+1, stat);
-        return stat;
-      }
-      if (mtype == DEGENERATE) continue;
-      n++;
-    }
-    if (nstripe == 0) {
-      nstripe = n;
-    } else {
-      if (n != nstripe) {
-        if (outLevel > 0)
-          printf(" EGADS Error: Sec %d has %d Edges -- prev = %d (EG_ruled_vels)!\n",
-                 i+1, n, nstripe);
-        return EGADS_TOPOERR;
-      }
-    }
-  }
-  if (nstripe == 0) {
-    if (outLevel > 0)
-      printf(" EGADS Error: Zero Edges found (EG_ruled_vels)!\n");
-    return EGADS_TOPOERR;
-  }
-  if (closed == 0) ncap = 0;
+  /* look at the input and check to see if OK */
+  stat = EG_checkSections(nsec_in, secs_in, "EG_ruled_vels",
+                          nstripe, ncap, bodyType, planar,
+                          uclosed, vclosed, allNodes);
+  if (stat != EGADS_SUCCESS) goto cleanup;
 
 #ifdef DUMP_SECTIONS
-  EG_dumpSections(nsec, secs, "EG_ruled_vels_secs.egads");
+  EG_dumpSections(nsec_in, secs_in, "EG_ruled_vels_secs.egads");
 #endif
 
-  stat = EG_ruledSpline(nsec, secs, nstripe, closed, &nodes, &splcurvsU,
+  stat = EG_uniqueSections(nsec_in, secs_in, nsec, &secs);
+  if (stat != EGADS_SUCCESS) goto cleanup;
+
+  /* special case for all nodes */
+  if (allNodes == 1) {
+
+    stat = EG_ruledNodeSpline(vels, nsec, secs, vclosed, &nodes, &splcurvsU);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: ruledNodeSpline = %d (EG_ruled_vels)!\n", stat);
+      goto cleanup;
+    }
+
+    stat = EG_splineNodeGeom_dot(body, nsec, secs, nodes, splcurvsU);
+    if (stat != EGADS_SUCCESS) {
+      if (outLevel > 0)
+        printf(" EGADS Error: splineNodeGeom_dot = %d (EG_ruled_vels)!\n", stat);
+      goto cleanup;
+    }
+
+    /* remove any temporary sensitivities from the sections */
+    for (i = 0; i < nsec; i++) {
+      stat = EG_setGeometry_dot(secs[i], 0, 0, NULL, NULL);
+      if (stat != EGADS_SUCCESS) goto cleanup;
+    }
+
+    stat = EGADS_SUCCESS;
+    goto cleanup;
+  }
+
+  /* sections with edges */
+  stat = EG_ruledSpline(vels, nsec, secs, nstripe, uclosed, vclosed, &nodes, &splcurvsU,
                         &splcurvsV, &splsurfs);
   if (stat != EGADS_SUCCESS) {
     if (outLevel > 0)
@@ -7061,8 +8301,8 @@ int EG_ruled_vels(int nsec, const ego *secs, egadsSplineVels *vels_in, ego body)
     goto cleanup;
   }
 
-  stat = EG_splineGeom_dot(body, nsec, secs, nstripe, closed, ncap, -1, 0,
-                           nodes, splcurvsU, splcurvsV, splsurfs);
+  stat = EG_splineGeom_dot(body, nsec, secs, nstripe, uclosed, vclosed, ncap,
+                           -1, 0, nodes, splcurvsU, splcurvsV, splsurfs);
   if (stat != EGADS_SUCCESS) {
      if (outLevel > 0)
        printf(" EGADS Error: splineGeom_dot = %d (EG_ruled_vels)!\n", stat);
@@ -7101,7 +8341,8 @@ int EG_ruled_vels(int nsec, const ego *secs, egadsSplineVels *vels_in, ego body)
         stat = EG_copyGeometry_dot(sec_surf, NULL, NULL, cap_surf);
         if (stat != EGADS_SUCCESS) goto cleanup;
       } else {
-        /* set sensitivity to INFTY so EG_hasGeometry_dot and EG_copyGeometry_dot work */
+        /* set sensitivity to INFTY so EG_hasGeometry_dot  and
+                                       EG_copyGeometry_dot work */
         stat = EG_getGeometry(cap_surf, &oclass, &mtype, &ref, &ivec, &rvec);
         if (stat != EGADS_SUCCESS) goto cleanup;
         EG_getGeometryLen(cap_surf, &ilen, &rlen);
@@ -7113,8 +8354,8 @@ int EG_ruled_vels(int nsec, const ego *secs, egadsSplineVels *vels_in, ego body)
         stat = EG_setGeometry_dot(cap_surf, oclass, mtype, ivec, rinfo);
         if (stat != EGADS_SUCCESS) goto cleanup;
 
-        EG_free(ivec); ivec=NULL;
-        EG_free(rvec); rvec=NULL;
+        EG_free(ivec);  ivec=NULL;
+        EG_free(rvec);  rvec=NULL;
         EG_free(rinfo); rinfo=NULL;
       }
 
@@ -7137,7 +8378,7 @@ cleanup:
   }
 
   /* clean up all of our temps */
-  vels = NULL;
+  EG_free(secs);
   EG_free(nodes);
   EG_free(ivec);
   EG_free(rvec);

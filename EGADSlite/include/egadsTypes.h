@@ -11,7 +11,7 @@
  *
  */
 
-#include "egadsErrors_lite.h"
+#include "egadsErrors.h"
 
 
 #define EGADSMAJOR     1

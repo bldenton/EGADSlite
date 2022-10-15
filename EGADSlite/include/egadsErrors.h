@@ -1,5 +1,5 @@
-#ifndef EGADSERRORS_LITE_H
-#define EGADSERRORS_LITE_H
+#ifndef EGADSERRORS_H
+#define EGADSERRORS_H
 /*
  *      EGADS: Electronic Geometry Aircraft Design System
  *

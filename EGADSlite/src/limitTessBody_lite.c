@@ -24,7 +24,7 @@ extern int  EGlite_referenceObject( egObject *object,
 extern int  EGlite_referenceTopObj( egObject *object,
                                 /*@null@*/ const egObject *ref );
 #else
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 extern int  EGlite_getBodyTopos( const egObject *body, /*@null@*/ egObject *src,
                              int oclass, int *ntopo, egObject ***topos );

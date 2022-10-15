@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 #include "liteClasses.h"
 #include "liteDevice.h"

@@ -13,7 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 
 #ifdef __HOST_AND_DEVICE__
 #undef __HOST_AND_DEVICE__

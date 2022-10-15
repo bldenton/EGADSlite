@@ -17,7 +17,7 @@
 #else
 #include <string.h>
 #endif
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 
 #ifdef __HOST_AND_DEVICE__

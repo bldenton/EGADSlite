@@ -14,7 +14,7 @@
 #include <string.h>
 #include <math.h>
 
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 #include "liteClasses.h"
 

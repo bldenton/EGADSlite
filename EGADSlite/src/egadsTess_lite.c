@@ -21,7 +21,7 @@
 #include <string.h>
 #endif
 
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 #include "egadsTris_lite.h"
 #include "emp_lite.h"

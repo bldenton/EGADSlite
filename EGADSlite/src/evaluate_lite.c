@@ -24,7 +24,7 @@ typedef int bool;
 #include <stdbool.h>
 #endif
 
-#include "egadsTypes_lite.h"
+#include "egadsTypes.h"
 #include "egadsInternals_lite.h"
 #ifdef LITE
 #include "liteClasses.h"

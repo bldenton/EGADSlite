@@ -42,8 +42,8 @@ INCDIR     = EGADSlite/include
 SRCDIR     = EGADSlite/src
 LIBBASE    = libegadslite
 LIBNAME    = ${LIBBASE}.${AR_LIB_SUFFIX}
-LIBSRC.h   = $(INCDIR)/egads_lite.h $(INCDIR)/egadsErrors_lite.h \
-             $(INCDIR)/egadsInternals_lite.h $(INCDIR)/egadsTris_lite.h $(INCDIR)/egadsTypes_lite.h \
+LIBSRC.h   = $(INCDIR)/egads_lite.h $(INCDIR)/egadsErrors.h \
+             $(INCDIR)/egadsInternals_lite.h $(INCDIR)/egadsTris_lite.h $(INCDIR)/egadsTypes.h \
              $(INCDIR)/emp_lite.h $(INCDIR)/liteClasses.h $(INCDIR)/liteString.h \
              $(INCDIR)/regQuads_lite.h
 LIBSRC.c   = $(SRCDIR)/liteAttrs.c $(SRCDIR)/liteBase.c $(SRCDIR)/liteGeom.c $(SRCDIR)/liteImport.c \

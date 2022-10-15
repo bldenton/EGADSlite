@@ -57,28 +57,28 @@ $(LDIR)/libegadslitestatic.a:	$(OBJS) liteTess.o liteTris.o liteQuads.o \
                 liteTess.o liteTris.o liteQuads.o liteTessInp.o egadsRobust.o \
 		emp.o evaLite.o ratLite.o liteRegQuads.o ; $(RANLB) )
 
-$(OBJS): %.o:	%.c ../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
-		../include/egadsTypes_lite.h ../include/liteClasses.h ../include/liteDevice.h
+$(OBJS): %.o:	%.c ../include/egadsErrors.h ../include/egadsInternals_lite.h \
+		../include/egadsTypes.h ../include/liteClasses.h ../include/liteDevice.h
 	$(CC) -c $(COPTS) $(DEFINE) -I../include -I. -I../src $< \
 		-o $(ODIR)/$@
 
-liteTess.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
-                ../include/egadsTypes_lite.h ../include/liteClasses.h ../src/egadsTess_lite.c
+liteTess.o:	../include/egadsErrors.h ../include/egadsInternals_lite.h \
+                ../include/egadsTypes.h ../include/liteClasses.h ../src/egadsTess_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
                 ../src/egadsTess_lite.c -o $(ODIR)/liteTess.o
 
-liteTris.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
-                ../include/egadsTypes_lite.h ../include/liteClasses.h ../src/egadsTris_lite.c
+liteTris.o:	../include/egadsErrors.h ../include/egadsInternals_lite.h \
+                ../include/egadsTypes.h ../include/liteClasses.h ../src/egadsTris_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
                 ../src/egadsTris_lite.c -o $(ODIR)/liteTris.o
 
-liteQuads.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
-                ../include/egadsTypes_lite.h ../include/liteClasses.h ../src/egadsQuads_lite.c
+liteQuads.o:	../include/egadsErrors.h ../include/egadsInternals_lite.h \
+                ../include/egadsTypes.h ../include/liteClasses.h ../src/egadsQuads_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -I../include -I. -I../src \
                 ../src/egadsQuads_lite.c -o $(ODIR)/liteQuads.o
 
-liteTessInp.o:	../include/egadsErrors_lite.h ../include/egadsInternals_lite.h \
-                ../include/egadsTypes_lite.h ../include/liteClasses.h ../src/egadsTessInp_lite.c
+liteTessInp.o:	../include/egadsErrors.h ../include/egadsInternals_lite.h \
+                ../include/egadsTypes.h ../include/liteClasses.h ../src/egadsTessInp_lite.c
 	$(CC) -c $(COPTS) $(DEFINE) -DLITE -I../include -I. -I../src \
                 -I../util ../src/egadsTessInp_lite.c -o $(ODIR)/liteTessInp.o
 

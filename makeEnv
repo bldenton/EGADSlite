@@ -23,8 +23,9 @@ fi
 # we must know where the OpenCASCADE distribution is!
 #
 if [ -z "$CASROOT" ]; then
-	echo "ERROR - CASROOT not defined - set or input as argument!"
-	exit 1
+	echo "WARNING - CASROOT not defined - REQUIRED for EGADS installation!"
+	echo "        - This condition is ok if installing EGADSlite only."
+	#exit 1
 fi
 
 #
@@ -35,8 +36,10 @@ if [ -d "$CASROOT" ]; then
 	ls "$CASROOT"
 	echo 
 else
-	echo "ERROR - CASROOT does not point to a valid directory!"
-	exit 1
+	echo "WARNING - CASROOT does not point to a valid directory!"
+	echo "        - This is REQUIRED for EGADS installations!"
+	echo "        - This configuration is ok if installing EGADSlite only."
+	#exit 1
 fi
 
 ARCH=UNKNOWN

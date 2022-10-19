@@ -1,5 +1,5 @@
-#ifndef EGADSTYPES_LITE_H
-#define EGADSTYPES_LITE_H
+#ifndef EGADSTYPES_H
+#define EGADSTYPES_H
 /*
  *      EGADS: Electronic Geometry Aircraft Design System
  *

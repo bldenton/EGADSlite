@@ -4,7 +4,7 @@ import os
 class Configure(config.package.GNUPackage):
   def __init__(self, framework):
     config.package.GNUPackage.__init__(self, framework)
-    self.gitcommit         = '9d21ea6aeed3df9cf7cc897e22b88a2b08ea78f6'
+    self.gitcommit         = '33309f413be4d2b7002b5c30f50385cdb54a8a05'
     self.download          = ['git://https://github.com/bldenton/EGADSlite.git']
     self.functions         = ['EG_open']
     self.includes          = ['egads.h']

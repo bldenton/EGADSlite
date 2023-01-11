@@ -21,6 +21,7 @@
 #ifdef PETSC_HAVE_EGADS
 PETSC_INTERN PetscErrorCode DMPlexSnapToGeomModel_EGADS_Internal(DM, PetscInt, ego, PetscInt, PetscInt, PetscInt, const PetscScalar[], PetscScalar[]);
 PETSC_INTERN PetscErrorCode DMPlexSnapToGeomModel_EGADSLite_Internal(DM, PetscInt, ego, PetscInt, PetscInt, PetscInt, const PetscScalar[], PetscScalar[]);
+PETSC_INTERN PetscErrorCode DMPlexInflateToEGADSliteGeomModel(DM);
 PETSC_INTERN PetscErrorCode DMPlex_EGADS_EDGE_XYZtoUV_Internal(const PetscScalar[], ego, const PetscScalar[], const PetscInt, const PetscInt, PetscScalar[]);
 PETSC_INTERN PetscErrorCode DMPlex_EGADS_FACE_XYZtoUV_Internal(const PetscScalar[], ego, const PetscScalar[], const PetscInt, const PetscInt, PetscScalar[]);
 
@@ -366,7 +367,7 @@ PetscErrorCode DMPlexSnapToGeomModel(DM dm, PetscInt p, PetscInt dE, const Petsc
     }
     PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
     if (!modelObj) {
-      PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSLite Model", (PetscObject *) &modelObj));
+      PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
       islite = PETSC_TRUE;
     }
     if (!modelObj) {
@@ -1763,10 +1764,6 @@ PetscErrorCode DMPlexInflateToEGADSGeomModel(DM dm)
 /*@
   DMPlexInflateToGeomModel - Snaps the vertex coordinates of a DMPlex object representing the mesh to its geometry if some vertices depart from the model. This usually happens with non-conforming refinement.
 
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  DELETE THIS ROUTINE -- SUPERCEDED BY DMPlexInflateToEGADSGeomModel() above
-!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
   Collective on dm
 
   Input Parameter:
@@ -1782,68 +1779,23 @@ PetscErrorCode DMPlexInflateToEGADSGeomModel(DM dm)
 PetscErrorCode DMPlexInflateToGeomModel(DM dm)
 {
 #if defined(PETSC_HAVE_EGADS)
-  /* EGADS Variables */
-  ego            model, geom, body, face, edge;
-  ego           *bodies;
-  int            Nb, oclass, mtype, *senses;
-  double         result[4];
   /* PETSc Variables */
-  DM             cdm;
   PetscContainer modelObj;
-  DMLabel        bodyLabel, faceLabel, edgeLabel, vertexLabel;
-  Vec            coordinates;
-  PetscScalar   *coords;
-  PetscInt       bodyID, faceID, edgeID, vertexID;
-  PetscInt       cdim, d, vStart, vEnd, v;
-  //PetscErrorCode ierr;
+  PetscBool      islite = PETSC_FALSE;
 #endif
 
   PetscFunctionBegin;
 #if defined(PETSC_HAVE_EGADS)
   PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
-  if (!modelObj) PetscFunctionReturn(0);
-  PetscCall(DMGetCoordinateDim(dm, &cdim));
-  PetscCall(DMGetCoordinateDM(dm, &cdm));
-  PetscCall(DMGetCoordinatesLocal(dm, &coordinates));
-  PetscCall(DMGetLabel(dm, "EGADS Body ID", &bodyLabel));
-  PetscCall(DMGetLabel(dm, "EGADS Face ID", &faceLabel));
-  PetscCall(DMGetLabel(dm, "EGADS Edge ID", &edgeLabel));
-  PetscCall(DMGetLabel(dm, "EGADS Vertex ID", &vertexLabel));
-
-  PetscCall(PetscContainerGetPointer(modelObj, (void **) &model));
-  PetscCall(EG_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses));
-
-  PetscCall(DMPlexGetDepthStratum(dm, 0, &vStart, &vEnd));
-  PetscCall(VecGetArrayWrite(coordinates, &coords));
-  for (v = vStart; v < vEnd; ++v) {
-    PetscScalar *vcoords;
-
-    PetscCall(DMLabelGetValue(bodyLabel, v, &bodyID));
-    PetscCall(DMLabelGetValue(faceLabel, v, &faceID));
-    PetscCall(DMLabelGetValue(edgeLabel, v, &edgeID));
-    PetscCall(DMLabelGetValue(vertexLabel, v, &vertexID));
-
-    if (bodyID >= Nb) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE, "Body %D is not in [0, %d)", bodyID, Nb);
-    body = bodies[bodyID];
-
-    PetscCall(DMPlexPointLocalRef(cdm, v, coords, (void *) &vcoords));
-    if (edgeID > 0) {
-      /* Snap to EDGE at nearest location */
-      double params[1];
-      PetscCall(EG_objectBodyTopo(body, EDGE, edgeID, &edge));
-      PetscCall(EG_invEvaluate(edge, vcoords, params, result)); // Get (x,y,z) of nearest point on EDGE
-      for (d = 0; d < cdim; ++d) vcoords[d] = result[d];
-    } else if (faceID > 0) {
-      /* Snap to FACE at nearest location */
-      double params[2];
-      PetscCall(EG_objectBodyTopo(body, FACE, faceID, &face));
-      PetscCall(EG_invEvaluate(face, vcoords, params, result)); // Get (x,y,z) of nearest point on FACE
-      for (d = 0; d < cdim; ++d) vcoords[d] = result[d];
-    }
+  if (!modelObj) {
+    PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
+    islite = PETSC_TRUE;
   }
-  PetscCall(VecRestoreArrayWrite(coordinates, &coords));
-  /* Clear out global coordinates */
-  PetscCall(VecDestroy(&dm->coordinates));
+  
+  if (modelObj) {
+    if (islite) {PetscCall(DMPlexInflateToEGADSliteGeomModel(dm));}
+    else        {PetscCall(DMPlexInflateToEGADSGeomModel(dm));}
+  }
 #endif
   PetscFunctionReturn(0);
 }
@@ -1942,7 +1894,7 @@ PetscErrorCode ConvertEGADSModelToAllBSplines(ego model)
 
   Level: beginner
 
-.seealso: DMPLEX, DMCreate(), DMPlexCreateEGADS(), DMPlexCreateEGADSLiteFromFile()
+.seealso: DMPLEX, DMCreate(), DMPlexCreateEGADS(), DMPlexCreateEGADSliteFromFile()
 @*/
 PetscErrorCode DMPlexCreateEGADSFromFile(MPI_Comm comm, const char filename[], DM *dm)
 {
@@ -2015,7 +1967,7 @@ PetscErrorCode DMPlex_Surface_Grad(DM dm)
 	PetscFunctionBegin;
 	PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
 	if (!modelObj) {
-	  PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSLite Model", (PetscObject *) &modelObj));
+	  PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
 	}
 
 	// Get attached EGADS model (pointer)
@@ -2468,7 +2420,7 @@ PetscErrorCode DMPlex_Surface_Grad(DM dm)
 
   Level: intermediate
 
-.seealso: DMPLEX, DMCreate(), DMPlexCreateEGADS(), DMPlexCreateEGADSLiteFromFile(), DMPlexModifyEGADSGeomModel()
+.seealso: DMPLEX, DMCreate(), DMPlexCreateEGADS(), DMPlexCreateEGADSliteFromFile(), DMPlexModifyEGADSGeomModel()
 @*/
 PetscErrorCode DMPlexGeomDataAndGrads(DM dm, PetscBool fullGeomGrad) 
 {
@@ -2486,7 +2438,7 @@ PetscErrorCode DMPlexGeomDataAndGrads(DM dm, PetscBool fullGeomGrad)
 	//PetscFunctionBegin;
 	PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
 	if (!modelObj) {
-	  PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSLite Model", (PetscObject *) &modelObj));
+	  PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
 	}
   
   // Throw Error is DM does not have an attached EGADS geometry model
@@ -3555,7 +3507,7 @@ PetscErrorCode DMPlexGeomDataAndGrads(DM dm, PetscBool fullGeomGrad)
 @*/
 PetscErrorCode DMPlexModifyEGADSGeomModel(DM dm, MPI_Comm comm, PetscScalar newCP[], PetscScalar newW[], PetscBool autoInflate, PetscBool saveGeom, char *stpName) 
 { 
-  /* EGADS/EGADSLite variables */
+  /* EGADS/EGADSlite variables */
   ego            context, model, geom, *bodies, *lobjs, *fobjs;
   int            oclass, mtype, *senses, *lsenses;
   int            Nb, Nf, Nl, id;
@@ -3569,7 +3521,7 @@ PetscErrorCode DMPlexModifyEGADSGeomModel(DM dm, MPI_Comm comm, PetscScalar newC
   // Look to see if DM has a Container with either a EGADS or EGADS Model
   PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
   if (!modelObj) {
-    PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSLite Model", (PetscObject *) &modelObj));
+    PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
   }
   if (!modelObj) SETERRQ(PETSC_COMM_SELF, PETSC_ERR_SUP, "DM does not have a EGADS Geometry Model attached to it!");
 
@@ -3588,7 +3540,6 @@ PetscErrorCode DMPlexModifyEGADSGeomModel(DM dm, MPI_Comm comm, PetscScalar newC
   
   // Get the number of bodies and body objects in the model
   PetscCall(EG_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses));
-  PetscCall(PetscPrintf(PETSC_COMM_SELF, " Number of BODIES (nbodies): %d \n", Nb));			//<-- DEBUG REMOVE
   
   // Get all Faces on the body
   ego body = bodies[0];

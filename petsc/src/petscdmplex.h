@@ -175,7 +175,7 @@ PETSC_EXTERN PetscErrorCode DMPlexCreateWedgeBoxMesh(MPI_Comm, const PetscInt[],
 PETSC_EXTERN PetscErrorCode DMPlexExtrude(DM, PetscInt, PetscReal, PetscBool, PetscBool, const PetscReal[], const PetscReal[], DM *);
 PETSC_EXTERN PetscErrorCode DMPlexCreateConeSection(DM, PetscSection *);
 PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModel(DM);   //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexInflateToEGADSGeomModel(DM);    //EGADS
+//PETSC_EXTERN PetscErrorCode DMPlexInflateToEGADSGeomModel(DM);    //EGADS
 PETSC_EXTERN PetscErrorCode DMPlexGeomDataAndGrads(DM, PetscBool);  //EGADS
 PETSC_EXTERN PetscErrorCode DMPlexModifyEGADSGeomModel(DM, MPI_Comm, PetscScalar[], PetscScalar[], PetscBool, PetscBool, char *);   //EGADS
 PETSC_EXTERN PetscErrorCode DMPlexGetEGADSGeomModel_tuv(DM);    //EGADS

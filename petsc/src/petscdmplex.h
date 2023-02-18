@@ -14,6 +14,7 @@
 #include <petscsftypes.h>
 #include <petscdmfield.h>
 #include <petscviewer.h>
+//#include <petsc/private/dmgeomimpl.h>
 
 PETSC_EXTERN PetscErrorCode PetscPartitionerDMPlexPartition(PetscPartitioner, DM, PetscSection, PetscSection, IS *);
 
@@ -174,12 +175,6 @@ PETSC_EXTERN PetscErrorCode DMPlexCreateWedgeCylinderMesh(MPI_Comm, PetscInt, Pe
 PETSC_EXTERN PetscErrorCode DMPlexCreateWedgeBoxMesh(MPI_Comm, const PetscInt[], const PetscReal[], const PetscReal[], const DMBoundaryType[], PetscBool, PetscBool, DM *);
 PETSC_EXTERN PetscErrorCode DMPlexExtrude(DM, PetscInt, PetscReal, PetscBool, PetscBool, const PetscReal[], const PetscReal[], DM *);
 PETSC_EXTERN PetscErrorCode DMPlexCreateConeSection(DM, PetscSection *);
-PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModel(DM);   //EGADS
-//PETSC_EXTERN PetscErrorCode DMPlexInflateToEGADSGeomModel(DM);    //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexGeomDataAndGrads(DM, PetscBool);  //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexModifyEGADSGeomModel(DM, MPI_Comm, PetscScalar[], PetscScalar[], PetscBool, PetscBool, char *);   //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexGetEGADSGeomModel_tuv(DM);    //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexInflateToEGADSGeomModel_tuv(DM);    //EGADS
 
 PETSC_EXTERN PetscErrorCode DMPlexCheckSymmetry(DM);
 PETSC_EXTERN PetscErrorCode DMPlexCheckSkeleton(DM, PetscInt);
@@ -204,8 +199,6 @@ PETSC_EXTERN PetscErrorCode DMPlexCreateFluent(MPI_Comm, PetscViewer, PetscBool,
 PETSC_EXTERN PetscErrorCode DMPlexCreateFluentFromFile(MPI_Comm, const char [], PetscBool, DM *);
 PETSC_EXTERN PetscErrorCode DMPlexCreateMedFromFile(MPI_Comm, const char [], PetscBool, DM *);
 PETSC_EXTERN PetscErrorCode DMPlexCreatePLYFromFile(MPI_Comm, const char [], PetscBool, DM *);
-PETSC_EXTERN PetscErrorCode DMPlexCreateEGADSFromFile(MPI_Comm, const char [], DM *);   //EGADS
-PETSC_EXTERN PetscErrorCode DMPlexCreateEGADSLiteFromFile(MPI_Comm, const char [], DM *);   //EGADS
 
 PETSC_EXTERN PetscErrorCode PetscViewerExodusIIOpen(MPI_Comm comm, const char name[], PetscFileMode type, PetscViewer *exo);
 PETSC_EXTERN PetscErrorCode PetscViewerExodusIIGetId(PetscViewer, int *);
@@ -533,5 +526,38 @@ PETSC_EXTERN PetscErrorCode DMPlexGlobalVectorLoad(DM,PetscViewer,DM,PetscSF,Vec
 PETSC_EXTERN PetscErrorCode DMPlexLocalVectorLoad(DM,PetscViewer,DM,PetscSF,Vec);
 
 PETSC_EXTERN PetscErrorCode DMPlexGetLocalOffsets(DM, DMLabel, PetscInt, PetscInt, PetscInt, PetscInt *, PetscInt *, PetscInt *, PetscInt *, PetscInt **);
+
+#if defined(PETSC_HAVE_EGADS)
+/*    Variable Type and Functions Listed below are intended to be used when the EGADS/EGADSlite libraries are installed
+      with Petsc. This functions enable the creation, iterrogation, and manipulation of CAD geometries attached to 
+      DM Plex discretized domains (meshes). 
+*/
+#include <egads.h>
+#include <egads_lite.h>
+typedef ego PetscGeom;
+//typedef _PetscGeom *PetscGeom;
+PETSC_INTERN PetscErrorCode DMPlexCreateGeomFromFile(MPI_Comm, const char [], DM *, PetscBool);
+
+PETSC_EXTERN PetscErrorCode DMPlexGeomDataAndGrads(DM, PetscBool);
+PETSC_EXTERN PetscErrorCode DMPlexModifyGeomModel(DM, MPI_Comm, PetscScalar[], PetscScalar[], PetscBool, PetscBool, char *);
+PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModel(DM, PetscBool); 
+PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModelUseXYZ(DM);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelTUV(DM);
+PETSC_EXTERN PetscErrorCode DMPlexInflateToGeomModelUseTUV(DM);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodies(DM, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodyShells(DM, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodyFaces(DM, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodyLoops(DM, PetscGeom, PetscGeom **, PetscInt *); 
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodyEdges(DM, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelBodyNodes(DM, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelShellFaces(DM, PetscGeom, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelFaceLoops(DM, PetscGeom, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelFaceEdges(DM, PetscGeom, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomModelEdgeNodes(DM, PetscGeom, PetscGeom, PetscGeom **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomBodyMassProperties(DM, PetscGeom, PetscScalar *, PetscScalar *, PetscScalar **, PetscInt *, PetscScalar **, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomID(DM, PetscGeom, PetscGeom, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexGetGeomFaceNumOfControlPoints(DM, PetscGeom face, PetscInt *);
+PETSC_EXTERN PetscErrorCode DMPlexFreeGeomObject(DM, PetscGeom *);
+#endif
 
 #endif

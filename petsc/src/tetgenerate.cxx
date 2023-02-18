@@ -121,8 +121,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
     }
   }
   
-  PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen pre options \n"));
-  
   if (rank == 0) {
     DM_Plex *mesh = (DM_Plex *) boundary->data;
     char     args[32];
@@ -136,8 +134,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
     if (mesh->tetgenOpts) {::tetrahedralize(mesh->tetgenOpts, &in, &out);}
     else                  {::tetrahedralize(args, &in, &out);}
   }
-  
-  PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen post options \n"));
   
   {
     const PetscInt   numCorners  = 4;
@@ -203,6 +199,8 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
     }
 
     PetscCall(PetscObjectQuery((PetscObject) boundary, "EGADS Model", (PetscObject *) &modelObj));
+    if (!modelObj) {PetscCall(PetscObjectQuery((PetscObject) boundary, "EGADSlite Model", (PetscObject *) &modelObj));}
+    
     if (modelObj) {
 #ifdef PETSC_HAVE_EGADS
       DMLabel        bodyLabel;
@@ -220,18 +218,16 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
         /* Transfer EGADS Model to Volumetric Mesh */
         PetscCall(PetscObjectCompose((PetscObject) *dm, "EGADS Model", (PetscObject) modelObj));
       } else {
-        PetscCall(PetscObjectQuery((PetscObject) boundary, "EGADSLite Model", (PetscObject *) &modelObj));
+        PetscCall(PetscObjectQuery((PetscObject) boundary, "EGADSlite Model", (PetscObject *) &modelObj));
         if (modelObj) {
           PetscCall(PetscContainerGetPointer(modelObj, (void **) &model));
           PetscCall(EGlite_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses));
           /* Transfer EGADS Model to Volumetric Mesh */
-          PetscCall(PetscObjectCompose((PetscObject) *dm, "EGADSLite Model", (PetscObject) modelObj));
+          PetscCall(PetscObjectCompose((PetscObject) *dm, "EGADSlite Model", (PetscObject) modelObj));
           islite = PETSC_TRUE;
         }
       }
       if (!modelObj) goto skip_egads;
-
-      PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen after goto skip_egads \n"));
 
       /* Set Cell Labels */
       PetscCall(DMGetLabel(*dm, "EGADS Body ID", &bodyLabel));
@@ -239,8 +235,6 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
       PetscCall(DMPlexGetHeightStratum(*dm, 1, &fStart, &fEnd));
       PetscCall(DMPlexGetDepthStratum(*dm, 1, &eStart, &eEnd));
 
-      PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen after DMLabel & Stratum Calls \n"));
-      PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen islite = %d \n", islite));
       for (c = cStart; c < cEnd; ++c) {
         PetscReal centroid[3] = {0., 0., 0.};
         PetscInt  b;
@@ -261,13 +255,9 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
           PetscCall(DMPlexComputeCellGeometryFVM(*dm, c, NULL, centroid, NULL));
         }
         for (b = 0; b < Nb; ++b) {
-          //ORIG :: if (islite) {if (EGlite_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
-          //ORIG :: else        {if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
-          PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen :: b = %d :: in for loop \n", b));
-          if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;   // NEW
+          if (islite) {if (EGlite_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
+          else        {if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
         }
-        
-        PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen :: c = %d :: After _inTopology \n", c));
         
         if (b < Nb) {
           PetscInt   cval = b, eVal, fVal;
@@ -292,16 +282,11 @@ PETSC_EXTERN PetscErrorCode DMPlexGenerate_Tetgen(DM boundary, PetscBool interpo
       }
 skip_egads: ;
 
-  PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen after skip_egads; line \n"));
-
 #endif
     }
     PetscCall(DMPlexSetRefinementUniform(*dm, PETSC_FALSE));
   }
-  PetscCall(DMUniversalLabelDestroy(&universal));
-  
-  PetscCall(PetscPrintf(PETSC_COMM_SELF, "\n Tetgen :: end DMPlexGenerate_Tetgen \n"));
-  
+  PetscCall(DMUniversalLabelDestroy(&universal)); 
   PetscFunctionReturn(0);
 }
 
@@ -497,6 +482,8 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
     }
 
     PetscCall(PetscObjectQuery((PetscObject) dm, "EGADS Model", (PetscObject *) &modelObj));
+    if (!modelObj) {PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));}
+    
     if (modelObj) {
 #ifdef PETSC_HAVE_EGADS
       DMLabel        bodyLabel;
@@ -514,12 +501,12 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
         /* Transfer EGADS Model to Volumetric Mesh */
         PetscCall(PetscObjectCompose((PetscObject) *dmRefined, "EGADS Model", (PetscObject) modelObj));
       } else {
-        PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSLite Model", (PetscObject *) &modelObj));
+        PetscCall(PetscObjectQuery((PetscObject) dm, "EGADSlite Model", (PetscObject *) &modelObj));
         if (modelObj) {
           PetscCall(PetscContainerGetPointer(modelObj, (void **) &model));
           PetscCall(EGlite_getTopology(model, &geom, &oclass, &mtype, NULL, &Nb, &bodies, &senses));
           /* Transfer EGADS Model to Volumetric Mesh */
-          PetscCall(PetscObjectCompose((PetscObject) *dmRefined, "EGADSLite Model", (PetscObject) modelObj));
+          PetscCall(PetscObjectCompose((PetscObject) *dmRefined, "EGADSlite Model", (PetscObject) modelObj));
           islite = PETSC_TRUE;
         }
       }
@@ -551,13 +538,12 @@ PETSC_EXTERN PetscErrorCode DMPlexRefine_Tetgen(DM dm, double *maxVolumes, DM *d
           PetscCall(DMPlexComputeCellGeometryFVM(*dmRefined, c, NULL, centroid, NULL));
         }
         for (b = 0; b < Nb; ++b) {
-          //ORIG :: if (islite) {if (EGlite_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
-          //ORIG :: else        {if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
-          if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;
+          if (islite) {if (EGlite_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
+          else        {if (EG_inTopology(bodies[b], centroid) == EGADS_SUCCESS) break;}
         }
         if (b < Nb) {
           PetscInt   cval = b, eVal, fVal;
-          PetscInt *closure = NULL, Ncl, cl;
+          PetscInt  *closure = NULL, Ncl, cl;
 
           PetscCall(DMLabelSetValue(bodyLabel, c, cval));
           PetscCall(DMPlexGetTransitiveClosure(*dmRefined, c, PETSC_TRUE, &Ncl, &closure));

@@ -932,6 +932,7 @@ EG_deleteObject(egObject *object)
         stat = EG_dereferenceObject(obj, context);
         if (stat == EGADS_SUCCESS) cnt++;
       }
+      obj->prev = NULL;
       obj = next;
     }
     total += cnt;
